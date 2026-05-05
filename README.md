@@ -37,6 +37,8 @@ The Worker accepts Claude's Anthropic-style requests at `/v1/messages`, converts
 
 It also handles tool calls, streaming, and DeepSeek reasoning output so coding-agent workflows work correctly.
 
+Important: this proxy has been live-tested with `minimax-m2.7`. Other OpenCode Go models are included from the public OpenCode Go model list, but provider behavior can vary, especially around streaming usage/token accounting.
+
 ## For Developers
 
 Technically, this is a Cloudflare Worker gateway that lets Anthropic/Claude clients talk to OpenAI-compatible APIs, and lets OpenAI clients talk to Anthropic-compatible APIs.

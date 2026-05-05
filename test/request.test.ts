@@ -150,7 +150,18 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
     expect(result.temperature).toBe(0.7);
     expect(result.top_p).toBe(0.9);
     expect(result.stream).toBe(true);
+    expect(result.stream_options).toEqual({ include_usage: true });
     expect(result.stop).toEqual(['END']);
+  });
+
+  it('requests usage in OpenAI-compatible streams', () => {
+    const result = formatAnthropicToOpenAI({
+      model: 'deepseek-v4-pro',
+      messages: [{ role: 'user', content: 'Hi' }],
+      max_tokens: 4096,
+      stream: true,
+    });
+    expect(result.stream_options).toEqual({ include_usage: true });
   });
 
   it('omits undefined optional parameters', () => {

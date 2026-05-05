@@ -78,6 +78,7 @@ export function formatAnthropicToOpenAI(body: any): any {
   if (temperature !== undefined) data.temperature = temperature;
   if (top_p !== undefined) data.top_p = top_p;
   if (stream !== undefined) data.stream = stream;
+  if (stream) data.stream_options = { include_usage: true };
   if (stop_sequences) data.stop = stop_sequences;
 
   if (tools) {
