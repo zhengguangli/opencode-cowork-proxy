@@ -14,6 +14,20 @@ When you attach an image in Claude Code and send it through this proxy, the requ
 
 No configuration needed — it just works as long as you have an OpenCode Go subscription.
 
+## Free Models
+
+We support a pay-as-you-go model. Below are the prices per 1M tokens for completely free models available through OpenCode Zen.
+
+| Model | Model ID | Input | Output | Cached Read |
+|-------|----------|-------|--------|-------------|
+| Big Pickle | `big-pickle` | Free | Free | Free |
+| DeepSeek V4 Flash Free | `deepseek-v4-flash-free` | Free | Free | Free |
+| MiniMax M2.5 Free | `minimax-m2.5-free` | Free | Free | Free |
+| Ring 2.6 1T Free | `ring-2.6-1t-free` | Free | Free | Free |
+| Nemotron 3 Super Free | `nemotron-3-super-free` | Free | Free | Free |
+
+These models are available at `https://opencode.ai/zen/v1/chat/completions` via the `/zen` prefix. For the full model list and latest pricing, see the [OpenCode Zen endpoint docs](https://opencode.ai/docs/zen/#endpoints).
+
 ## Set Up In Claude
 
 If you want the fastest working setup, use `minimax-m2.5-free` as the first model.
