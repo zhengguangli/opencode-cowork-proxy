@@ -271,7 +271,7 @@ describe('worker routing', () => {
     expect(capturedBody.model).toBe('deepseek-v4-pro');
   });
 
-  it('overrides model to minimax-m3 when image attachments are present on the go path', async () => {
+  it('overrides model to qwen3.6-plus when image attachments are present on the go path', async () => {
     let capturedBody: any = null;
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(
       async (_url, init: any) => {
@@ -301,7 +301,7 @@ describe('worker routing', () => {
 
     await worker.fetch(request);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(capturedBody.model).toBe('minimax-m3');
+    expect(capturedBody.model).toBe('qwen3.6-plus');
     expect(Array.isArray(capturedBody.messages[0].content)).toBe(true);
     expect(capturedBody.messages[0].content).toEqual([
       { type: 'text', text: 'What is in this image?' },
@@ -309,7 +309,7 @@ describe('worker routing', () => {
     ]);
   });
 
-  it('overrides model to minimax-m3-free when image attachments are present on the zen path', async () => {
+  it('overrides model to qwen3.6-plus when image attachments are present on the zen path', async () => {
     let capturedBody: any = null;
     vi.spyOn(globalThis, 'fetch').mockImplementation(
       async (_url, init: any) => {
@@ -338,6 +338,6 @@ describe('worker routing', () => {
     });
 
     await worker.fetch(request);
-    expect(capturedBody.model).toBe('minimax-m3-free');
+    expect(capturedBody.model).toBe('qwen3.6-plus');
   });
 });

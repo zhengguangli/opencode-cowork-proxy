@@ -10,8 +10,7 @@ import { streamAnthropicToOpenAI } from './translate/stream/anthropic-to-openai'
 const GO_UPSTREAM = "https://opencode.ai/zen/go/v1";
 const ZEN_UPSTREAM = "https://opencode.ai/zen/v1";
 const DEFAULT_UPSTREAM = GO_UPSTREAM;
-const VISION_MODEL_GO = "minimax-m3";
-const VISION_MODEL_ZEN = "minimax-m3-free";
+const VISION_MODEL = "qwen3.6-plus";
 
 const API_START_PATHS = new Set(['v1', 'v2']);
 
@@ -106,7 +105,7 @@ async function handleRequest(request: Request): Promise<Response> {
         const originalModel = req.model;
         if (route.modelOverride) req.model = route.modelOverride;
         if (hasImages(req)) {
-          req.model = route.upstream === ZEN_UPSTREAM ? VISION_MODEL_ZEN : VISION_MODEL_GO;
+          req.model = VISION_MODEL;
         }
         const openaiReq = formatAnthropicToOpenAI(req);
         const res = await fetch(`${upstream}/chat/completions`, {
