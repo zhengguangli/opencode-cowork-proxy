@@ -29,9 +29,14 @@ jobs:
 
       - name: Deploy to Cloudflare Workers
         continue-on-error: true
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CF_API_TOKEN }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "Skipping: CLOUDFLARE_API_TOKEN not set"
+            exit 0
+          fi
+          bunx wrangler deploy
 
       - name: Deploy to Vercel
         env:
