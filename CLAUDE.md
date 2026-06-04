@@ -47,11 +47,11 @@ bun run deploy         # wrangler deploy to Cloudflare (config: wrangler.toml)
 bunx vercel deploy --prod  # Deploy to Vercel (alternative to Cloudflare)
 ```
 
-**Deployment pipeline:** `.github/workflows/release.yml` uses `oven-sh/setup-bun@v1` — runs `bun install --frozen-lockfile`, `bun test`, then `wrangler deploy` on push to main.
+**Deployment pipeline:** `.github/workflows/release.yml` uses `oven-sh/setup-bun@v1` — runs `bun install --frozen-lockfile`, `bun test`, then deploys to Cloudflare Workers (optional, needs `CF_API_TOKEN`) and Vercel (needs `VERCEL_TOKEN`).
 
 **Local deployment (macOS):** Build a standalone binary with `bun build --compile --outfile opencode-cowork-proxy server.ts`, copy to `/usr/local/bin/`, and manage via `launchctl` with the `ai.opencode.proxy` LaunchAgent (port 18787).
 
-**Vercel deployment (alternative to Cloudflare):** `api/[[...route]].ts` entry exports `app.fetch` directly (no `hono/vercel` adapter needed — it can cause builds to hang). Deploy with `npx vercel deploy --prod`. Production URL: `https://opencode-cowork-proxy.vercel.app`. Useful when Cloudflare Workers' shared egress IPs trigger upstream rate limiting (429).
+**Vercel deployment (alternative to Cloudflare):** `api/[[...route]].ts` entry exports `app.fetch` directly (no `hono/vercel` adapter needed — it can cause builds to hang). Deploy with `bunx vercel deploy --prod`. Production URL: `https://opencode-cowork-proxy.vercel.app`. Useful when Cloudflare Workers' shared egress IPs trigger upstream rate limiting (429).
 
 ## High-Level Architecture
 
@@ -127,3 +127,4 @@ vi.restoreAllMocks();
 3. **Usage token double-counting:** When mapping OpenAI usage to Anthropic, cached tokens are reported both inside `prompt_tokens` and separately in `prompt_tokens_details.cached_tokens`. The `extractUncachedInputTokens()` function subtracts to avoid double-count.
 4. **Tool call argument accumulation:** In streaming, OpenAI sends tool call arguments incrementally across multiple chunks. The Anthropic→OpenAI translator concatenates them; the OpenAI→Anthropic translator handles accumulation per tool call index.
 5. **Responses API tool calls in non-DeepSeek path:** `translateAssistantContent()` in `responses-to-chat-completions.ts` must call `extractToolCalls()` to handle embedded `tool_call` content blocks. The DeepSeek merge path does this; the plain assistant path used to silently drop them — a CRITICAL class bug. See `field-mapping` skill "Common Bug Patterns (Responses API)" for the full list.
+6. **Bun vitest `vi.mocked` unavailable:** bun's vitest does not export `vi.mocked`. Use `globalThis.fetch` directly (or `(globalThis.fetch as any)` for TypeScript) in `toHaveBeenCalledWith` assertions.
