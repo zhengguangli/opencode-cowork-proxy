@@ -5,3 +5,5 @@ dist/
 .DS_Store
 opencode-cowork-proxy
 .vercel
+.wrangler/
+package-lock.json
