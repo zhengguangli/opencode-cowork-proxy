@@ -6,7 +6,9 @@
 export function extractApiKey(headers: Headers | Record<string, string | null>): string | null {
   const get = (name: string) => {
     if (headers instanceof Headers) return headers.get(name);
-    return (headers as Record<string, string | null>)[name.toLowerCase()] || null;
+    // Handle both original-case and lowercase keys in Record objects
+    const record = headers as Record<string, string | null>;
+    return record[name] || record[name.toLowerCase()] || null;
   };
   return get("X-Api-Key") || get("Authorization")?.replace(/^Bearer\s+/i, "")?.trim() || null;
 }

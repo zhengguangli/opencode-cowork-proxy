@@ -241,8 +241,9 @@ export function streamChatCompletionsToResponses(
               // New tool call (has id)
               if (activeItemType) flushActiveItem();
               startToolCallItem(tc.index, tc.id, tc.function?.name || "");
-            } else if (tc.function?.arguments) {
-              // Accumulating arguments
+            }
+            if (tc.function?.arguments) {
+              // Accumulating arguments (also handle when arguments arrive together with id)
               const acc = toolCallAccum.get(tc.index);
               if (acc) {
                 acc.args += tc.function.arguments;
@@ -264,7 +265,10 @@ export function streamChatCompletionsToResponses(
         // Handle text content — skip empty priming chunks to avoid creating spurious items
         const hasTextContent = delta.content !== undefined && delta.content !== null;
         if (hasTextContent) {
-          if (activeItemType && activeItemType !== "text") {
+          // Skip empty priming content when reasoning is active — prevents premature reasoning flush
+          if (activeItemType === "reasoning" && delta.content === "") {
+            // Don't flush reasoning for empty priming content
+          } else if (activeItemType && activeItemType !== "text") {
             flushActiveItem();
           }
 
@@ -349,6 +353,18 @@ export function streamChatCompletionsToResponses(
       // Flush final active item
       if (activeItemType) {
         flushActiveItem();
+      }
+
+      // If no output items were created (e.g., empty content with finish_reason),
+      // synthesize an empty text output item so the response has at least one output
+      if (outputItems.length === 0 && finishReason) {
+        outputItems.push({
+          id: msgId + "-0",
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "" }],
+          status: "completed",
+        });
       }
 
       // Emit response.completed (or response.failed/incomplete based on finish_reason)

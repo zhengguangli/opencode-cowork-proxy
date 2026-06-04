@@ -17,7 +17,7 @@ function imageSourceFromUrl(url: string | undefined): any {
   if (match) {
     return { type: "base64", media_type: match[1], data: match[2] };
   }
-  return { type: "base64", media_type: "image/jpeg", data: url || "" };
+  return { type: "url", url: url || "" };
 }
 
 export function formatOpenAIToAnthropic(body: any): any {
@@ -163,7 +163,18 @@ export function formatOpenAIToAnthropic(body: any): any {
   }
 
   // Passthrough additional fields for upstream providers that support them
-  if (tool_choice !== undefined) anthropicRequest.tool_choice = tool_choice;
+  if (tool_choice !== undefined) {
+    if (typeof tool_choice === "object" && tool_choice.type === "function") {
+      // OpenAI: {type:"function", function:{name:"xxx"}} → Anthropic: {type:"tool", name:"xxx"}
+      anthropicRequest.tool_choice = { type: "tool", name: tool_choice.function?.name };
+    } else if (typeof tool_choice === "string") {
+      // OpenAI "required" → Anthropic "any"; "auto" and "none" are shared
+      const anthyMap: Record<string, string> = { auto: "auto", none: "none", required: "any" };
+      anthropicRequest.tool_choice = anthyMap[tool_choice] || tool_choice;
+    } else {
+      anthropicRequest.tool_choice = tool_choice;
+    }
+  }
   if (response_format !== undefined) anthropicRequest.response_format = response_format;
   if (user !== undefined) anthropicRequest.metadata = { ...(anthropicRequest.metadata || {}), user_id: user };
 

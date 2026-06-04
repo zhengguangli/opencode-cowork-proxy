@@ -39,6 +39,7 @@ export function formatOpenAIToAnthropic(completion: any, model: string): any {
   if (finishReason === "tool_calls") stopReason = "tool_use";
   else if (finishReason === "length") stopReason = "max_tokens";
   else if (finishReason === "stop") stopReason = "end_turn";
+  else if (finishReason === "content_filter" || finishReason === "insufficient_system_resource") stopReason = "max_tokens";
 
   const result: any = {
     id: messageId,

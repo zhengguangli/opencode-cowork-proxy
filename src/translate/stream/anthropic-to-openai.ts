@@ -14,9 +14,10 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
       const decoder = new TextDecoder();
       let buffer = "";
 
-      // Tool call tracking: index → { id, name, args }
-      const toolCallMap = new Map<number, { id: string; name: string; args: string }>();
+      // Tool call tracking: contentBlockIndex → { id, name, args, toolCallIndex }
+      const toolCallMap = new Map<number, { id: string; name: string; args: string; toolCallIndex: number }>();
       let contentBlockIndex = -1;
+      let toolCallCounter = 0; // 0-based sequential index for OpenAI tool calls (independent of contentBlockIndex)
       let activeBlockType: "text" | "thinking" | "tool_use" | null = null;
 
       // Usage tracking from Anthropic events
@@ -70,10 +71,11 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
                 activeBlockType = "tool_use";
                 // Emit the initial tool_call chunk with id, name, empty args
                 const tcId = block.id || `call_${Date.now()}`;
-                toolCallMap.set(contentBlockIndex, { id: tcId, name: block.name || "", args: "" });
+                const tcIndex = toolCallCounter++;
+                toolCallMap.set(contentBlockIndex, { id: tcId, name: block.name || "", args: "", toolCallIndex: tcIndex });
                 emitChunk({
                   tool_calls: [{
-                    index: contentBlockIndex,
+                    index: tcIndex,
                     id: tcId,
                     type: "function",
                     function: { name: block.name || "", arguments: "" },
@@ -96,7 +98,7 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
                   tc.args += delta.partial_json || "";
                   emitChunk({
                     tool_calls: [{
-                      index: contentBlockIndex,
+                      index: tc.toolCallIndex,
                       function: { arguments: delta.partial_json || "" },
                     }],
                   });
@@ -165,9 +167,13 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
         if (buffer.trim()) {
           processEvents(buffer.split("\n"));
         }
-      } finally {
+      } catch (err) {
+        // On error, close without [DONE] to signal abnormal termination
+        controller.close();
         reader.releaseLock();
+        return;
       }
+      reader.releaseLock();
 
       // Emit usage as a final chunk if captured but never forwarded through message_delta
       if (!usageForwarded && (inputTokens > 0 || outputTokens > 0)) {

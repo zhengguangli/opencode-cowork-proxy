@@ -6,12 +6,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Goal:** Anthropic↔OpenAI API translation gateway (Cloudflare Worker using Hono).
 
-**Trigger:** For proxy-related work (translation bugs, streaming issues, routing changes, model updates, testing, deployment), invoke the `proxy-orchestrator` skill. Simple questions can be answered directly.
+**Trigger:** For proxy-related work (translation bugs, streaming issues, routing changes, model updates, code review, deployment, testing), invoke the `proxy-orchestrator` skill. Specialized skills also available: `deployment` (build, CI/CD, LaunchAgent, Cloudflare deploy), `field-mapping` (Anthropic↔OpenAI field reference for translation work), `stream-debug` (SSE streaming diagnosis). Simple questions can be answered directly.
+
+**Agent Team (6 members):** `translation-specialist`, `streaming-specialist`, `routing-specialist`, `qa-inspector`, `code-reviewer`, `deployment-manager` — definitions in `.claude/agents/`. Orchestration rules in `skills/proxy-orchestrator/SKILL.md`.
 
 **Change History:**
 | Date | Change | Target | Reason |
 |------|--------|--------|--------|
 | 2026-06-04 | Initial harness setup | All | New build for proxy project |
+| 2026-06-04 | Added translation-specialist | agents/translation-specialist.md | Request/response field mapping between Anthropic and OpenAI formats |
+| 2026-06-04 | Added streaming-specialist | agents/streaming-specialist.md | SSE event sequencing for both translation directions |
+| 2026-06-04 | Added routing-specialist | agents/routing-specialist.md | Path routing, model override, auth, cache, deployment config |
+| 2026-06-04 | Added qa-inspector | agents/qa-inspector.md | Cross-boundary integration verification (catches boundary mismatches) |
+| 2026-06-04 | Added code-reviewer | agents/code-reviewer.md | Static review for correctness, security, type safety |
+| 2026-06-04 | Added deployment-manager | agents/deployment-manager.md | Dedicated build/deploy/CI/CD management |
+| 2026-06-04 | Added field-mapping skill | skills/field-mapping/SKILL.md | Authoritative field-by-field reference for translation work |
+| 2026-06-04 | Added stream-debug skill | skills/stream-debug/SKILL.md | SSE streaming diagnostic guide with common pitfalls |
+| 2026-06-04 | Added deployment skill | skills/deployment/SKILL.md | Step-by-step deploy, config, model mgmt reference |
+| 2026-06-04 | Updated proxy-orchestrator | skills/proxy-orchestrator/SKILL.md | Include new agents, add review/deploy workflows, update to sub-agent pattern |
+| 2026-06-04 | Reconciled CLAUDE.md drift | CLAUDE.md | Audit found 4 agents + 2 skills unaccounted for in change history; trigger rules now list all 4 skills |
+| 2026-06-04 | Fixed orchestrator Phase 2 mode | skills/proxy-orchestrator/SKILL.md | Execution-mode table said "Agent Team" but body correctly said "Sub-agents" — body is authoritative; table now matches |
 
 ## Commands
 
@@ -20,11 +34,14 @@ npm install            # Install dependencies
 npm test               # Run all tests (vitest)
 npm run test:watch     # Watch mode
 npm run dev            # wrangler dev (CF Workers runtime)
-bun run server.ts      # Bun dev server (port 18788, no CF runtime)
+bun run server.ts      # Bun dev server (port 8787, no CF runtime)
+bun build --compile --outfile opencode-cowork-proxy server.ts  # Build standalone binary
 npm run deploy         # wrangler deploy to Cloudflare (config: wrangler.toml)
 ```
 
 **Deployment pipeline:** `.github/workflows/release.yml` triggers `wrangler deploy` on push to main. Manual deploy: `npm run deploy`.
+
+**Local deployment (macOS):** Build a standalone binary with `bun build --compile --outfile opencode-cowork-proxy server.ts`, copy to `/usr/local/bin/`, and manage via `launchctl` with the `ai.opencode.proxy` LaunchAgent (port 18787).
 
 ## High-Level Architecture
 

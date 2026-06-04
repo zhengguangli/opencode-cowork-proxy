@@ -13,7 +13,9 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
       let hasStartedTextBlock = false;
       let hasStartedThinkingBlock = false;
       let isToolUse = false;
-      let currentToolCallId: string | null = null;
+      let activeToolCallId: string | null = null;
+      let toolCallIdByOaiIndex = new Map<number, string>(); // OpenAI tool_call index → tool call ID
+      let oaiIndexToCbIndex = new Map<number, number>();    // OpenAI tool_call index → content block index
       let toolCallJsonMap = new Map<string, string>();
       let lastUsage: any = null;
       let finishReason: string | null = null;
@@ -42,10 +44,23 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
         // Handle tool calls
         if (delta.tool_calls?.length > 0) {
           for (const toolCall of delta.tool_calls) {
-            const toolCallId = toolCall.id;
+            const isNewDeclaration = !!toolCall.id;
 
-            if (toolCallId && toolCallId !== currentToolCallId) {
-              if (isToolUse || hasStartedTextBlock || hasStartedThinkingBlock) {
+            if (isNewDeclaration) {
+              const toolCallId = toolCall.id;
+
+              // Close previous content block if switching types
+              if (hasStartedTextBlock || hasStartedThinkingBlock) {
+                enqueueSSE(controller, "content_block_stop", {
+                  type: "content_block_stop",
+                  index: contentBlockIndex,
+                });
+                hasStartedTextBlock = false;
+                hasStartedThinkingBlock = false;
+              }
+
+              // Close previous tool call if switching to a different one
+              if (isToolUse && activeToolCallId !== toolCallId) {
                 enqueueSSE(controller, "content_block_stop", {
                   type: "content_block_stop",
                   index: contentBlockIndex,
@@ -53,10 +68,10 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
               }
 
               isToolUse = true;
-              hasStartedTextBlock = false;
-              hasStartedThinkingBlock = false;
-              currentToolCallId = toolCallId;
+              activeToolCallId = toolCallId;
               contentBlockIndex++;
+              toolCallIdByOaiIndex.set(toolCall.index, toolCallId);
+              oaiIndexToCbIndex.set(toolCall.index, contentBlockIndex);
               toolCallJsonMap.set(toolCallId, "");
 
               const toolBlock = {
@@ -91,18 +106,24 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
               });
             }
 
-            if (toolCall.function?.arguments && currentToolCallId) {
-              const currentJson = toolCallJsonMap.get(currentToolCallId) || "";
-              toolCallJsonMap.set(currentToolCallId, currentJson + toolCall.function.arguments);
+            // Always process arguments, keyed by OpenAI tool call index
+            // (not by a single currentToolCallId pointer)
+            if (toolCall.function?.arguments) {
+              const tcId = toolCallIdByOaiIndex.get(toolCall.index);
+              if (tcId) {
+                const currentJson = toolCallJsonMap.get(tcId) || "";
+                toolCallJsonMap.set(tcId, currentJson + toolCall.function.arguments);
 
-              enqueueSSE(controller, "content_block_delta", {
-                type: "content_block_delta",
-                index: contentBlockIndex,
-                delta: {
-                  type: "input_json_delta",
-                  partial_json: toolCall.function.arguments,
-                },
-              });
+                const cbIndex = oaiIndexToCbIndex.get(toolCall.index) ?? contentBlockIndex;
+                enqueueSSE(controller, "content_block_delta", {
+                  type: "content_block_delta",
+                  index: cbIndex,
+                  delta: {
+                    type: "input_json_delta",
+                    partial_json: toolCall.function.arguments,
+                  },
+                });
+              }
             }
           }
         }
@@ -115,7 +136,7 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
             });
             isToolUse = false;
             hasStartedTextBlock = false;
-            currentToolCallId = null;
+            activeToolCallId = null;
             contentBlockIndex++;
           }
 
@@ -155,50 +176,58 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
         }
 
         if (delta.content !== undefined && delta.content !== null) {
-          if (isToolUse || hasStartedThinkingBlock) {
-            enqueueSSE(controller, "content_block_stop", {
-              type: "content_block_stop",
-              index: contentBlockIndex,
-            });
-            isToolUse = false;
-            hasStartedThinkingBlock = false;
-            currentToolCallId = null;
-            contentBlockIndex++;
-          }
-
-          if (!hasStartedTextBlock) {
-            if (contentBlockIndex < 0) contentBlockIndex = 0;
-
-            if (!messageStarted) {
-              enqueueSSE(controller, "message_start", {
-                type: "message_start",
-                message: {
-                  id: messageId,
-                  type: "message",
-                  role: "assistant",
-                  content: [],
-                  model,
-                  stop_reason: null,
-                  stop_sequence: null,
-                  usage: { input_tokens: 0, output_tokens: 0 },
-                },
+          // Skip empty priming content — avoid creating spurious empty text block
+          // before reasoning or tool use content
+          if (delta.content === "" && !hasStartedTextBlock) {
+            // Don't create a text block for empty content
+          } else {
+            if (isToolUse || hasStartedThinkingBlock) {
+              enqueueSSE(controller, "content_block_stop", {
+                type: "content_block_stop",
+                index: contentBlockIndex,
               });
-              messageStarted = true;
+              isToolUse = false;
+              hasStartedThinkingBlock = false;
+              activeToolCallId = null;
+              contentBlockIndex++;
             }
 
-            enqueueSSE(controller, "content_block_start", {
-              type: "content_block_start",
-              index: contentBlockIndex,
-              content_block: { type: "text", text: "" },
-            });
-            hasStartedTextBlock = true;
-          }
+            if (!hasStartedTextBlock) {
+              if (contentBlockIndex < 0) contentBlockIndex = 0;
 
-          enqueueSSE(controller, "content_block_delta", {
-            type: "content_block_delta",
-            index: contentBlockIndex,
-            delta: { type: "text_delta", text: delta.content },
-          });
+              if (!messageStarted) {
+                enqueueSSE(controller, "message_start", {
+                  type: "message_start",
+                  message: {
+                    id: messageId,
+                    type: "message",
+                    role: "assistant",
+                    content: [],
+                    model,
+                    stop_reason: null,
+                    stop_sequence: null,
+                    usage: { input_tokens: 0, output_tokens: 0 },
+                  },
+                });
+                messageStarted = true;
+              }
+
+              enqueueSSE(controller, "content_block_start", {
+                type: "content_block_start",
+                index: contentBlockIndex,
+                content_block: { type: "text", text: "" },
+              });
+              hasStartedTextBlock = true;
+            }
+
+            if (delta.content) {
+              enqueueSSE(controller, "content_block_delta", {
+                type: "content_block_delta",
+                index: contentBlockIndex,
+                delta: { type: "text_delta", text: delta.content },
+              });
+            }
+          }
         }
       }
 
@@ -207,16 +236,20 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
           const { done, value } = await reader.read();
           if (done) {
             if (buffer.trim()) {
-              const lines = buffer.split('\n');
-              for (const line of lines) {
-                if (line.trim() && line.startsWith('data: ')) {
-                  const data = line.slice(6).trim();
-                  if (data === '[DONE]') continue;
-                  try {
-                    const parsed = JSON.parse(data);
-                    const delta = parsed.choices?.[0]?.delta;
-                    if (delta) processStreamDelta(delta, parsed);
-                  } catch { /* parse error */ }
+              const frames = buffer.split('\n\n');
+              for (const frame of frames) {
+                if (!frame.trim()) continue;
+                const lines = frame.split('\n');
+                for (const line of lines) {
+                  if (line.trim() && line.startsWith('data: ')) {
+                    const data = line.slice(6).trim();
+                    if (data === '[DONE]') continue;
+                    try {
+                      const parsed = JSON.parse(data);
+                      const delta = parsed.choices?.[0]?.delta;
+                      if (delta) processStreamDelta(delta, parsed);
+                    } catch { /* parse error */ }
+                  }
                 }
               }
             }
@@ -226,18 +259,23 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
           const chunk = decoder.decode(value, { stream: true });
           buffer += chunk;
 
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
+          // Split on double newline to handle TCP fragmentation correctly
+          const frames = buffer.split('\n\n');
+          buffer = frames.pop() || '';
 
-          for (const line of lines) {
-            if (line.trim() && line.startsWith('data: ')) {
-              const data = line.slice(6).trim();
-              if (data === '[DONE]') continue;
-              try {
-                const parsed = JSON.parse(data);
-                const delta = parsed.choices?.[0]?.delta;
-                if (delta) processStreamDelta(delta, parsed);
-              } catch { continue; }
+          for (const frame of frames) {
+            if (!frame.trim()) continue;
+            const lines = frame.split('\n');
+            for (const line of lines) {
+              if (line.trim() && line.startsWith('data: ')) {
+                const data = line.slice(6).trim();
+                if (data === '[DONE]') continue;
+                try {
+                  const parsed = JSON.parse(data);
+                  const delta = parsed.choices?.[0]?.delta;
+                  if (delta) processStreamDelta(delta, parsed);
+                } catch { continue; }
+              }
             }
           }
 
@@ -255,6 +293,23 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
         enqueueSSE(controller, "content_block_stop", {
           type: "content_block_stop",
           index: contentBlockIndex,
+        });
+      }
+
+      // Emit synthetic message_start if it was never emitted (e.g., empty delta with finish_reason)
+      if (!messageStarted) {
+        enqueueSSE(controller, "message_start", {
+          type: "message_start",
+          message: {
+            id: messageId,
+            type: "message",
+            role: "assistant",
+            content: [],
+            model,
+            stop_reason: null,
+            stop_sequence: null,
+            usage: { input_tokens: 0, output_tokens: 0 },
+          },
         });
       }
 

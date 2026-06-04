@@ -14,6 +14,76 @@ When you attach an image in Claude Code and send it through this proxy, the requ
 
 No configuration needed — it just works as long as you have an OpenCode Go or Zen subscription.
 
+## Local Deployment (macOS LaunchAgent)
+
+The proxy can also run as a standalone Bun HTTP server via `server.ts`, managed by `launchctl` for automatic startup on login.
+
+### Build
+
+```bash
+bun build --compile --outfile opencode-cowork-proxy server.ts
+```
+
+This produces a standalone `opencode-cowork-proxy` binary (Mach-O, no runtime dependencies). Copy it to `/usr/local/bin/`:
+
+```bash
+cp opencode-cowork-proxy /usr/local/bin/opencode-cowork-proxy
+```
+
+### LaunchAgent Plist
+
+Create `~/Library/LaunchAgents/ai.opencode.proxy.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ai.opencode.proxy</string>
+    <key>Program</key>
+    <string>/usr/local/bin/opencode-cowork-proxy</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PORT</key>
+        <string>18787</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/usr/local/var/log/opencode-cowork-proxy.log</string>
+    <key>StandardErrorPath</key>
+    <string>/usr/local/var/log/opencode-cowork-proxy.log</string>
+</dict>
+</plist>
+```
+
+### Load / Unload
+
+```bash
+launchctl load ~/Library/LaunchAgents/ai.opencode.proxy.plist
+launchctl unload ~/Library/LaunchAgents/ai.opencode.proxy.plist
+```
+
+To restart after rebuilding:
+
+```bash
+cd /path/to/project
+bun build --compile --outfile opencode-cowork-proxy server.ts
+sudo cp opencode-cowork-proxy /usr/local/bin/
+launchctl unload ~/Library/LaunchAgents/ai.opencode.proxy.plist
+launchctl load ~/Library/LaunchAgents/ai.opencode.proxy.plist
+```
+
+### Verify
+
+```bash
+launchctl print gui/$(id -u)/ai.opencode.proxy
+tail -f /usr/local/var/log/opencode-cowork-proxy.log
+```
+
 ## Free Models
 
 We support a pay-as-you-go model. Below are the prices per 1M tokens for completely free models available through OpenCode Zen.
@@ -91,100 +161,18 @@ Known Zen model categories that do not work yet through this proxy:
 | Zen model category | Why it does not work yet |
 |--------------------|--------------------------|
 | GPT models such as `gpt-5.5`, `gpt-5.5-pro`, `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.3-codex`, `gpt-5.2` | Zen exposes these through `/responses`, and this proxy does not yet translate Anthropic Messages to OpenAI Responses API. |
-| Claude models such as `claude-opus-4-8`, `claude-sonnet-4-6`, `claude-haiku-4-5` | Zen exposes these through `/messages`; this proxy's `/zen` Claude path currently translates to OpenAI-compatible `/chat/completions`. |
-| Qwen models such as `qwen3.7-max`, `qwen3.6-plus`, `qwen3.5-plus` | Zen exposes these through `/messages` (Anthropic-compatible), not `/chat/completions`. |
-| Gemini models such as `gemini-3.5-flash`, `gemini-3.1-pro`, `gemini-3-flash` | Zen exposes these through model-specific endpoints, not the generic chat-completions path used here. |
+| Claude models such as `claude-opus-4-8`, `claude-sonnet-4-6`, `claude-haiku-4-5` | Zen exposes these through `/messages`; this proxy's `/zen` Claude path currently translates to OpenAI format for the Go upstream. A `/zen/claude` sub-route or pass-through may be added later. |
+| DeepSeek V4 Pro, DeepSeek V4 Flash | Already available on Go (paid) — behavior on Zen may differ. |
 
-Use `/go` for OpenCode Go. Use `/zen` only for Zen models listed as OpenAI-compatible chat models in the [OpenCode Zen endpoint docs](https://opencode.ai/docs/zen/#endpoints).
+## OpenCode Go Models
 
-## For Developers (OpenCode Cowork Proxy Worker)
+This proxy is tested with `minimax-m3`. It also provides access to all OpenCode Go models listed in its public model manifest.
 
-Technically, this is a Cloudflare Worker gateway that lets Anthropic/Claude clients talk to OpenAI-compatible APIs, and lets OpenAI clients talk to Anthropic-compatible APIs.
-
-The default upstream is [OpenCode Go](https://opencode.ai/docs/go/#endpoints):
-
-```text
-https://opencode.ai/zen/go/v1
-```
-
-This means Claude can be configured to use OpenCode Go models through this proxy without additional server-side configuration.
-
-```text
-Claude / Anthropic SDK  ->  /v1/messages           ->  OpenAI-compatible upstream
-OpenAI SDK              ->  /v1/chat/completions   ->  OpenAI-compatible upstream
-OpenAI SDK              ->  /v1/chat/completions   ->  Anthropic upstream with x-upstream-format: anthropic
-```
-
-## Detailed Claude Setup
-
-Use Claude's **Configure third-party Inference** flow and add the Worker as a custom gateway.
-
-Configure the gateway like this:
-
-| Setting | Value |
-|---------|-------|
-| Base URL | Your deployed Worker URL, or add `/go` or `/zen` |
-| Auth scheme | `x-api-key` |
-| API key | Your OpenCode Go API key |
-| Model | Add manually, for example `deepseek-v4-pro` |
-
-Do not include `/v1/messages` in the Claude base URL. Claude will call `/v1/messages`; the Worker handles that path.
-
-Use `/go` for OpenCode Go subscription models. Use `/zen` only for OpenCode Zen models available through the OpenAI-compatible `/chat/completions` endpoint. Zen GPT `/responses`, Zen Claude `/messages`, and Zen Gemini model-specific endpoints are not supported yet.
-
-### Manual Model Setup
-
-Claude may not discover the OpenCode Go models automatically. Add the model manually in **Configure third-party Inference**.
-
-Common OpenCode Go model IDs:
-
-| Model | Model ID | Upstream API style |
-|-------|----------|--------------------|
-| GLM-5.1 | `glm-5.1` | OpenAI-compatible |
-| GLM-5 | `glm-5` | OpenAI-compatible |
-| Kimi K2.5 | `kimi-k2.5` | OpenAI-compatible |
-| Kimi K2.6 | `kimi-k2.6` | OpenAI-compatible |
-| DeepSeek V4 Pro | `deepseek-v4-pro` | OpenAI-compatible |
-| DeepSeek V4 Flash | `deepseek-v4-flash` | OpenAI-compatible |
-| MiMo-V2.5-Pro | `mimo-v2.5-pro` | OpenAI-compatible |
-| MiMo-V2.5 | `mimo-v2.5` | OpenAI-compatible |
-| MiniMax M3 | `minimax-m3` | Anthropic-compatible upstream |
-| MiniMax M2.7 | `minimax-m2.7` | Anthropic-compatible upstream |
-| MiniMax M2.5 | `minimax-m2.5` | Anthropic-compatible upstream |
-| Qwen3.7 Max | `qwen3.7-max` | Anthropic-compatible upstream |
-| Qwen3.6 Plus | `qwen3.6-plus` | Anthropic-compatible upstream |
-
-For the latest list, see the OpenCode Go endpoint docs:
-
-```text
-https://opencode.ai/docs/go/#endpoints
-```
-
-For OpenCode's own config files, model IDs use the `opencode-go/<model-id>` format. For Claude's third-party inference setup through this proxy, use the raw API model ID such as `deepseek-v4-pro`, `kimi-k2.6`, or `minimax-m3`.
-
-### `claude.json` Example
-
-You can also configure Claude with a `claude.json` gateway entry. Replace the Worker URL and API key with your own values.
+The built-in model list is compiled from the [opencode.ai/models](https://opencode.ai/models) page (see `src/models.ts`).
 
 ```json
 {
-  "inferenceProvider": "gateway",
-  "inferenceGatewayBaseUrl": "YOUR_DEPLOYED_WORKER_URL/go",
-  "inferenceGatewayApiKey": "YOUR_OPENCODE_GO_API_KEY",
-  "inferenceGatewayAuthScheme": "x-api-key",
-  "inferenceModels": [
-    {
-      "name": "glm-5.1"
-    },
-    {
-      "name": "glm-5"
-    },
-    {
-      "name": "kimi-k2.5"
-    },
-    {
-      "name": "kimi-k2.6"
-    },
+  "models": [
     {
       "name": "deepseek-v4-pro"
     },
@@ -192,10 +180,7 @@ You can also configure Claude with a `claude.json` gateway entry. Replace the Wo
       "name": "deepseek-v4-flash"
     },
     {
-      "name": "mimo-v2.5-pro"
-    },
-    {
-      "name": "mimo-v2.5"
+      "name": "deepseek-v4-flash-free"
     },
     {
       "name": "minimax-m3"
@@ -287,6 +272,7 @@ This works with all Go and Zen models.
 | `/v1/messages` | POST | Anthropic Messages API. Translates to OpenAI format by default. |
 | `/v1/chat/completions` | POST | OpenAI Chat Completions API. Pass-through by default. |
 | `/v1/models` | GET | Model discovery proxy. |
+| `/v1/responses` | POST | OpenAI Responses API. Translates to/from Chat Completions internally. |
 
 ## OpenAI SDK Usage
 
@@ -329,6 +315,7 @@ The gateway handles:
 - Streaming SSE in both directions
 - DeepSeek/OpenAI `reasoning_content` as Anthropic `thinking` blocks
 - Prompt cache key injection for OpenAI-style prefix caching
+- OpenAI Responses API to/from Chat Completions internal translation
 
 ## Prompt Caching
 

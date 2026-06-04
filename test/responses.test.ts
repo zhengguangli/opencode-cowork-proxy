@@ -512,9 +512,11 @@ describe('streamChatCompletionsToResponses (Chat Completions SSE → Responses A
 
     const result = await collectStream(streamChatCompletionsToResponses(source, 'test-model'));
 
-    // No output items → no response.created emitted (empty chunk skipped)
+    // No output items emitted during stream → no response.created event
     expect(result).not.toContain('event: response.created');
     expect(result).toContain('event: response.completed');
-    expect(result).toContain('"output":[]');
+    // Synthetic empty text item created because finish_reason was present with no output
+    expect(result).toContain('"type":"output_text"');
+    expect(result).toContain('"text":""');
   });
 });

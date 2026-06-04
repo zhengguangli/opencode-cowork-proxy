@@ -21,7 +21,7 @@ export function formatAnthropicToOpenAI(response: any, model: string): any {
         type: "function",
         function: {
           name: block.name,
-          arguments: JSON.stringify(block.input),
+          arguments: typeof block.input === "string" ? block.input : JSON.stringify(block.input),
         },
       });
     }
@@ -61,7 +61,12 @@ export function formatAnthropicToOpenAI(response: any, model: string): any {
       ? (() => {
           const input = extractInputTokens(response.usage);
           const output = extractOutputTokens(response.usage);
-          return { prompt_tokens: input, completion_tokens: output, total_tokens: input + output };
+          const cached = response.usage.cache_read_input_tokens || response.usage.cache_creation_input_tokens || 0;
+          const result: any = { prompt_tokens: input + cached, completion_tokens: output, total_tokens: input + output + cached };
+          if (cached > 0) {
+            result.prompt_tokens_details = { cached_tokens: cached };
+          }
+          return result;
         })()
       : { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
   };

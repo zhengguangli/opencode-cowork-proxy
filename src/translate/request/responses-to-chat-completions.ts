@@ -205,6 +205,12 @@ function translateUserContent(content: any): any {
       const src = part.image_url || part.source;
       if (src?.url) {
         parts.push({ type: "image_url", image_url: { url: src.url } });
+      } else if (src?.type === "base64") {
+        // Source-based image (Responses API native format)
+        parts.push({
+          type: "image_url",
+          image_url: { url: `data:${src.media_type};base64,${src.data}` },
+        });
       }
     } else if (part.type === "image_url") {
       hasImages = true;
@@ -229,10 +235,14 @@ function translateAssistantContent(item: any): any {
     .filter((p: any) => p.type === "output_text")
     .map((p: any) => p.text || "")
     .join("\n");
+  const toolCalls = extractToolCalls(item);
 
   const assistantMsg: any = { role: "assistant" };
   // Always set content (null if no text, for tool call responses)
   assistantMsg.content = text || null;
+  if (toolCalls.length > 0) {
+    assistantMsg.tool_calls = toolCalls;
+  }
 
   return assistantMsg;
 }
