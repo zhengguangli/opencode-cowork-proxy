@@ -44,11 +44,14 @@ npm run dev            # wrangler dev (CF Workers runtime)
 bun run server.ts      # Bun dev server (port 8787, no CF runtime)
 bun build --compile --outfile opencode-cowork-proxy server.ts  # Build standalone binary
 npm run deploy         # wrangler deploy to Cloudflare (config: wrangler.toml)
+npx vercel deploy --prod  # Deploy to Vercel (alternative to Cloudflare)
 ```
 
 **Deployment pipeline:** `.github/workflows/release.yml` triggers `wrangler deploy` on push to main. Manual deploy: `npm run deploy`.
 
 **Local deployment (macOS):** Build a standalone binary with `bun build --compile --outfile opencode-cowork-proxy server.ts`, copy to `/usr/local/bin/`, and manage via `launchctl` with the `ai.opencode.proxy` LaunchAgent (port 18787).
+
+**Vercel deployment (alternative to Cloudflare):** `api/[[...route]].ts` entry exports `app.fetch` directly (no `hono/vercel` adapter needed — it can cause builds to hang). Deploy with `npx vercel deploy --prod`. Production URL: `https://opencode-cowork-proxy.vercel.app`. Useful when Cloudflare Workers' shared egress IPs trigger upstream rate limiting (429).
 
 ## High-Level Architecture
 
