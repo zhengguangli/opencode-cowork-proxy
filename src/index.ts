@@ -175,11 +175,17 @@ function authenticateRequest(request: Request): { key: string } | { response: Re
   return { key };
 }
 
-/** Fetch with network-error catch — returns a 502 response if upstream is unreachable. */
+/** Fetch with timeout/abort/network-error catch — returns error response on failure. */
 async function safeUpstreamFetch(url: string, init: RequestInit): Promise<Response> {
   try {
     return await fetch(url, init);
-  } catch {
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      return new Response(
+        JSON.stringify({ error: { type: "upstream_error", message: "Request aborted" } }),
+        { status: 499, headers: { "Content-Type": "application/json" } },
+      );
+    }
     return new Response(
       JSON.stringify({ error: { type: "upstream_error", message: "Upstream unreachable" } }),
       { status: 502, headers: { "Content-Type": "application/json" } },
@@ -222,6 +228,7 @@ async function handleRequest(request: Request): Promise<Response> {
         req.model = VISION_MODEL;
       }
       const openaiReq = formatAnthropicToOpenAI(req);
+      const upstreamSignal = openaiReq.stream ? request.signal : AbortSignal.timeout(60_000);
       const res = await safeUpstreamFetch(`${upstream}/chat/completions`, {
         method: "POST",
         headers: {
@@ -229,6 +236,7 @@ async function handleRequest(request: Request): Promise<Response> {
           "Authorization": `Bearer ${key}`,
         },
         body: JSON.stringify(openaiReq),
+        signal: upstreamSignal,
       });
       if (!res.ok) return upstreamErrorResponse(res, await res.text());
 
@@ -265,6 +273,7 @@ async function handleRequest(request: Request): Promise<Response> {
         method: "POST",
         headers: anthropicHeaders(request, key),
         body: anthBody,
+        signal: AbortSignal.timeout(60_000),
       });
       if (!anthPassRes.ok) return upstreamErrorResponse(anthPassRes, await anthPassRes.text());
       return anthPassRes;
@@ -289,10 +298,12 @@ async function handleRequest(request: Request): Promise<Response> {
       if (route.modelOverride) req.model = route.modelOverride;
       if (hasOpenAIImages(req)) req.model = VISION_MODEL;
       const anthReq = formatOpenAIToAnthropic(req);
+      const upstreamSignal = anthReq.stream ? request.signal : AbortSignal.timeout(60_000);
       const res = await safeUpstreamFetch(`${upstream}/v1/messages`, {
         method: "POST",
         headers: anthropicHeaders(request, key),
         body: JSON.stringify(anthReq),
+        signal: upstreamSignal,
       });
       if (!res.ok) return upstreamErrorResponse(res, await res.text());
 
@@ -331,6 +342,7 @@ async function handleRequest(request: Request): Promise<Response> {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
       body: oaiBody,
+      signal: AbortSignal.timeout(60_000),
     });
     if (!oaiPassRes.ok) return upstreamErrorResponse(oaiPassRes, await oaiPassRes.text());
     return oaiPassRes;
@@ -363,6 +375,7 @@ async function handleRequest(request: Request): Promise<Response> {
     }
 
     const chatReq = formatResponsesToChatCompletions(req);
+    const upstreamSignal = chatReq.stream ? request.signal : AbortSignal.timeout(60_000);
     const upstreamRes = await safeUpstreamFetch(`${upstream}/chat/completions`, {
       method: "POST",
       headers: {
@@ -370,6 +383,7 @@ async function handleRequest(request: Request): Promise<Response> {
         "Authorization": `Bearer ${key}`,
       },
       body: JSON.stringify(chatReq),
+      signal: upstreamSignal,
     });
     if (!upstreamRes.ok) return upstreamErrorResponse(upstreamRes, await upstreamRes.text());
 
@@ -411,10 +425,12 @@ async function handleRequest(request: Request): Promise<Response> {
       ? await safeUpstreamFetch(`${upstream}/v1/models`, {
           method: "GET",
           headers: anthropicHeaders(request, key),
+          signal: AbortSignal.timeout(10_000),
         })
       : await safeUpstreamFetch(`${upstream}/models`, {
           method: "GET",
           headers: { "Authorization": `Bearer ${key}` },
+          signal: AbortSignal.timeout(10_000),
       });
     if (!res.ok) return upstreamErrorResponse(res, await res.text());
 
