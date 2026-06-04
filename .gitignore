@@ -7,3 +7,9 @@ opencode-cowork-proxy
 .vercel
 .wrangler/
 package-lock.json
+
+# Track .claude/ (agents + skills) but exclude per-user and runtime files
+!.claude/
+.claude/settings.json
+.claude/scheduled_tasks.lock
+.claude/skills/**/_workspace/
