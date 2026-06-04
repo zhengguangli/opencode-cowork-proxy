@@ -199,8 +199,8 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
       ],
     });
     expect(Array.isArray(result.messages[0].content)).toBe(true);
-    expect(result.messages[0].content[0]).toEqual({ type: 'image_url', image_url: { url: 'data:image/png;base64,abc' } });
-    expect(result.messages[0].content[1]).toEqual({ type: 'text', text: 'What is this?' });
+    expect(result.messages[0].content[0]).toEqual({ type: 'text', text: 'What is this?' });
+    expect(result.messages[0].content[1]).toEqual({ type: 'image_url', image_url: { url: 'data:image/png;base64,abc' } });
   });
 
   // ── System message deduplication ──

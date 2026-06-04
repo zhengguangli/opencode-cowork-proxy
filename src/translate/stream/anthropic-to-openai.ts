@@ -154,6 +154,11 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
               processEvents(frame.split("\n"));
             }
           }
+
+          // Backpressure: if consumer is behind, yield to let them drain
+          if (controller.desiredSize !== null && controller.desiredSize <= 0) {
+            await new Promise(resolve => setTimeout(resolve, 0));
+          }
         }
 
         // Process remaining buffer

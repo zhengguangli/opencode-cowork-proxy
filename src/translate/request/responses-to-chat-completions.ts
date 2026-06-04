@@ -192,34 +192,35 @@ function translateUserContent(content: any): any {
     return { role: "user", content: "" };
   }
 
-  // Check if there are image content blocks
-  const hasImages = content.some(
-    (p: any) => p.type === "input_image" || p.type === "image_url"
-  );
+  // Single pass: detect images and collect content parts simultaneously
+  let hasImages = false;
+  const parts: any[] = [];
+  const textParts: string[] = [];
+
+  for (const part of content) {
+    if (part.type === "text") {
+      textParts.push(part.text || "");
+    } else if (part.type === "input_image") {
+      hasImages = true;
+      const src = part.image_url || part.source;
+      if (src?.url) {
+        parts.push({ type: "image_url", image_url: { url: src.url } });
+      }
+    } else if (part.type === "image_url") {
+      hasImages = true;
+      parts.push({ type: "image_url", image_url: { url: part.image_url?.url || "" } });
+    }
+  }
 
   if (hasImages) {
-    const parts: any[] = [];
-    for (const part of content) {
-      if (part.type === "text") {
-        parts.push({ type: "text", text: part.text || "" });
-      } else if (part.type === "input_image") {
-        const src = part.image_url || part.source;
-        if (src?.url) {
-          parts.push({ type: "image_url", image_url: { url: src.url } });
-        }
-      } else if (part.type === "image_url") {
-        parts.push({ type: "image_url", image_url: { url: part.image_url?.url || "" } });
-      }
+    if (textParts.length > 0) {
+      parts.unshift({ type: "text", text: textParts.join("\n") });
     }
     return { role: "user", content: parts };
   }
 
-  // Plain text content
-  const plainText = content
-    .filter((p: any) => p.type === "text")
-    .map((p: any) => p.text || "")
-    .join("\n");
-  return { role: "user", content: plainText || "" };
+  // Plain text content (no intermediate arrays)
+  return { role: "user", content: textParts.join("\n") || "" };
 }
 
 function translateAssistantContent(item: any): any {
@@ -240,21 +241,19 @@ function extractToolCalls(item: any): any[] {
   // Responses API assistant items may have tool_calls attached
   // but in Responses API format, tool calls are separate output items, not embedded
   const content = item.content || [];
-  return content
-    .filter((p: any) => p.type === "function_call_output" || p.type === "tool_call")
-    .map((p: any) => {
-      if (p.type === "function_call_output") return null;
-      if (p.type === "tool_call") {
-        return {
-          id: p.id,
-          type: "function",
-          function: {
-            name: p.name || "",
-            arguments: typeof p.arguments === "string" ? p.arguments : JSON.stringify(p.arguments || {}),
-          },
-        };
-      }
-      return null;
-    })
-    .filter(Boolean);
+  const result: any[] = [];
+  for (const p of content) {
+    if (p.type === "function_call_output") continue;
+    if (p.type === "tool_call") {
+      result.push({
+        id: p.id,
+        type: "function",
+        function: {
+          name: p.name || "",
+          arguments: typeof p.arguments === "string" ? p.arguments : JSON.stringify(p.arguments || {}),
+        },
+      });
+    }
+  }
+  return result;
 }

@@ -151,18 +151,18 @@ async function handleRequest(request: Request): Promise<Response> {
         return new Response(JSON.stringify(toAnthropicResponse(data, originalModel)), {
           headers: { "Content-Type": "application/json" },
         });
-      }
-
-      // Pass-through to Anthropic upstream (with model override applied)
-      const anthReqJson = await request.json();
-      if (route.modelOverride) anthReqJson.model = route.modelOverride;
-      if (hasImages(anthReqJson)) anthReqJson.model = VISION_MODEL;
-      const anthPassRes = await fetch(`${upstream}/v1/messages`, {
+      } else {
+        // Pass-through to Anthropic upstream (with model override applied)
+        const anthReqJson = await request.json();
+        if (route.modelOverride) anthReqJson.model = route.modelOverride;
+        if (hasImages(anthReqJson)) anthReqJson.model = VISION_MODEL;
+        const anthPassRes = await fetch(`${upstream}/v1/messages`, {
         method: "POST",
         headers: anthropicHeaders(request, key!),
         body: JSON.stringify(anthReqJson),
       });
-      return anthPassRes;
+        return anthPassRes;
+      }
   }
 
   // OpenAI → Anthropic (or pass-through)
@@ -250,11 +250,17 @@ async function handleRequest(request: Request): Promise<Response> {
       });
   }
 
-  // Model discovery
+  // Model discovery (with Cloudflare Cache API for 300s TTL)
   if (route.path === '/v1/models' && request.method === 'GET') {
       const key = extractApiKey(request.headers);
       const err = validateApiKey(key);
       if (err) return authErrorResponse(err);
+
+      // Compute cache key from upstream + format (auth-independent)
+      const cacheKey = new Request(`${upstream}/models?fmt=${fmt}`, request);
+      const modelCache = typeof caches !== "undefined" ? caches.default : null;
+      const cached = modelCache ? await modelCache.match(cacheKey) : null;
+      if (cached) return cached;
 
       const res = fmt === "anthropic"
         ? await fetch(`${upstream}/v1/models`, {
@@ -266,7 +272,19 @@ async function handleRequest(request: Request): Promise<Response> {
             headers: { "Authorization": `Bearer ${key}` },
       });
       if (!res.ok) return upstreamErrorResponse(res, await res.text());
-      return new Response(await res.text(), { headers: { "Content-Type": "application/json" } });
+
+      const body = await res.text();
+      const response = new Response(body, {
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "public, max-age=300",
+        },
+      });
+      // Fire-and-forget cache put (no await to avoid blocking response)
+      if (modelCache) {
+        (async () => { try { await modelCache.put(cacheKey, response.clone()); } catch {} })();
+      }
+      return response;
   }
 
   return new Response(JSON.stringify({

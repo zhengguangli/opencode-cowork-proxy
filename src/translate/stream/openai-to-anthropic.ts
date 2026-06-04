@@ -240,6 +240,11 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
               } catch { continue; }
             }
           }
+
+          // Backpressure: if consumer is behind, yield to let them drain
+          if (controller.desiredSize !== null && controller.desiredSize <= 0) {
+            await new Promise(resolve => setTimeout(resolve, 0));
+          }
         }
       } finally {
         reader.releaseLock();
