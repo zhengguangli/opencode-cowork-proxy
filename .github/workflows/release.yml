@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -28,12 +31,14 @@ jobs:
         run: bun test
 
       - name: Deploy to Cloudflare Workers
+        if: github.event_name == 'push'
         continue-on-error: true
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
 
       - name: Deploy to Vercel
+        if: github.event_name == 'push'
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: team_Y9xS2rBnMALnypWNwhRKW3ox
@@ -46,6 +51,7 @@ jobs:
           bunx vercel deploy --prod --token="$VERCEL_TOKEN"
 
       - name: Create release
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: release-${{ github.run_number }}
