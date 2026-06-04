@@ -407,7 +407,7 @@ describe('worker routing', () => {
     });
 
     await worker.fetch(request);
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith('https://opencode.ai/zen/go/v1/chat/completions', expect.anything());
+    expect(globalThis.fetch).toHaveBeenCalledWith('https://opencode.ai/zen/go/v1/chat/completions', expect.anything());
   });
 
   it('injects DeepSeek thinking for /v1/responses deepseek models', async () => {

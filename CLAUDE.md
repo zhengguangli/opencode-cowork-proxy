@@ -37,17 +37,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm install            # Install dependencies
-npm test               # Run all tests (vitest)
-npm run test:watch     # Watch mode
-npm run dev            # wrangler dev (CF Workers runtime)
+bun install            # Install dependencies
+bun test               # Run all tests (vitest)
+bun run test:watch     # Watch mode
+bun run dev            # wrangler dev (CF Workers runtime)
 bun run server.ts      # Bun dev server (port 8787, no CF runtime)
 bun build --compile --outfile opencode-cowork-proxy server.ts  # Build standalone binary
-npm run deploy         # wrangler deploy to Cloudflare (config: wrangler.toml)
-npx vercel deploy --prod  # Deploy to Vercel (alternative to Cloudflare)
+bun run deploy         # wrangler deploy to Cloudflare (config: wrangler.toml)
+bunx vercel deploy --prod  # Deploy to Vercel (alternative to Cloudflare)
 ```
 
-**Deployment pipeline:** `.github/workflows/release.yml` triggers `wrangler deploy` on push to main. Manual deploy: `npm run deploy`.
+**Deployment pipeline:** `.github/workflows/release.yml` triggers `wrangler deploy` on push to main. Manual deploy: `bun run deploy`.
 
 **Local deployment (macOS):** Build a standalone binary with `bun build --compile --outfile opencode-cowork-proxy server.ts`, copy to `/usr/local/bin/`, and manage via `launchctl` with the `ai.opencode.proxy` LaunchAgent (port 18787).
 

@@ -210,7 +210,7 @@ Use these settings when connecting the repository in Cloudflare:
 | Setting | Value |
 |---------|-------|
 | Build command | empty |
-| Deploy command | `npm run deploy` |
+| Deploy command | `bun run deploy` |
 | Production branch | `main` |
 
 Do not deploy this as a normal Node.js web app. `wrangler deploy` builds and publishes the Worker from `wrangler.toml`.
@@ -326,9 +326,9 @@ Cache hit tokens from OpenAI-compatible usage metadata are mapped back to Anthro
 ## Development
 
 ```bash
-npm install
-npm test
-npm run deploy -- --dry-run
+bun install
+bun test
+bun run deploy -- --dry-run
 ```
 
 Project structure:
