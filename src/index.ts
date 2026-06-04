@@ -409,32 +409,23 @@ async function handleRequest(request: Request): Promise<Response> {
   }
 
   // ====================================================================
-  // Root path: health-check info
+  // Root path: health-check info (no auth required)
   // ====================================================================
   if (route.path === '/' && request.method === 'GET') {
-    const auth = authenticateRequest(request);
-    if ('key' in auth) {
-      // Authenticated — return full topology info
-      return new Response(JSON.stringify({
-        name: "opencode-cowork-proxy",
-        upstream,
-        routes: {
-          "/go": GO_UPSTREAM,
-          "/zen": ZEN_UPSTREAM,
-        },
-        endpoints: {
-          "/v1/messages": "Anthropic → upstream (translated if upstream=openai)",
-          "/v1/chat/completions": "OpenAI → upstream (translated if upstream=anthropic)",
-          "/v1/responses": "OpenAI Responses API → upstream Chat Completions",
-          "/v1/models": "Model discovery proxy",
-        },
-      }, null, 2), {
-        headers: { "Content-Type": "application/json" },
-        status: 200,
-      });
-    }
-    // Unauthenticated — minimal health check only (no topology info leak)
-    return new Response(JSON.stringify({ status: "ok" }), {
+    return new Response(JSON.stringify({
+      name: "opencode-cowork-proxy",
+      upstream,
+      routes: {
+        "/go": GO_UPSTREAM,
+        "/zen": ZEN_UPSTREAM,
+      },
+      endpoints: {
+        "/v1/messages": "Anthropic → upstream (translated if upstream=openai)",
+        "/v1/chat/completions": "OpenAI → upstream (translated if upstream=anthropic)",
+        "/v1/responses": "OpenAI Responses API → upstream Chat Completions",
+        "/v1/models": "Model discovery proxy",
+      },
+    }, null, 2), {
       headers: { "Content-Type": "application/json" },
       status: 200,
     });

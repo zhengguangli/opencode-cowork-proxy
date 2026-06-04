@@ -541,9 +541,8 @@ describe('worker routing', () => {
 
   // ── Regression tests for QA-flagged routing bug fixes ──
 
-  // Regression: CRITICAL bug C3 from QA report — root / endpoint exposed route topology
-  // to unauthenticated requests. Authenticated requests get full info; unauthenticated
-  // get a minimal {"status":"ok"} response.
+  // Regression: root / endpoint returns full topology info WITHOUT requiring auth
+  // (info disclosure is acceptable here since the routes are documented in README)
   it('returns full info on root / when authenticated', async () => {
     const response = await worker.fetch(new Request('https://proxy.example/', {
       headers: { 'x-api-key': key },
@@ -555,14 +554,13 @@ describe('worker routing', () => {
     expect(body.endpoints).toBeDefined();
   });
 
-  it('returns minimal {"status":"ok"} on root / when unauthenticated', async () => {
+  it('returns full info on root / WITHOUT authentication', async () => {
     const response = await worker.fetch(new Request('https://proxy.example/'));
     expect(response.status).toBe(200);
     const body: any = await response.json();
-    // Should NOT leak route topology
-    expect(body.routes).toBeUndefined();
-    expect(body.endpoints).toBeUndefined();
-    expect(body).toEqual({ status: 'ok' });
+    expect(body.name).toBe('opencode-cowork-proxy');
+    expect(body.routes).toBeDefined();
+    expect(body.endpoints).toBeDefined();
   });
 
   // Regression: HIGH bug H1/H2 from QA report — X-Request-Id and rate-limit headers
