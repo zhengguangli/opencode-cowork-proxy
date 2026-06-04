@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   release-and-deploy:
-    name: Create release + deploy to Cloudflare
+    name: Create release + deploy
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -31,6 +31,18 @@ jobs:
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
+
+      - name: Deploy to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: team_Y9xS2rBnMALnypWNwhRKW3ox
+          VERCEL_PROJECT_ID: prj_erSVGhp12ZUKOP0fqWhOZBCNUruX
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "Skipping Vercel deploy: VERCEL_TOKEN not set"
+            exit 0
+          fi
+          npx vercel deploy --prod --token="$VERCEL_TOKEN"
 
       - name: Create release
         env:
