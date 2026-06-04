@@ -18,31 +18,6 @@ export function hashSystemPrompt(system: string | any[] | undefined): string | n
   return 'cache-' + Math.abs(hash).toString(36);
 }
 
-/** Check if any message, system prompt, or Responses API input has Anthropic cache_control markers */
-export function hasCacheControl(messages: any[], system?: any, body?: any): boolean {
-  if (Array.isArray(system)) {
-    if (system.some((s: any) => s.cache_control)) return true;
-  }
-  if (typeof system === 'object' && system?.cache_control) return true;
-
-  // Check Responses API input format (for /v1/responses compatibility)
-  const input = body?.input;
-  if (Array.isArray(input)) {
-    for (const item of input) {
-      if (item.type === "message" && Array.isArray(item.content)) {
-        if (item.content.some((block: any) => block.cache_control)) return true;
-      }
-    }
-  }
-
-  for (const msg of messages || []) {
-    if (Array.isArray(msg.content)) {
-      if (msg.content.some((block: any) => block.cache_control)) return true;
-    }
-  }
-  return false;
-}
-
 function tokenCount(...values: any[]): number {
   for (const value of values) {
     if (typeof value === 'number' && Number.isFinite(value)) return value;

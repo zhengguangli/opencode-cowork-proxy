@@ -122,6 +122,23 @@ function hasOpenAIImages(body: any): boolean {
   });
 }
 
+/**
+ * Single-pass image detection: checks both Anthropic (type: "image") and OpenAI (type: "image_url")
+ * formats in one traversal. Used on pass-through paths where body format is assumed but not guaranteed,
+ * to avoid double-traversing the message array.
+ */
+function hasAnyImageInMessages(body: any): boolean {
+  const messages = body?.messages;
+  if (!Array.isArray(messages)) return false;
+  return messages.some((msg: any) => {
+    if (typeof msg.content === "string") return false;
+    if (!Array.isArray(msg.content)) return false;
+    return msg.content.some(
+      (part: any) => part.type === "image" || part.type === "image_url"
+    );
+  });
+}
+
 function upstreamErrorResponse(res: Response, body: string): Response {
   const headers = new Headers();
   for (const name of ["Content-Type", "Retry-After", "RateLimit-Limit", "RateLimit-Remaining", "RateLimit-Reset", "X-Request-Id", "X-RateLimit-Limit-Requests", "X-RateLimit-Limit-Tokens"]) {
@@ -234,18 +251,20 @@ async function handleRequest(request: Request): Promise<Response> {
       });
     } else {
       // ---- Pass-through: send Anthropic body as-is to Anthropic upstream ----
-      // Belt-and-suspenders image detection: primary check for Anthropic-format type: "image",
-      // with secondary check for OpenAI-format type: "image_url" in case of body/route format mismatch.
-      const parsed = await safeJsonBody<any>(request);
-      if (!parsed.ok) return parsed.response;
-      const anthReqJson = parsed.data;
-
-      if (route.modelOverride) anthReqJson.model = route.modelOverride;
-      if (hasImages(anthReqJson) || hasOpenAIImages(anthReqJson)) anthReqJson.model = VISION_MODEL;
+      const anthRawBody = await request.text();
+      const needsAnthMod = route.modelOverride || hasAnyImageInMessages(JSON.parse(anthRawBody));
+      const anthBody = needsAnthMod
+        ? (() => {
+            const obj = JSON.parse(anthRawBody);
+            if (route.modelOverride) obj.model = route.modelOverride;
+            if (hasAnyImageInMessages(obj)) obj.model = VISION_MODEL;
+            return JSON.stringify(obj);
+          })()
+        : anthRawBody;
       const anthPassRes = await safeUpstreamFetch(`${upstream}/v1/messages`, {
         method: "POST",
         headers: anthropicHeaders(request, key),
-        body: JSON.stringify(anthReqJson),
+        body: anthBody,
       });
       if (!anthPassRes.ok) return upstreamErrorResponse(anthPassRes, await anthPassRes.text());
       return anthPassRes;
@@ -297,18 +316,21 @@ async function handleRequest(request: Request): Promise<Response> {
     }
 
     // ---- Pass-through: send OpenAI body as-is to OpenAI upstream ----
-    // Belt-and-suspenders image detection: primary check for OpenAI-format type: "image_url",
-    // with secondary check for Anthropic-format type: "image" in case of body/route format mismatch.
-    const parsed = await safeJsonBody<any>(request);
-    if (!parsed.ok) return parsed.response;
-    const oaiReqJson = parsed.data;
-
-    if (route.modelOverride) oaiReqJson.model = route.modelOverride;
-    if (hasOpenAIImages(oaiReqJson) || hasImages(oaiReqJson)) oaiReqJson.model = VISION_MODEL;
+    // Single-pass image detection checks both formats simultaneously.
+    const oaiRawBody = await request.text();
+    const needsOaiMod = route.modelOverride || hasAnyImageInMessages(JSON.parse(oaiRawBody));
+    const oaiBody = needsOaiMod
+      ? (() => {
+          const obj = JSON.parse(oaiRawBody);
+          if (route.modelOverride) obj.model = route.modelOverride;
+          if (hasAnyImageInMessages(obj)) obj.model = VISION_MODEL;
+          return JSON.stringify(obj);
+        })()
+      : oaiRawBody;
     const oaiPassRes = await safeUpstreamFetch(`${upstream}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
-      body: JSON.stringify(oaiReqJson),
+      body: oaiBody,
     });
     if (!oaiPassRes.ok) return upstreamErrorResponse(oaiPassRes, await oaiPassRes.text());
     return oaiPassRes;
@@ -405,7 +427,7 @@ async function handleRequest(request: Request): Promise<Response> {
     });
     // Fire-and-forget cache put (no await to avoid blocking response)
     if (modelCache) {
-      (async () => { try { await modelCache.put(cacheRequest, response.clone()); } catch {} })();
+      (async () => { try { await modelCache.put(cacheRequest, response.clone()); } catch (e) { console.error('modelCache.put failed:', e); } })();
     }
     return response;
   }

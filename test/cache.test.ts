@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hashSystemPrompt, hasCacheControl, extractCachedTokens, extractInputTokens, extractOutputTokens, extractUncachedInputTokens } from '../src/cache';
+import { hashSystemPrompt, extractCachedTokens, extractInputTokens, extractOutputTokens, extractUncachedInputTokens } from '../src/cache';
 
 describe('hashSystemPrompt', () => {
   it('produces a stable hash for the same string', () => {
@@ -33,59 +33,6 @@ describe('hashSystemPrompt', () => {
 
   it('returns null for empty array system', () => {
     expect(hashSystemPrompt([])).toBeNull();
-  });
-});
-
-describe('hasCacheControl', () => {
-  it('detects cache_control in array system messages', () => {
-    expect(hasCacheControl([], [
-      { type: 'text', text: 'cached', cache_control: { type: 'ephemeral' } },
-    ])).toBe(true);
-  });
-
-  it('detects cache_control in content blocks', () => {
-    expect(hasCacheControl([
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: 'hello', cache_control: { type: 'ephemeral' } },
-        ],
-      },
-    ])).toBe(true);
-  });
-
-  it('returns false when no cache_control markers present', () => {
-    expect(hasCacheControl([
-      { role: 'user', content: 'hello' },
-    ])).toBe(false);
-  });
-
-  it('returns false for empty messages', () => {
-    expect(hasCacheControl([])).toBe(false);
-  });
-
-  // Regression: LOW bug L3 from QA report — hasCacheControl did not check Responses API input.
-  // The 3-arg signature adds support for the Responses API `input` array of message items.
-  it('detects cache_control in Responses API input format (body.input)', () => {
-    expect(hasCacheControl(
-      [],
-      undefined,
-      { input: [
-        { type: 'message', role: 'user', content: [
-          { type: 'text', text: 'cached prompt', cache_control: { type: 'ephemeral' } },
-        ]},
-      ]},
-    )).toBe(true);
-  });
-
-  it('returns false for Responses API input with no cache_control', () => {
-    expect(hasCacheControl(
-      [],
-      undefined,
-      { input: [
-        { type: 'message', role: 'user', content: [{ type: 'text', text: 'plain' }] },
-      ]},
-    )).toBe(false);
   });
 });
 

@@ -22,13 +22,14 @@ export function streamChatCompletionsToResponses(
   const msgId = "msg_" + Date.now();
   const createdTime = Math.floor(Date.now() / 1000);
 
+  const sseEncoder = new TextEncoder();
   const enqueueSSE = (
     controller: ReadableStreamDefaultController,
     eventType: string,
     data: any
   ) => {
     controller.enqueue(
-      new TextEncoder().encode(
+      sseEncoder.encode(
         `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`
       )
     );

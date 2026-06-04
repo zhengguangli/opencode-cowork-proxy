@@ -2,10 +2,12 @@
  * Converts Anthropic Messages streaming SSE to OpenAI Chat Completions streaming SSE.
  */
 export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: string): ReadableStream {
-  const chatId = "chatcmpl-" + Math.floor(Date.now() / 1000);
+  const startTime = Math.floor(Date.now() / 1000);
+  const chatId = "chatcmpl-" + startTime;
+  const sseEncoder = new TextEncoder();
 
   const enqueueSSE = (controller: ReadableStreamDefaultController, data: any) => {
-    controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`));
+    controller.enqueue(sseEncoder.encode(`data: ${JSON.stringify(data)}\n\n`));
   };
 
   return new ReadableStream({
@@ -30,7 +32,7 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
         const chunk: any = {
           id: chatId,
           object: "chat.completion.chunk",
-          created: Math.floor(Date.now() / 1000),
+          created: startTime,
           model,
           choices: [{ index: 0, delta }],
         };
@@ -188,7 +190,7 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
       }
 
       // Send [DONE] — raw text, NOT JSON-stringified (OpenAI spec requires data: [DONE])
-      controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+      controller.enqueue(sseEncoder.encode("data: [DONE]\n\n"));
       controller.close();
     },
   });

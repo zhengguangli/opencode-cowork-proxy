@@ -2,9 +2,10 @@ import { extractCachedTokens, extractOutputTokens, extractUncachedInputTokens } 
 
 export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: string): ReadableStream {
   const messageId = "msg_" + Date.now();
+  const sseEncoder = new TextEncoder();
 
   const enqueueSSE = (controller: ReadableStreamDefaultController, eventType: string, data: any) => {
-    controller.enqueue(new TextEncoder().encode(`event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`));
+    controller.enqueue(sseEncoder.encode(`event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`));
   };
 
   return new ReadableStream({
