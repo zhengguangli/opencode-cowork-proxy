@@ -8,7 +8,7 @@
  */
 
 export function formatResponsesToChatCompletions(body: any): any {
-  const { model, input, instructions, temperature, max_output_tokens, top_p, stream, stream_options, tools, tool_choice, parallel_tool_calls, user, text, prompt_cache_key, top_logprobs, thinking } = body;
+  const { model, input, instructions, temperature, max_output_tokens, top_p, top_k, stream, stream_options, tools, tool_choice, parallel_tool_calls, user, text, prompt_cache_key, top_logprobs, thinking, store } = body;
 
   const messages: any[] = [];
   let hasSystemMessage = false;
@@ -105,6 +105,7 @@ export function formatResponsesToChatCompletions(body: any): any {
   if (max_output_tokens !== undefined) chatReq.max_tokens = max_output_tokens;
   if (temperature !== undefined) chatReq.temperature = temperature;
   if (top_p !== undefined) chatReq.top_p = top_p;
+  if (top_k !== undefined) chatReq.top_k = top_k;
   if (stream !== undefined) chatReq.stream = stream;
   if (stream_options !== undefined) chatReq.stream_options = stream_options;
   if (parallel_tool_calls !== undefined) chatReq.parallel_tool_calls = parallel_tool_calls;
@@ -157,6 +158,11 @@ export function formatResponsesToChatCompletions(body: any): any {
   // prompt_cache_key passthrough
   if (prompt_cache_key) {
     chatReq.prompt_cache_key = prompt_cache_key;
+  }
+
+  // store passthrough (OpenAI-compatible providers)
+  if (store !== undefined) {
+    chatReq.store = store;
   }
 
   return chatReq;

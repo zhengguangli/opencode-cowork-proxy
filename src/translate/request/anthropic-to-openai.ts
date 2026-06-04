@@ -13,7 +13,7 @@ function translateImageBlock(part: any): any {
 }
 
 export function formatAnthropicToOpenAI(body: any): any {
-  const { model, messages, system, temperature, max_tokens, top_p, stop_sequences, tools, stream, metadata, thinking } = body;
+  const { model, messages, system, temperature, max_tokens, top_p, top_k, tool_choice, stop_sequences, tools, stream, metadata, thinking } = body;
 
   const openAIMessages = Array.isArray(messages)
     ? messages.flatMap((msg: any) => {
@@ -100,6 +100,7 @@ export function formatAnthropicToOpenAI(body: any): any {
   if (max_tokens !== undefined) data.max_tokens = max_tokens;
   if (temperature !== undefined) data.temperature = temperature;
   if (top_p !== undefined) data.top_p = top_p;
+  if (top_k !== undefined) data.top_k = top_k;
   if (stream !== undefined) data.stream = stream;
   if (stream) data.stream_options = { include_usage: true };
   if (stop_sequences) data.stop = stop_sequences;
@@ -119,6 +120,19 @@ export function formatAnthropicToOpenAI(body: any): any {
         parameters: item.input_schema,
       },
     }));
+  }
+
+  // Map tool_choice from Anthropic to OpenAI format
+  if (tool_choice != null) {
+    if (typeof tool_choice === "string") {
+      // "auto" → "auto", "any" → "required", "none" → "none"
+      data.tool_choice = tool_choice === "any" ? "required" : tool_choice;
+    } else if (tool_choice.type === "auto" || tool_choice.type === "any") {
+      data.tool_choice = tool_choice.type === "any" ? "required" : tool_choice.type;
+    } else if (tool_choice.type === "tool") {
+      // Anthropic {type: "tool", name: "xxx"} → OpenAI {type: "function", function: {name: "xxx"}}
+      data.tool_choice = { type: "function", function: { name: tool_choice.name } };
+    }
   }
 
   // Inject prompt_cache_key from system prompt hash for OpenAI node affinity caching.

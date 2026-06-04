@@ -25,6 +25,8 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
       // Usage tracking from Anthropic events
       let inputTokens = 0;
       let outputTokens = 0;
+      let cacheReadTokens = 0;
+      let cacheCreateTokens = 0;
       let lastFinishReason: string | undefined;
       let usageForwarded = false;
 
@@ -55,9 +57,11 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
               contentBlockIndex = -1;
               activeBlockType = null;
               toolCallMap.clear();
-              // Capture input tokens from the initial message
-              if (evt.message?.usage?.input_tokens) {
-                inputTokens = evt.message.usage.input_tokens;
+              // Capture input tokens and cache stats from the initial message
+              if (evt.message?.usage) {
+                inputTokens = evt.message.usage.input_tokens || 0;
+                cacheReadTokens = evt.message.usage.cache_read_input_tokens || 0;
+                cacheCreateTokens = evt.message.usage.cache_creation_input_tokens || 0;
               }
               break;
 
@@ -125,8 +129,16 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
                   outputTokens = evt.usage.output_tokens;
                 }
                 // Emit chunk with both finish_reason and usage when available
-                const usagePayload = (inputTokens > 0 || outputTokens > 0)
-                  ? { prompt_tokens: inputTokens, completion_tokens: outputTokens, total_tokens: inputTokens + outputTokens }
+                const totalPromptTokens = inputTokens + cacheReadTokens + cacheCreateTokens;
+                const usagePayload = (totalPromptTokens > 0 || outputTokens > 0)
+                  ? {
+                      prompt_tokens: totalPromptTokens,
+                      completion_tokens: outputTokens,
+                      total_tokens: totalPromptTokens + outputTokens,
+                      ...(cacheReadTokens + cacheCreateTokens > 0
+                        ? { prompt_tokens_details: { cached_tokens: cacheReadTokens + cacheCreateTokens } }
+                        : {}),
+                    }
                   : undefined;
                 emitChunk({}, finishReason, usagePayload);
                 if (usagePayload) usageForwarded = true;
@@ -183,10 +195,14 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
         const finishReason = lastFinishReason === "tool_use" ? "tool_calls"
                            : lastFinishReason === "max_tokens" ? "length"
                            : "stop";
+        const totalP = inputTokens + cacheReadTokens + cacheCreateTokens;
         emitChunk({}, finishReason, {
-          prompt_tokens: inputTokens,
+          prompt_tokens: totalP,
           completion_tokens: outputTokens,
-          total_tokens: inputTokens + outputTokens,
+          total_tokens: totalP + outputTokens,
+          ...(cacheReadTokens + cacheCreateTokens > 0
+            ? { prompt_tokens_details: { cached_tokens: cacheReadTokens + cacheCreateTokens } }
+            : {}),
         });
       }
 

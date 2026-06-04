@@ -10,8 +10,11 @@ import { formatResponsesToChatCompletions } from './translate/request/responses-
 import { formatChatCompletionsToResponses } from './translate/response/chat-completions-to-responses';
 import { streamChatCompletionsToResponses } from './translate/stream/chat-completions-to-responses';
 
-const GO_UPSTREAM = "https://opencode.ai/zen/go/v1";
-const ZEN_UPSTREAM = "https://opencode.ai/zen/v1";
+// NOTE: These upstream URLs intentionally do NOT include /v1. Each route handler appends
+// the appropriate path segment (e.g., /v1/messages, /chat/completions). This prevents
+// double /v1/ when the handler adds its own prefix.
+const GO_UPSTREAM = "https://opencode.ai/zen/go";
+const ZEN_UPSTREAM = "https://opencode.ai/zen";
 const DEFAULT_UPSTREAM = GO_UPSTREAM;
 const VISION_MODEL = "qwen3.6-plus";
 
@@ -93,10 +96,15 @@ function anthropicHeaders(request: Request, key: string): Record<string, string>
 function hasImages(body: any): boolean {
   // Checks Anthropic-format content blocks (type: "image") — used on /v1/messages path
   const messages = body?.messages;
-  if (!Array.isArray(messages)) return false;
-  return messages.some((msg: any) =>
+  if (Array.isArray(messages) && messages.some((msg: any) =>
     Array.isArray(msg.content) && msg.content.some((part: any) => part.type === "image")
-  );
+  )) return true;
+  // Check system prompt (Anthropic format can have image blocks in system as content blocks)
+  const system = body?.system;
+  if (Array.isArray(system)) {
+    return system.some((part: any) => part.type === "image");
+  }
+  return false;
 }
 
 function hasResponsesImages(body: any): boolean {
@@ -112,14 +120,19 @@ function hasResponsesImages(body: any): boolean {
 function hasOpenAIImages(body: any): boolean {
   // Checks OpenAI-format content parts (type: "image_url") — used on /v1/chat/completions path
   const messages = body?.messages;
-  if (!Array.isArray(messages)) return false;
-  return messages.some((msg: any) => {
+  if (Array.isArray(messages) && messages.some((msg: any) => {
     if (typeof msg.content === "string") return false;
     if (Array.isArray(msg.content)) {
       return msg.content.some((part: any) => part.type === "image_url");
     }
     return false;
-  });
+  })) return true;
+  // Check top-level system field (some OpenAI-compatible providers support it with image_url parts)
+  const system = body?.system;
+  if (Array.isArray(system)) {
+    return system.some((part: any) => part.type === "image_url");
+  }
+  return false;
 }
 
 /**
@@ -128,15 +141,26 @@ function hasOpenAIImages(body: any): boolean {
  * to avoid double-traversing the message array.
  */
 function hasAnyImageInMessages(body: any): boolean {
+  // Check messages array
   const messages = body?.messages;
-  if (!Array.isArray(messages)) return false;
-  return messages.some((msg: any) => {
-    if (typeof msg.content === "string") return false;
-    if (!Array.isArray(msg.content)) return false;
-    return msg.content.some(
+  if (Array.isArray(messages)) {
+    const hasInMessages = messages.some((msg: any) => {
+      if (typeof msg.content === "string") return false;
+      if (!Array.isArray(msg.content)) return false;
+      return msg.content.some(
+        (part: any) => part.type === "image" || part.type === "image_url"
+      );
+    });
+    if (hasInMessages) return true;
+  }
+  // Check system prompt (Anthropic format can have image blocks in system)
+  const system = body?.system;
+  if (Array.isArray(system)) {
+    return system.some(
       (part: any) => part.type === "image" || part.type === "image_url"
     );
-  });
+  }
+  return false;
 }
 
 function upstreamErrorResponse(res: Response, body: string): Response {
@@ -146,6 +170,22 @@ function upstreamErrorResponse(res: Response, body: string): Response {
     if (value) headers.set(name, value);
   }
   return new Response(body, { status: res.status, headers });
+}
+
+/**
+ * Creates a combined abort signal for upstream streaming requests.
+ * Races the client's disconnect signal against a generous 120s timeout.
+ * If the client disconnects first, the upstream request is aborted immediately.
+ * If the upstream stalls for 120s, the connection is terminated as a safety net.
+ */
+function createStreamSignal(request: Request): AbortSignal {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120_000);
+  request.signal.addEventListener('abort', () => {
+    clearTimeout(timeoutId);
+    controller.abort();
+  }, { once: true });
+  return controller.signal;
 }
 
 // ---- Shared Helpers ----
@@ -167,11 +207,12 @@ async function safeJsonBody<T>(request: Request): Promise<{ ok: true; data: T } 
 }
 
 /** Authenticate request and return confirmed non-null API key, or an auth error response. */
-function authenticateRequest(request: Request): { key: string } | { response: Response } {
+function authenticateRequest(request: Request, path: string): { key: string } | { response: Response } {
   const key = extractApiKey(request.headers);
   const err = validateApiKey(key);
-  if (err) return { response: authErrorResponse(err) };
-  if (!key) return { response: authErrorResponse({ status: 401, body: { error: { type: "authentication_error", message: "Invalid API key" } } }) };
+  if (err) return { response: authErrorResponse(err, path) };
+  // validateApiKey already rejects null/undefined keys; this branch is a defensive fallback
+  if (!key) return { response: authErrorResponse({ status: 401, body: { error: { type: "authentication_error", message: "Invalid API key" } } }, path) };
   return { key };
 }
 
@@ -212,7 +253,7 @@ async function handleRequest(request: Request): Promise<Response> {
   // Anthropic → OpenAI (Claude Desktop/Cowork → any OpenAI-compatible API)
   // ====================================================================
   if (route.path === '/v1/messages' && request.method === 'POST') {
-    const auth = authenticateRequest(request);
+    const auth = authenticateRequest(request, route.path);
     if ('response' in auth) return auth.response;
     const key = auth.key;
 
@@ -228,8 +269,8 @@ async function handleRequest(request: Request): Promise<Response> {
         req.model = VISION_MODEL;
       }
       const openaiReq = formatAnthropicToOpenAI(req);
-      const upstreamSignal = openaiReq.stream ? request.signal : AbortSignal.timeout(60_000);
-      const res = await safeUpstreamFetch(`${upstream}/chat/completions`, {
+      const upstreamSignal = openaiReq.stream ? createStreamSignal(request) : AbortSignal.timeout(60_000);
+      const res = await safeUpstreamFetch(`${upstream}/v1/chat/completions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -260,20 +301,27 @@ async function handleRequest(request: Request): Promise<Response> {
     } else {
       // ---- Pass-through: send Anthropic body as-is to Anthropic upstream ----
       const anthRawBody = await request.text();
-      const needsAnthMod = route.modelOverride || hasAnyImageInMessages(JSON.parse(anthRawBody));
-      const anthBody = needsAnthMod
-        ? (() => {
-            const obj = JSON.parse(anthRawBody);
-            if (route.modelOverride) obj.model = route.modelOverride;
-            if (hasAnyImageInMessages(obj)) obj.model = VISION_MODEL;
-            return JSON.stringify(obj);
-          })()
-        : anthRawBody;
+      let parsedBody: any;
+      try { parsedBody = JSON.parse(anthRawBody); } catch {
+        return new Response(
+          JSON.stringify({ error: { type: "invalid_request_error", message: "Request body contains invalid JSON" } }),
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      const anthHasImages = hasAnyImageInMessages(parsedBody);
+      const needsAnthMod = !!(route.modelOverride || anthHasImages);
+      if (needsAnthMod) {
+        if (route.modelOverride) parsedBody.model = route.modelOverride;
+        if (anthHasImages) parsedBody.model = VISION_MODEL;
+      }
+      const anthBody = needsAnthMod ? JSON.stringify(parsedBody) : anthRawBody;
+      const anthIsStreaming = !!(parsedBody?.stream);
+      const anthUpstreamSignal = anthIsStreaming ? createStreamSignal(request) : AbortSignal.timeout(60_000);
       const anthPassRes = await safeUpstreamFetch(`${upstream}/v1/messages`, {
         method: "POST",
         headers: anthropicHeaders(request, key),
         body: anthBody,
-        signal: AbortSignal.timeout(60_000),
+        signal: anthUpstreamSignal,
       });
       if (!anthPassRes.ok) return upstreamErrorResponse(anthPassRes, await anthPassRes.text());
       return anthPassRes;
@@ -284,7 +332,7 @@ async function handleRequest(request: Request): Promise<Response> {
   // OpenAI → Anthropic (or pass-through to OpenAI upstream)
   // ====================================================================
   if (route.path === '/v1/chat/completions' && request.method === 'POST') {
-    const auth = authenticateRequest(request);
+    const auth = authenticateRequest(request, route.path);
     if ('response' in auth) return auth.response;
     const key = auth.key;
 
@@ -298,7 +346,7 @@ async function handleRequest(request: Request): Promise<Response> {
       if (route.modelOverride) req.model = route.modelOverride;
       if (hasOpenAIImages(req)) req.model = VISION_MODEL;
       const anthReq = formatOpenAIToAnthropic(req);
-      const upstreamSignal = anthReq.stream ? request.signal : AbortSignal.timeout(60_000);
+      const upstreamSignal = anthReq.stream ? createStreamSignal(request) : AbortSignal.timeout(60_000);
       const res = await safeUpstreamFetch(`${upstream}/v1/messages`, {
         method: "POST",
         headers: anthropicHeaders(request, key),
@@ -329,20 +377,27 @@ async function handleRequest(request: Request): Promise<Response> {
     // ---- Pass-through: send OpenAI body as-is to OpenAI upstream ----
     // Single-pass image detection checks both formats simultaneously.
     const oaiRawBody = await request.text();
-    const needsOaiMod = route.modelOverride || hasAnyImageInMessages(JSON.parse(oaiRawBody));
-    const oaiBody = needsOaiMod
-      ? (() => {
-          const obj = JSON.parse(oaiRawBody);
-          if (route.modelOverride) obj.model = route.modelOverride;
-          if (hasAnyImageInMessages(obj)) obj.model = VISION_MODEL;
-          return JSON.stringify(obj);
-        })()
-      : oaiRawBody;
-    const oaiPassRes = await safeUpstreamFetch(`${upstream}/chat/completions`, {
+    let parsedOaiBody: any;
+    try { parsedOaiBody = JSON.parse(oaiRawBody); } catch {
+      return new Response(
+        JSON.stringify({ error: { type: "invalid_request_error", message: "Request body contains invalid JSON" } }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    const oaiHasImages = hasAnyImageInMessages(parsedOaiBody);
+    const needsOaiMod = !!(route.modelOverride || oaiHasImages);
+    if (needsOaiMod) {
+      if (route.modelOverride) parsedOaiBody.model = route.modelOverride;
+      if (oaiHasImages) parsedOaiBody.model = VISION_MODEL;
+    }
+    const oaiBody = needsOaiMod ? JSON.stringify(parsedOaiBody) : oaiRawBody;
+    const oaiIsStreaming = !!(parsedOaiBody?.stream);
+    const oaiUpstreamSignal = oaiIsStreaming ? createStreamSignal(request) : AbortSignal.timeout(60_000);
+    const oaiPassRes = await safeUpstreamFetch(`${upstream}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
       body: oaiBody,
-      signal: AbortSignal.timeout(60_000),
+      signal: oaiUpstreamSignal,
     });
     if (!oaiPassRes.ok) return upstreamErrorResponse(oaiPassRes, await oaiPassRes.text());
     return oaiPassRes;
@@ -352,7 +407,7 @@ async function handleRequest(request: Request): Promise<Response> {
   // Responses API → Chat Completions
   // ====================================================================
   if (route.path === '/v1/responses' && request.method === 'POST') {
-    const auth = authenticateRequest(request);
+    const auth = authenticateRequest(request, route.path);
     if ('response' in auth) return auth.response;
     const key = auth.key;
 
@@ -375,8 +430,8 @@ async function handleRequest(request: Request): Promise<Response> {
     }
 
     const chatReq = formatResponsesToChatCompletions(req);
-    const upstreamSignal = chatReq.stream ? request.signal : AbortSignal.timeout(60_000);
-    const upstreamRes = await safeUpstreamFetch(`${upstream}/chat/completions`, {
+    const upstreamSignal = chatReq.stream ? createStreamSignal(request) : AbortSignal.timeout(60_000);
+    const upstreamRes = await safeUpstreamFetch(`${upstream}/v1/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -411,12 +466,12 @@ async function handleRequest(request: Request): Promise<Response> {
   // Model discovery (with Cloudflare Cache API for 300s TTL)
   // ====================================================================
   if (route.path === '/v1/models' && request.method === 'GET') {
-    const auth = authenticateRequest(request);
+    const auth = authenticateRequest(request, route.path);
     if ('response' in auth) return auth.response;
     const key = auth.key;
 
     // Compute cache key from upstream + format (auth-independent, URL-only)
-    const cacheRequest = new Request(`${upstream}/models?fmt=${fmt}`, { method: "GET" });
+    const cacheRequest = new Request(`${upstream}/v1/models?fmt=${fmt}`, { method: "GET" });
     const modelCache = typeof caches !== "undefined" ? caches.default : null;
     const cached = modelCache ? await modelCache.match(cacheRequest) : null;
     if (cached) return cached;
@@ -427,7 +482,7 @@ async function handleRequest(request: Request): Promise<Response> {
           headers: anthropicHeaders(request, key),
           signal: AbortSignal.timeout(10_000),
         })
-      : await safeUpstreamFetch(`${upstream}/models`, {
+      : await safeUpstreamFetch(`${upstream}/v1/models`, {
           method: "GET",
           headers: { "Authorization": `Bearer ${key}` },
           signal: AbortSignal.timeout(10_000),

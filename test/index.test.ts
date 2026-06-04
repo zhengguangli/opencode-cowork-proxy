@@ -647,4 +647,100 @@ describe('worker routing', () => {
     // Thinking config must NOT be present (would have been injected for deepseek-v4-pro)
     expect(capturedBody.thinking).toBeUndefined();
   });
+
+  // ── FIX 1 — Pass-through paths return 400 for malformed JSON body ──
+  it('returns 400 for malformed JSON body on Anthropic pass-through path', async () => {
+    const request = new Request('https://proxy.example/go/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key, 'x-upstream-format': 'anthropic' },
+      body: '{invalid json here',
+    });
+    const response = await worker.fetch(request);
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error.type).toBe('invalid_request_error');
+  });
+
+  it('returns 400 for malformed JSON body on OpenAI pass-through path', async () => {
+    const request = new Request('https://proxy.example/go/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key },
+      body: 'not json at all',
+    });
+    const response = await worker.fetch(request);
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error.type).toBe('invalid_request_error');
+  });
+
+  // ── FIX 4 — Path-aware auth error format ──
+  it('returns Anthropic error format on /v1/messages auth failure', async () => {
+    const request = new Request('https://proxy.example/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'test', messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    const response = await worker.fetch(request);
+    expect(response.status).toBe(401);
+    const body = await response.json();
+    // Anthropic format: { type: "error", error: { type: "...", message: "..." } }
+    expect(body.type).toBe('error');
+    expect(body.error.type).toBe('authentication_error');
+  });
+
+  it('returns Anthropic error format on /v1/models auth failure', async () => {
+    const request = new Request('https://proxy.example/go/v1/models', {
+      headers: { 'x-upstream-format': 'anthropic' },
+    });
+    const response = await worker.fetch(request);
+    expect(response.status).toBe(401);
+    const body = await response.json();
+    expect(body.type).toBe('error');
+    expect(body.error.type).toBe('authentication_error');
+  });
+
+  it('returns OpenAI error format on /v1/chat/completions auth failure', async () => {
+    const request = new Request('https://proxy.example/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'test', messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    const response = await worker.fetch(request);
+    expect(response.status).toBe(401);
+    const body = await response.json();
+    // OpenAI format: { error: { type: "...", message: "..." } } (no outer type field)
+    expect(body.type).toBeUndefined();
+    expect(body.error.type).toBe('authentication_error');
+  });
+
+  // ── FIX 6 — Image detection in system prompt ──
+  it('overrides model to qwen3.6-plus when image is in Anthropic system prompt', async () => {
+    let capturedBody: any = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async (_url, init: any) => {
+        capturedBody = JSON.parse(init.body);
+        return new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      },
+    );
+
+    const request = new Request('https://proxy.example/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key },
+      body: JSON.stringify({
+        model: 'deepseek-v4-pro',
+        system: [
+          { type: 'text', text: 'You are a helpful assistant.' },
+          { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'abc123' } },
+        ],
+        messages: [{ role: 'user', content: 'What is in this image?' }],
+        max_tokens: 1024,
+      }),
+    });
+
+    await worker.fetch(request);
+    expect(capturedBody.model).toBe('qwen3.6-plus');
+  });
 });

@@ -50,6 +50,7 @@ export function streamChatCompletionsToResponses(
       >();
 
       const outputItems: any[] = [];
+      let activeToolCallIndex: number | null = null;
 
       const reader = openaiStream.getReader();
       const decoder = new TextDecoder();
@@ -105,6 +106,7 @@ export function streamChatCompletionsToResponses(
         const item = {
           id: itemId,
           type: "reasoning" as const,
+          status: "in_progress" as const,
           reasoning_text: "",
         };
         outputItems.push(item);
@@ -132,6 +134,7 @@ export function streamChatCompletionsToResponses(
         };
         outputItems.push(item);
         toolCallAccum.set(index, { id, name, args: "" });
+        activeToolCallIndex = index;
         enqueueSSE(controller, "response.output_item.added", {
           type: "response.output_item.added",
           item,
@@ -139,7 +142,7 @@ export function streamChatCompletionsToResponses(
         activeItemType = "function_call";
       }
 
-      function flushActiveItem() {
+      function flushActiveItem(isMidStream: boolean = false) {
         if (activeItemType === "text") {
           const item = outputItems[outputItems.length - 1];
           if (item?.type === "message") {
@@ -157,6 +160,7 @@ export function streamChatCompletionsToResponses(
               type: "response.output_item.done",
               item: { ...item, status: "completed" },
             });
+            item.status = "completed";
             textAccum = "";
           }
         } else if (activeItemType === "reasoning") {
@@ -172,11 +176,14 @@ export function streamChatCompletionsToResponses(
               type: "response.output_item.done",
               item: { ...item, status: "completed" },
             });
+            item.status = "completed";
             reasoningAccum = "";
           }
         } else if (activeItemType === "function_call") {
           const item = outputItems[outputItems.length - 1];
           if (item?.type === "function_call") {
+            // Mid-stream flushes always use "completed"; only terminal flush uses global finishReason
+            const fcStatus = isMidStream ? "completed" : (finishReason === "tool_calls" ? "completed" : "incomplete");
             enqueueSSE(controller, "response.function_call_arguments.done", {
               type: "response.function_call_arguments.done",
               arguments: item.arguments,
@@ -184,10 +191,15 @@ export function streamChatCompletionsToResponses(
             });
             enqueueSSE(controller, "response.output_item.done", {
               type: "response.output_item.done",
-              item: { ...item, status: finishReason === "tool_calls" ? "completed" : "incomplete" },
+              item: { ...item, status: fcStatus },
             });
+            item.status = fcStatus;
           }
-          toolCallAccum.clear();
+          // Delete only this tool call's accumulator entry, not all accumulators
+          if (activeToolCallIndex !== null) {
+            toolCallAccum.delete(activeToolCallIndex);
+            activeToolCallIndex = null;
+          }
         }
         activeItemType = null;
       }
@@ -211,7 +223,7 @@ export function streamChatCompletionsToResponses(
           const isFirst = delta.reasoning_content === "" || (reasoningAccum === "" && activeItemType !== "reasoning");
 
           if (activeItemType && activeItemType !== "reasoning") {
-            flushActiveItem();
+            flushActiveItem(true);
           }
 
           if (!isFirst) {
@@ -240,7 +252,7 @@ export function streamChatCompletionsToResponses(
           for (const tc of delta.tool_calls) {
             if (tc.id) {
               // New tool call (has id)
-              if (activeItemType) flushActiveItem();
+              if (activeItemType) flushActiveItem(true);
               startToolCallItem(tc.index, tc.id, tc.function?.name || "");
             }
             if (tc.function?.arguments) {
@@ -270,7 +282,7 @@ export function streamChatCompletionsToResponses(
           if (activeItemType === "reasoning" && delta.content === "") {
             // Don't flush reasoning for empty priming content
           } else if (activeItemType && activeItemType !== "text") {
-            flushActiveItem();
+            flushActiveItem(true);
           }
 
           if (delta.content === "" && !activeItemType) {
@@ -347,9 +359,32 @@ export function streamChatCompletionsToResponses(
             await new Promise(resolve => setTimeout(resolve, 0));
           }
         }
-      } finally {
+      } catch (err) {
+        console.error('streamChatCompletionsToResponses error:', err);
+        if (activeItemType) {
+          flushActiveItem(true);
+        }
+        // Emit response.incomplete with partial usage
+        const finalResponse: any = {
+          id: respId,
+          object: "response",
+          created_at: createdTime,
+          model,
+          status: "incomplete",
+          output: outputItems,
+        };
+        if (lastUsage) {
+          finalResponse.usage = mapUsage(lastUsage);
+        }
+        enqueueSSE(controller, "response.incomplete", {
+          type: "response.incomplete",
+          response: finalResponse,
+        });
+        controller.close();
         reader.releaseLock();
+        return;
       }
+      reader.releaseLock();
 
       // Flush final active item
       if (activeItemType) {

@@ -256,6 +256,102 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
       { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,xyz' } },
     ]);
   });
+
+  // Regression: top_k passthrough — M5 from translation audit
+  it('passes through top_k', () => {
+    const result = formatAnthropicToOpenAI({
+      model: 'deepseek-v4-pro',
+      messages: [{ role: 'user', content: 'Hi' }],
+      max_tokens: 1024,
+      top_k: 50,
+    });
+    expect(result.top_k).toBe(50);
+  });
+
+  it('omits top_k when undefined', () => {
+    const result = formatAnthropicToOpenAI({
+      model: 'deepseek-v4-pro',
+      messages: [{ role: 'user', content: 'Hi' }],
+      max_tokens: 1024,
+    });
+    expect(result.top_k).toBeUndefined();
+  });
+
+  // Regression: tool_choice passthrough — M6 from translation audit
+  it('maps tool_choice string "auto" unchanged', () => {
+    const result = formatAnthropicToOpenAI({
+      model: 'claude-sonnet-4-20250514',
+      messages: [{ role: 'user', content: 'Hi' }],
+      max_tokens: 1024,
+      tool_choice: 'auto',
+    });
+    expect(result.tool_choice).toBe('auto');
+  });
+
+  it('maps tool_choice string "any" to "required"', () => {
+    const result = formatAnthropicToOpenAI({
+      model: 'claude-sonnet-4-20250514',
+      messages: [{ role: 'user', content: 'Hi' }],
+      max_tokens: 1024,
+      tool_choice: 'any',
+    });
+    expect(result.tool_choice).toBe('required');
+  });
+
+  it('maps tool_choice string "none" unchanged', () => {
+    const result = formatAnthropicToOpenAI({
+      model: 'claude-sonnet-4-20250514',
+      messages: [{ role: 'user', content: 'Hi' }],
+      max_tokens: 1024,
+      tool_choice: 'none',
+    });
+    expect(result.tool_choice).toBe('none');
+  });
+
+  it('maps tool_choice object {type:"auto"} to "auto"', () => {
+    const result = formatAnthropicToOpenAI({
+      model: 'claude-sonnet-4-20250514',
+      messages: [{ role: 'user', content: 'Hi' }],
+      max_tokens: 1024,
+      tool_choice: { type: 'auto' },
+    });
+    expect(result.tool_choice).toBe('auto');
+  });
+
+  it('maps tool_choice object {type:"any"} to "required"', () => {
+    const result = formatAnthropicToOpenAI({
+      model: 'claude-sonnet-4-20250514',
+      messages: [{ role: 'user', content: 'Hi' }],
+      max_tokens: 1024,
+      tool_choice: { type: 'any' },
+    });
+    expect(result.tool_choice).toBe('required');
+  });
+
+  it('maps tool_choice object {type:"tool", name:"xxx"} to {type:"function", function:{name:"xxx"}}', () => {
+    const result = formatAnthropicToOpenAI({
+      model: 'claude-sonnet-4-20250514',
+      messages: [{ role: 'user', content: 'Hi' }],
+      max_tokens: 1024,
+      tools: [
+        { name: 'get_weather', description: 'Get weather', input_schema: { type: 'object' } },
+      ],
+      tool_choice: { type: 'tool', name: 'get_weather' },
+    });
+    expect(result.tool_choice).toEqual({
+      type: 'function',
+      function: { name: 'get_weather' },
+    });
+  });
+
+  it('omits tool_choice when undefined', () => {
+    const result = formatAnthropicToOpenAI({
+      model: 'claude-sonnet-4-20250514',
+      messages: [{ role: 'user', content: 'Hi' }],
+      max_tokens: 1024,
+    });
+    expect(result.tool_choice).toBeUndefined();
+  });
 });
 
 describe('formatOpenAIToAnthropic (OpenAI → Anthropic request)', () => {

@@ -10,7 +10,7 @@ export function extractApiKey(headers: Headers | Record<string, string | null>):
     const record = headers as Record<string, string | null>;
     return record[name] || record[name.toLowerCase()] || null;
   };
-  return get("X-Api-Key") || get("Authorization")?.replace(/^Bearer\s+/i, "")?.trim() || null;
+  return get("X-Api-Key") || get("Authorization")?.replace(/^(Bearer|Token)\s+/i, "")?.trim() || null;
 }
 
 export interface AuthError {
@@ -34,8 +34,14 @@ export function validateApiKey(key: string | null): AuthError | null {
   return null;
 }
 
-export function authErrorResponse(err: AuthError): Response {
-  return new Response(JSON.stringify(err.body), {
+export function authErrorResponse(err: AuthError, path?: string): Response {
+  // Anthropic clients (hitting /v1/messages or /v1/models with anthropic fmt) expect
+  // { type: "error", error: { ... } } wrapper. Other paths use OpenAI format.
+  const isAnthropicPath = path === '/v1/messages' || path === '/v1/models';
+  const body = isAnthropicPath
+    ? { type: "error", error: err.body.error }
+    : err.body;
+  return new Response(JSON.stringify(body), {
     status: err.status,
     headers: { "Content-Type": "application/json" },
   });

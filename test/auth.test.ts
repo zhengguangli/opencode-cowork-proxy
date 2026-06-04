@@ -10,6 +10,10 @@ describe('extractApiKey', () => {
     expect(extractApiKey({ 'authorization': 'Bearer sk-test-key-32-chars-minimum-here' })).toBe('sk-test-key-32-chars-minimum-here');
   });
 
+  it('extracts from Authorization Token header (OpenAI SDK convention)', () => {
+    expect(extractApiKey({ 'authorization': 'Token sk-test-key-32-chars-minimum-here' })).toBe('sk-test-key-32-chars-minimum-here');
+  });
+
   it('prefers X-Api-Key over Authorization', () => {
     const result = extractApiKey({
       'x-api-key': 'sk-primary',

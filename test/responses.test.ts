@@ -227,7 +227,54 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
     });
     expect(result.temperature).toBeUndefined();
     expect(result.top_p).toBeUndefined();
+    expect(result.top_k).toBeUndefined();
     expect(result.stream).toBeUndefined();
+    expect(result.store).toBeUndefined();
+  });
+
+  // Regression: top_k passthrough — M5 from translation audit
+  it('passes through top_k', () => {
+    const result = formatResponsesToChatCompletions({
+      model: 'deepseek-v4-flash',
+      input: 'Hi',
+      top_k: 50,
+    });
+    expect(result.top_k).toBe(50);
+  });
+
+  it('omits top_k when undefined', () => {
+    const result = formatResponsesToChatCompletions({
+      model: 'deepseek-v4-flash',
+      input: 'Hi',
+    });
+    expect(result.top_k).toBeUndefined();
+  });
+
+  // Regression: store passthrough — M7 from translation audit
+  it('passes through store=true', () => {
+    const result = formatResponsesToChatCompletions({
+      model: 'deepseek-v4-flash',
+      input: 'Hi',
+      store: true,
+    });
+    expect(result.store).toBe(true);
+  });
+
+  it('passes through store=false', () => {
+    const result = formatResponsesToChatCompletions({
+      model: 'deepseek-v4-flash',
+      input: 'Hi',
+      store: false,
+    });
+    expect(result.store).toBe(false);
+  });
+
+  it('omits store when undefined', () => {
+    const result = formatResponsesToChatCompletions({
+      model: 'deepseek-v4-flash',
+      input: 'Hi',
+    });
+    expect(result.store).toBeUndefined();
   });
 
   // ── Image handling ──

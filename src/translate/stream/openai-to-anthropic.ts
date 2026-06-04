@@ -285,9 +285,28 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
             await new Promise(resolve => setTimeout(resolve, 0));
           }
         }
-      } finally {
+      } catch (err) {
+        console.error('streamOpenAIToAnthropic error:', err);
+        // Close active content block
+        if (isToolUse || hasStartedTextBlock || hasStartedThinkingBlock) {
+          enqueueSSE(controller, "content_block_stop", {
+            type: "content_block_stop",
+            index: contentBlockIndex,
+          });
+        }
+        enqueueSSE(controller, "message_delta", {
+          type: "message_delta",
+          delta: { stop_reason: "max_tokens", stop_sequence: null },
+          usage: lastUsage || { input_tokens: 0, output_tokens: 0 },
+        });
+        enqueueSSE(controller, "message_stop", {
+          type: "message_stop",
+        });
+        controller.close();
         reader.releaseLock();
+        return;
       }
+      reader.releaseLock();
 
       // Close last content block
       if (isToolUse || hasStartedTextBlock || hasStartedThinkingBlock) {
@@ -316,9 +335,15 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
 
       // Map finish reason and usage
       let stopReason = "end_turn";
-      if (finishReason === "tool_calls") stopReason = "tool_use";
-      else if (finishReason === "length") stopReason = "max_tokens";
-      else if (finishReason === "stop") stopReason = "end_turn";
+      switch (finishReason) {
+        case "tool_calls": stopReason = "tool_use"; break;
+        case "length": stopReason = "max_tokens"; break;
+        case "stop": stopReason = "end_turn"; break;
+        case "content_filter":
+        case "insufficient_system_resource":
+          stopReason = "max_tokens"; break;
+        default: stopReason = "end_turn"; break;
+      }
 
       enqueueSSE(controller, "message_delta", {
         type: "message_delta",
