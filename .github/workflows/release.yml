@@ -28,6 +28,7 @@ jobs:
         run: bun test
 
       - name: Deploy to Cloudflare Workers
+        continue-on-error: true
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CF_API_TOKEN }}
@@ -42,7 +43,7 @@ jobs:
             echo "Skipping Vercel deploy: VERCEL_TOKEN not set"
             exit 0
           fi
-          npx vercel deploy --prod --token="$VERCEL_TOKEN"
+          bunx vercel deploy --prod --token="$VERCEL_TOKEN"
 
       - name: Create release
         env:
