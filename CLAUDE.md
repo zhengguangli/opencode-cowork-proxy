@@ -4,40 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 🏗️ Harness: OpenCode Cowork Proxy
 
-**Goal:** Anthropic↔OpenAI and OpenAI Responses API translation gateway (Cloudflare Worker using Hono).
+**Goal:** Anthropic↔OpenAI and OpenAI Responses API translation gateway (Hono app, deployable to Cloudflare Workers, Vercel, or macOS standalone binary).
 
 **Trigger:** For proxy-related work (translation bugs, streaming issues, routing changes, model updates, code review, deployment, testing), invoke the `proxy-orchestrator` skill. Specialized skills also available: `deployment` (build, CI/CD, LaunchAgent, Cloudflare deploy), `field-mapping` (Anthropic↔OpenAI field reference for translation work), `stream-debug` (SSE streaming diagnosis). Simple questions can be answered directly.
 
 **Agent Team (6 members):** `translation-specialist`, `streaming-specialist`, `routing-specialist`, `qa-inspector`, `code-reviewer`, `deployment-manager` — definitions in `.claude/agents/`. Orchestration rules in `skills/proxy-orchestrator/SKILL.md`.
 
-**Change History:**
-| Date | Change | Target | Reason |
-|------|--------|--------|--------|
-| 2026-06-04 | Initial harness setup | All | New build for proxy project |
-| 2026-06-04 | Added translation-specialist | agents/translation-specialist.md | Request/response field mapping between Anthropic and OpenAI formats |
-| 2026-06-04 | Added streaming-specialist | agents/streaming-specialist.md | SSE event sequencing for both translation directions |
-| 2026-06-04 | Added routing-specialist | agents/routing-specialist.md | Path routing, model override, auth, cache, deployment config |
-| 2026-06-04 | Added qa-inspector | agents/qa-inspector.md | Cross-boundary integration verification (catches boundary mismatches) |
-| 2026-06-04 | Added code-reviewer | agents/code-reviewer.md | Static review for correctness, security, type safety |
-| 2026-06-04 | Added deployment-manager | agents/deployment-manager.md | Dedicated build/deploy/CI/CD management |
-| 2026-06-04 | Added field-mapping skill | skills/field-mapping/SKILL.md | Authoritative field-by-field reference for translation work |
-| 2026-06-04 | Added stream-debug skill | skills/stream-debug/SKILL.md | SSE streaming diagnostic guide with common pitfalls |
-| 2026-06-04 | Added deployment skill | skills/deployment/SKILL.md | Step-by-step deploy, config, model mgmt reference |
-| 2026-06-04 | Updated proxy-orchestrator | skills/proxy-orchestrator/SKILL.md | Include new agents, add review/deploy workflows, update to sub-agent pattern |
-| 2026-06-04 | Reconciled CLAUDE.md drift | CLAUDE.md | Audit found 4 agents + 2 skills unaccounted for in change history; trigger rules now list all 4 skills |
-| 2026-06-04 | Fixed orchestrator Phase 2 mode | skills/proxy-orchestrator/SKILL.md | Execution-mode table said "Agent Team" but body correctly said "Sub-agents" — body is authoritative; table now matches |
-| 2026-06-04 | Archived stale _workspace/ to _workspace_archive/2026-06-04-responses-api-fixes/ | skills/proxy-orchestrator | Preserved audit trail from `f010dfd` bug-fix run; future runs start clean |
-| 2026-06-04 | Extended translation-specialist for Responses API | agents/translation-specialist.md | Translation of `/v1/responses` ↔ `/chat/completions` (input as string or array, reasoning merging, function_call_output, input_image) was undocumented; CRITICAL bug class (tool calls dropped) had no agent ownership |
-| 2026-06-04 | Extended streaming-specialist for Responses API SSE | agents/streaming-specialist.md | Responses API uses a different event vocabulary (response.created/output_item.added/text.delta/reasoning_text.delta/function_call_arguments.delta/output_item.done/completed); no agent owned the streamChatCompletionsToResponses file |
-| 2026-06-04 | Added Responses API field mapping to field-mapping skill | skills/field-mapping/SKILL.md | New tables for Responses API request/response mappings + 6-item Common Bug Patterns section |
-| 2026-06-04 | Added Responses API streaming to stream-debug skill | skills/stream-debug/SKILL.md | New section: event type vocabulary, stream translation reference, tool call lifecycle, 6 known pitfalls |
-| 2026-06-04 | Updated CLAUDE.md architecture for Responses API | CLAUDE.md | Translation Layer table now 3 columns × 3 rows = 9 translators; added 5th Common Pitfall; request flow diagram shows 3 paths |
-| 2026-06-04 | Filled orchestrator workflow gaps | skills/proxy-orchestrator/SKILL.md | Added `model: opus` reminder, Investigate Only workflow, Performance audit workflow, explicit Add New Model workflow |
+**Notable recent changes (June 4, 2026):** Vercel deployment target added (solves CF Workers 429 rate limiting), CI/CD switched from npm to bun (requires `CF_API_TOKEN` + `VERCEL_TOKEN` GitHub secrets), belt-and-suspenders image detection on pass-through paths, 15 routing + 8 translation bug fixes from comprehensive code review, and 24 regression tests added. See `_workspace_archive/` for full change history.
 
 ## Commands
 
 ```bash
 bun install            # Install dependencies
+bun install --frozen-lockfile  # CI-style clean install (verifies lockfile)
 bun test               # Run all tests (vitest)
 bun run test:watch     # Watch mode
 bun run dev            # wrangler dev (CF Workers runtime)
@@ -49,7 +28,7 @@ bunx vercel deploy --prod  # Deploy to Vercel (alternative to Cloudflare)
 
 **Deployment pipeline:** `.github/workflows/release.yml` uses `oven-sh/setup-bun@v1` — runs `bun install --frozen-lockfile`, `bun test`, then deploys to Cloudflare Workers (optional, needs `CF_API_TOKEN`) and Vercel (needs `VERCEL_TOKEN`).
 
-**Local deployment (macOS):** Build a standalone binary with `bun build --compile --outfile opencode-cowork-proxy server.ts`, copy to `/usr/local/bin/`, and manage via `launchctl` with the `ai.opencode.proxy` LaunchAgent (port 18787).
+**Local deployment (macOS):** Build a standalone binary with `bun build --compile --outfile opencode-cowork-proxy server.ts`, copy to `/usr/local/bin/`, and manage via `launchctl` with the `ai.opencode.proxy` LaunchAgent (port 18787). Check status: `launchctl print gui/$(id -u)/ai.opencode.proxy`.
 
 **Vercel deployment (alternative to Cloudflare):** `api/[[...route]].ts` entry exports `app.fetch` directly (no `hono/vercel` adapter needed — it can cause builds to hang). Deploy with `bunx vercel deploy --prod`. Production URL: `https://opencode-cowork-proxy.vercel.app`. Useful when Cloudflare Workers' shared egress IPs trigger upstream rate limiting (429).
 
