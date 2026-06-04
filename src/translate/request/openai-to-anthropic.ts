@@ -166,7 +166,9 @@ export function formatOpenAIToAnthropic(body: any): any {
   if (tool_choice !== undefined) {
     if (typeof tool_choice === "object" && tool_choice.type === "function") {
       // OpenAI: {type:"function", function:{name:"xxx"}} → Anthropic: {type:"tool", name:"xxx"}
-      anthropicRequest.tool_choice = { type: "tool", name: tool_choice.function?.name };
+      anthropicRequest.tool_choice = tool_choice.function?.name
+        ? { type: "tool", name: tool_choice.function.name }
+        : { type: "tool" };
     } else if (typeof tool_choice === "string") {
       // OpenAI "required" → Anthropic "any"; "auto" and "none" are shared
       const anthyMap: Record<string, string> = { auto: "auto", none: "none", required: "any" };

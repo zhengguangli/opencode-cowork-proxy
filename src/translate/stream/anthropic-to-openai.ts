@@ -167,7 +167,7 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
         if (buffer.trim()) {
           processEvents(buffer.split("\n"));
         }
-      } catch (err) {
+      } catch (_err) {
         // On error, close without [DONE] to signal abnormal termination
         controller.close();
         reader.releaseLock();
