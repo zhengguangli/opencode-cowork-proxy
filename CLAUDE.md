@@ -47,7 +47,7 @@ bun run deploy         # wrangler deploy to Cloudflare (config: wrangler.toml)
 bunx vercel deploy --prod  # Deploy to Vercel (alternative to Cloudflare)
 ```
 
-**Deployment pipeline:** `.github/workflows/release.yml` triggers `wrangler deploy` on push to main. Manual deploy: `bun run deploy`.
+**Deployment pipeline:** `.github/workflows/release.yml` uses `oven-sh/setup-bun@v1` — runs `bun install --frozen-lockfile`, `bun test`, then `wrangler deploy` on push to main.
 
 **Local deployment (macOS):** Build a standalone binary with `bun build --compile --outfile opencode-cowork-proxy server.ts`, copy to `/usr/local/bin/`, and manage via `launchctl` with the `ai.opencode.proxy` LaunchAgent (port 18787).
 
