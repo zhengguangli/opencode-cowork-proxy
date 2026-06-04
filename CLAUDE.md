@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Agent Team (6 members):** `translation-specialist`, `streaming-specialist`, `routing-specialist`, `qa-inspector`, `code-reviewer`, `deployment-manager` — definitions in `.claude/agents/`. Orchestration rules in `skills/proxy-orchestrator/SKILL.md`.
 
-**Notable recent changes (June 4, 2026):** Vercel deployment target added (solves CF Workers 429 rate limiting), CI/CD switched from npm to bun (requires `CF_API_TOKEN` + `VERCEL_TOKEN` GitHub secrets), belt-and-suspenders image detection on pass-through paths, 15 routing + 8 translation bug fixes from comprehensive code review, and 24 regression tests added. See `_workspace_archive/` for full change history.
+**Notable recent changes (June 4, 2026):** Vercel deployment target added (solves CF Workers 429 rate limiting), CI/CD switched from npm to bun (requires `CF_API_TOKEN` + `VERCEL_TOKEN` GitHub secrets), belt-and-suspenders image detection on pass-through paths, 15 routing + 8 translation bug fixes, 24 regression tests added, dev branch workflow (PR triggers test only, merge triggers full deploy), harness skills updated to reflect bun+Vercel. See `_workspace_archive/` for full change history.
 
 ## Commands
 
