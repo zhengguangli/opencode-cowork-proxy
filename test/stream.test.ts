@@ -127,7 +127,7 @@ describe('streamAnthropicToOpenAI (Anthropic SSE → OpenAI SSE)', () => {
     expect(result).toContain('"content":"Hello"');
     expect(result).toContain('"content":" world"');
     expect(result).toContain('"finish_reason":"stop"');
-    expect(result).toContain('data: "[DONE]"');
+    expect(result).toContain('data: [DONE]');
   });
 
   it('handles tool_use streams', async () => {
@@ -163,5 +163,24 @@ describe('streamAnthropicToOpenAI (Anthropic SSE → OpenAI SSE)', () => {
 
     expect(result).toContain('"reasoning_content":"thinking"');
     expect(result).toContain('"content":"answer"');
+  });
+
+  it('maps max_tokens stop_reason to length finish_reason', async () => {
+    const anthropicSSE = sseStream(
+      'event: message_start\ndata: {"type":"message_start","message":{"id":"msg_1","model":"deepseek-reasoner","role":"assistant","content":[],"usage":{"input_tokens":10}}}\n\n',
+      'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"partial"}}\n\n',
+      'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
+      'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{"output_tokens":5}}\n\n',
+      'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+    );
+
+    const result = await collectStream(streamAnthropicToOpenAI(anthropicSSE, 'deepseek-reasoner'));
+
+    expect(result).toContain('"finish_reason":"length"');
+    expect(result).toContain('"prompt_tokens":10');
+    expect(result).toContain('"completion_tokens":5');
+    expect(result).not.toContain('data: "[DONE]"');
+    expect(result).toContain('data: [DONE]');
   });
 });

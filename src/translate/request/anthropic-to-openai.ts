@@ -13,7 +13,7 @@ function translateImageBlock(part: any): any {
 }
 
 export function formatAnthropicToOpenAI(body: any): any {
-  const { model, messages, system, temperature, max_tokens, top_p, stop_sequences, tools, stream } = body;
+  const { model, messages, system, temperature, max_tokens, top_p, stop_sequences, tools, stream, metadata, thinking } = body;
 
   const openAIMessages = Array.isArray(messages)
     ? messages.flatMap((msg: any) => {
@@ -103,6 +103,12 @@ export function formatAnthropicToOpenAI(body: any): any {
   if (stream !== undefined) data.stream = stream;
   if (stream) data.stream_options = { include_usage: true };
   if (stop_sequences) data.stop = stop_sequences;
+
+  // Map Anthropic metadata.user_id to OpenAI user field
+  if (metadata?.user_id) data.user = metadata.user_id;
+
+  // Passthrough thinking config (DeepSeek-specific)
+  if (thinking !== undefined) data.thinking = thinking;
 
   if (tools) {
     data.tools = tools.map((item: any) => ({

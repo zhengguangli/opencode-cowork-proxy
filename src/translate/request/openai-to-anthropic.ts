@@ -21,7 +21,7 @@ function imageSourceFromUrl(url: string | undefined): any {
 }
 
 export function formatOpenAIToAnthropic(body: any): any {
-  const { model, messages, temperature, max_tokens, top_p, stop, tools, stream } = body;
+  const { model, messages, temperature, max_tokens, top_p, stop, tools, stream, tool_choice, response_format, user } = body;
 
   // Separate system messages from conversation
   const systemMessages: string[] = [];
@@ -161,6 +161,11 @@ export function formatOpenAIToAnthropic(body: any): any {
       input_schema: t.function?.parameters || t.input_schema || { type: "object", properties: {} },
     }));
   }
+
+  // Passthrough additional fields for upstream providers that support them
+  if (tool_choice !== undefined) anthropicRequest.tool_choice = tool_choice;
+  if (response_format !== undefined) anthropicRequest.response_format = response_format;
+  if (user !== undefined) anthropicRequest.metadata = { ...(anthropicRequest.metadata || {}), user_id: user };
 
   return anthropicRequest;
 }

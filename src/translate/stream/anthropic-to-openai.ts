@@ -19,7 +19,13 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
       let contentBlockIndex = -1;
       let activeBlockType: "text" | "thinking" | "tool_use" | null = null;
 
-      function emitChunk(delta: any, finishReason?: string) {
+      // Usage tracking from Anthropic events
+      let inputTokens = 0;
+      let outputTokens = 0;
+      let lastFinishReason: string | undefined;
+      let usageForwarded = false;
+
+      function emitChunk(delta: any, finishReason?: string, usage?: any) {
         const chunk: any = {
           id: chatId,
           object: "chat.completion.chunk",
@@ -28,6 +34,7 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
           choices: [{ index: 0, delta }],
         };
         if (finishReason) chunk.choices[0].finish_reason = finishReason;
+        if (usage) chunk.usage = usage;
         enqueueSSE(controller, chunk);
       }
 
@@ -45,6 +52,10 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
               contentBlockIndex = -1;
               activeBlockType = null;
               toolCallMap.clear();
+              // Capture input tokens from the initial message
+              if (evt.message?.usage?.input_tokens) {
+                inputTokens = evt.message.usage.input_tokens;
+              }
               break;
 
             case "content_block_start": {
@@ -101,8 +112,20 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
             case "message_delta": {
               const stopReason = evt.delta?.stop_reason;
               if (stopReason) {
-                const finishReason = stopReason === "tool_use" ? "tool_calls" : "stop";
-                emitChunk({}, finishReason);
+                lastFinishReason = stopReason;
+                const finishReason = stopReason === "tool_use" ? "tool_calls"
+                                   : stopReason === "max_tokens" ? "length"
+                                   : "stop";
+                // Capture output tokens from message_delta
+                if (evt.usage?.output_tokens) {
+                  outputTokens = evt.usage.output_tokens;
+                }
+                // Emit chunk with both finish_reason and usage when available
+                const usagePayload = (inputTokens > 0 || outputTokens > 0)
+                  ? { prompt_tokens: inputTokens, completion_tokens: outputTokens, total_tokens: inputTokens + outputTokens }
+                  : undefined;
+                emitChunk({}, finishReason, usagePayload);
+                if (usagePayload) usageForwarded = true;
               }
               break;
             }
@@ -141,8 +164,20 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
         reader.releaseLock();
       }
 
-      // Send [DONE]
-      enqueueSSE(controller, "[DONE]");
+      // Emit usage as a final chunk if captured but never forwarded through message_delta
+      if (!usageForwarded && (inputTokens > 0 || outputTokens > 0)) {
+        const finishReason = lastFinishReason === "tool_use" ? "tool_calls"
+                           : lastFinishReason === "max_tokens" ? "length"
+                           : "stop";
+        emitChunk({}, finishReason, {
+          prompt_tokens: inputTokens,
+          completion_tokens: outputTokens,
+          total_tokens: inputTokens + outputTokens,
+        });
+      }
+
+      // Send [DONE] — raw text, NOT JSON-stringified (OpenAI spec requires data: [DONE])
+      controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
       controller.close();
     },
   });

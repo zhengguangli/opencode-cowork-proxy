@@ -105,7 +105,9 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
               });
             }
           }
-        } else if (delta.reasoning_content) {
+        }
+
+        if (delta.reasoning_content) {
           if (isToolUse || hasStartedTextBlock) {
             enqueueSSE(controller, "content_block_stop", {
               type: "content_block_stop",
@@ -150,7 +152,9 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
             index: contentBlockIndex,
             delta: { type: "thinking_delta", thinking: delta.reasoning_content },
           });
-        } else if (delta.content) {
+        }
+
+        if (delta.content !== undefined && delta.content !== null) {
           if (isToolUse || hasStartedThinkingBlock) {
             enqueueSSE(controller, "content_block_stop", {
               type: "content_block_stop",

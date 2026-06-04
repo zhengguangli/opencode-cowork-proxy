@@ -7,11 +7,14 @@ export function formatAnthropicToOpenAI(response: any, model: string): any {
   const content = response.content || [];
 
   let textContent = "";
+  let reasoningContent = "";
   const toolCalls: any[] = [];
 
   for (const block of content) {
     if (block.type === "text") {
       textContent += block.text;
+    } else if (block.type === "thinking") {
+      reasoningContent += (typeof block.thinking === "string" ? block.thinking : JSON.stringify(block.thinking)) + "\n";
     } else if (block.type === "tool_use") {
       toolCalls.push({
         id: block.id,
@@ -30,6 +33,10 @@ export function formatAnthropicToOpenAI(response: any, model: string): any {
     message.content = textContent;
   } else {
     message.content = null;
+  }
+
+  if (reasoningContent.trim()) {
+    message.reasoning_content = reasoningContent.trim();
   }
 
   if (toolCalls.length > 0) {

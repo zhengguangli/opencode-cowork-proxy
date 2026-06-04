@@ -8,7 +8,7 @@ export function extractApiKey(headers: Headers | Record<string, string | null>):
     if (headers instanceof Headers) return headers.get(name);
     return (headers as Record<string, string | null>)[name.toLowerCase()] || null;
   };
-  return get("X-Api-Key") || get("Authorization")?.replace("Bearer ", "")?.trim() || null;
+  return get("X-Api-Key") || get("Authorization")?.replace(/^Bearer\s+/i, "")?.trim() || null;
 }
 
 export interface AuthError {
@@ -20,7 +20,7 @@ export function validateApiKey(key: string | null): AuthError | null {
   if (!key) {
     return {
       status: 401,
-      body: { error: { type: "authentication_error", message: "Missing API key. Provide x-api-key header." } },
+      body: { error: { type: "authentication_error", message: "Missing API key. Provide X-Api-Key header." } },
     };
   }
   if (key.length < 32) {

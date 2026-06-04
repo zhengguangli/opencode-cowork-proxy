@@ -45,6 +45,7 @@ export function extractCachedTokens(usage: any): number {
     usage?.prompt_tokens_details?.cached_tokens,
     usage?.input_tokens_details?.cached_tokens,
     usage?.cache_read_input_tokens,
+    usage?.prompt_cache_hit_tokens, // DeepSeek-specific
   );
 }
 
@@ -75,4 +76,46 @@ export function extractOutputTokens(usage: any): number {
     usage?.completionTokens,
     usage?.outputTokens,
   );
+}
+
+/**
+ * Map Chat Completions usage to Responses API usage format.
+ * Handles both standard OpenAI (prompt_tokens_details.cached_tokens)
+ * and DeepSeek-specific (prompt_cache_hit_tokens) cache formats.
+ */
+export function mapUsage(usage: any): any {
+  if (!usage) return undefined;
+
+  const hasDeepSeekCache = usage.prompt_cache_hit_tokens !== undefined;
+
+  let inputTokens: number;
+  let cachedTokens: number;
+
+  if (hasDeepSeekCache) {
+    inputTokens = typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : 0;
+    cachedTokens = typeof usage.prompt_cache_hit_tokens === "number" ? usage.prompt_cache_hit_tokens : 0;
+  } else {
+    inputTokens = typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : 0;
+    cachedTokens = usage.prompt_tokens_details?.cached_tokens || 0;
+  }
+
+  const outputTokens = typeof usage.completion_tokens === "number" ? usage.completion_tokens : 0;
+  const totalTokens = typeof usage.total_tokens === "number" ? usage.total_tokens : inputTokens + outputTokens;
+  const reasoningTokens = usage.completion_tokens_details?.reasoning_tokens;
+
+  const result: any = {
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    total_tokens: totalTokens,
+  };
+
+  if (cachedTokens > 0) {
+    result.input_tokens_details = { cached_tokens: cachedTokens };
+  }
+
+  if (reasoningTokens !== undefined) {
+    result.output_tokens_details = { reasoning_tokens: reasoningTokens };
+  }
+
+  return result;
 }

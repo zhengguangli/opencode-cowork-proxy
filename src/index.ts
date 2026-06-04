@@ -6,6 +6,9 @@ import { formatOpenAIToAnthropic as toAnthropicResponse } from './translate/resp
 import { formatAnthropicToOpenAI as toOpenAIResponse } from './translate/response/anthropic-to-openai';
 import { streamOpenAIToAnthropic } from './translate/stream/openai-to-anthropic';
 import { streamAnthropicToOpenAI } from './translate/stream/anthropic-to-openai';
+import { formatResponsesToChatCompletions } from './translate/request/responses-to-chat-completions';
+import { formatChatCompletionsToResponses } from './translate/response/chat-completions-to-responses';
+import { streamChatCompletionsToResponses } from './translate/stream/chat-completions-to-responses';
 
 const GO_UPSTREAM = "https://opencode.ai/zen/go/v1";
 const ZEN_UPSTREAM = "https://opencode.ai/zen/v1";
@@ -80,9 +83,30 @@ function hasImages(body: any): boolean {
   );
 }
 
+function hasResponsesImages(body: any): boolean {
+  const input = body?.input;
+  if (!Array.isArray(input)) return false;
+  return input.some((item: any) =>
+    item.type === "message" && Array.isArray(item.content) &&
+    item.content.some((part: any) => part.type === "input_image" || part.type === "image_url")
+  );
+}
+
+function hasOpenAIImages(body: any): boolean {
+  const messages = body?.messages;
+  if (!Array.isArray(messages)) return false;
+  return messages.some((msg: any) => {
+    if (typeof msg.content === "string") return false;
+    if (Array.isArray(msg.content)) {
+      return msg.content.some((part: any) => part.type === "image_url");
+    }
+    return false;
+  });
+}
+
 function upstreamErrorResponse(res: Response, body: string): Response {
   const headers = new Headers();
-  for (const name of ["Content-Type", "Retry-After", "RateLimit-Limit", "RateLimit-Remaining", "RateLimit-Reset"]) {
+  for (const name of ["Content-Type", "Retry-After", "RateLimit-Limit", "RateLimit-Remaining", "RateLimit-Reset", "X-Request-Id", "X-RateLimit-Limit-Requests", "X-RateLimit-Limit-Tokens"]) {
     const value = res.headers.get(name);
     if (value) headers.set(name, value);
   }
@@ -129,13 +153,16 @@ async function handleRequest(request: Request): Promise<Response> {
         });
       }
 
-      // Pass-through to Anthropic upstream
-      const res = await fetch(`${upstream}/v1/messages`, {
+      // Pass-through to Anthropic upstream (with model override applied)
+      const anthReqJson = await request.json();
+      if (route.modelOverride) anthReqJson.model = route.modelOverride;
+      if (hasImages(anthReqJson)) anthReqJson.model = VISION_MODEL;
+      const anthPassRes = await fetch(`${upstream}/v1/messages`, {
         method: "POST",
         headers: anthropicHeaders(request, key!),
-        body: await request.text(),
+        body: JSON.stringify(anthReqJson),
       });
-      return res;
+      return anthPassRes;
   }
 
   // OpenAI → Anthropic (or pass-through)
@@ -146,6 +173,9 @@ async function handleRequest(request: Request): Promise<Response> {
 
       if (fmt === "anthropic") {
         const req = await request.json();
+        const originalModel = req.model;
+        if (route.modelOverride) req.model = route.modelOverride;
+        if (hasOpenAIImages(req)) req.model = VISION_MODEL;
         const anthReq = formatOpenAIToAnthropic(req);
         const res = await fetch(`${upstream}/v1/messages`, {
           method: "POST",
@@ -155,23 +185,69 @@ async function handleRequest(request: Request): Promise<Response> {
         if (!res.ok) return upstreamErrorResponse(res, await res.text());
 
         if (anthReq.stream) {
-          return new Response(streamAnthropicToOpenAI(res.body as ReadableStream, anthReq.model), {
+          return new Response(streamAnthropicToOpenAI(res.body as ReadableStream, originalModel), {
             headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "Connection": "keep-alive" },
           });
         }
         const data: any = await res.json();
-        return new Response(JSON.stringify(toOpenAIResponse(data, anthReq.model)), {
+        return new Response(JSON.stringify(toOpenAIResponse(data, originalModel)), {
           headers: { "Content-Type": "application/json" },
         });
       }
 
-      // Pass-through to OpenAI upstream
-      const res = await fetch(`${upstream}/chat/completions`, {
+      // Pass-through to OpenAI upstream (with model override applied)
+      const oaiReqJson = await request.json();
+      if (route.modelOverride) oaiReqJson.model = route.modelOverride;
+      if (hasOpenAIImages(oaiReqJson)) oaiReqJson.model = VISION_MODEL;
+      const oaiPassRes = await fetch(`${upstream}/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
-        body: await request.text(),
+        body: JSON.stringify(oaiReqJson),
       });
-      return res;
+      return oaiPassRes;
+  }
+
+  // Responses API → Chat Completions
+  if (route.path === '/v1/responses' && request.method === 'POST') {
+      const key = extractApiKey(request.headers);
+      const err = validateApiKey(key);
+      if (err) return authErrorResponse(err);
+
+      const req = await request.json();
+      const originalModel = req.model;
+      if (route.modelOverride) req.model = route.modelOverride;
+
+      // DeepSeek compatibility: auto-inject thinking for reasoning models
+      if (req.model?.startsWith('deepseek-') && !req.thinking) {
+        req.thinking = { type: "enabled" };
+      }
+
+      // Vision model override: force qwen3.6-plus when images detected
+      if (hasResponsesImages(req)) {
+        req.model = VISION_MODEL;
+      }
+
+      const chatReq = formatResponsesToChatCompletions(req);
+      const upstreamRes = await fetch(`${upstream}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${key}`,
+        },
+        body: JSON.stringify(chatReq),
+      });
+      if (!upstreamRes.ok) return upstreamErrorResponse(upstreamRes, await upstreamRes.text());
+
+      if (chatReq.stream) {
+        return new Response(streamChatCompletionsToResponses(upstreamRes.body as ReadableStream, originalModel), {
+          headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "Connection": "keep-alive" },
+        });
+      }
+
+      const data: any = await upstreamRes.json();
+      return new Response(JSON.stringify(formatChatCompletionsToResponses(data, originalModel)), {
+        headers: { "Content-Type": "application/json" },
+      });
   }
 
   // Model discovery
@@ -203,6 +279,7 @@ async function handleRequest(request: Request): Promise<Response> {
     endpoints: {
       "/v1/messages": "Anthropic → upstream (translated if upstream=openai)",
       "/v1/chat/completions": "OpenAI → upstream (translated if upstream=anthropic)",
+      "/v1/responses": "OpenAI Responses API → upstream Chat Completions",
       "/v1/models": "Model discovery proxy",
     },
   }, null, 2), {
@@ -212,6 +289,16 @@ async function handleRequest(request: Request): Promise<Response> {
 }
 
 const app = new Hono();
+
+// CORS support for browser-based clients and preflight requests
+app.use('*', async (c, next) => {
+  c.header('Access-Control-Allow-Origin', '*');
+  c.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  c.header('Access-Control-Allow-Headers', 'Content-Type, X-Api-Key, Authorization, X-Upstream-Url, X-Upstream-Format, Anthropic-Version, Anthropic-Beta');
+  if (c.req.method === 'OPTIONS') return c.body(null, 204);
+  await next();
+});
+
 app.all('*', (c) => handleRequest(c.req.raw));
 
 export default app;
