@@ -234,13 +234,14 @@ async function handleRequest(request: Request): Promise<Response> {
       });
     } else {
       // ---- Pass-through: send Anthropic body as-is to Anthropic upstream ----
-      // Image detection uses hasImages() which checks Anthropic-format type: "image"
+      // Belt-and-suspenders image detection: primary check for Anthropic-format type: "image",
+      // with secondary check for OpenAI-format type: "image_url" in case of body/route format mismatch.
       const parsed = await safeJsonBody<any>(request);
       if (!parsed.ok) return parsed.response;
       const anthReqJson = parsed.data;
 
       if (route.modelOverride) anthReqJson.model = route.modelOverride;
-      if (hasImages(anthReqJson)) anthReqJson.model = VISION_MODEL;
+      if (hasImages(anthReqJson) || hasOpenAIImages(anthReqJson)) anthReqJson.model = VISION_MODEL;
       const anthPassRes = await safeUpstreamFetch(`${upstream}/v1/messages`, {
         method: "POST",
         headers: anthropicHeaders(request, key),
@@ -296,13 +297,14 @@ async function handleRequest(request: Request): Promise<Response> {
     }
 
     // ---- Pass-through: send OpenAI body as-is to OpenAI upstream ----
-    // Image detection uses hasOpenAIImages() which checks OpenAI-format type: "image_url"
+    // Belt-and-suspenders image detection: primary check for OpenAI-format type: "image_url",
+    // with secondary check for Anthropic-format type: "image" in case of body/route format mismatch.
     const parsed = await safeJsonBody<any>(request);
     if (!parsed.ok) return parsed.response;
     const oaiReqJson = parsed.data;
 
     if (route.modelOverride) oaiReqJson.model = route.modelOverride;
-    if (hasOpenAIImages(oaiReqJson)) oaiReqJson.model = VISION_MODEL;
+    if (hasOpenAIImages(oaiReqJson) || hasImages(oaiReqJson)) oaiReqJson.model = VISION_MODEL;
     const oaiPassRes = await safeUpstreamFetch(`${upstream}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
