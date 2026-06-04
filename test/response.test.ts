@@ -73,6 +73,22 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic response)', () => {
     expect(result.stop_reason).toBe('max_tokens');
   });
 
+  // Regression: LOW bug 8 from QA report — content_filter and insufficient_system_resource
+  // used to fall through silently to end_turn; they now map to max_tokens (truncation signal).
+  it('maps finish_reason "content_filter" to "max_tokens"', () => {
+    const result = formatOpenAIToAnthropic({
+      choices: [{ message: { role: 'assistant', content: '[filtered]' }, finish_reason: 'content_filter' }],
+    }, 'claude-sonnet-4-20250514');
+    expect(result.stop_reason).toBe('max_tokens');
+  });
+
+  it('maps finish_reason "insufficient_system_resource" to "max_tokens"', () => {
+    const result = formatOpenAIToAnthropic({
+      choices: [{ message: { role: 'assistant', content: '' }, finish_reason: 'insufficient_system_resource' }],
+    }, 'claude-sonnet-4-20250514');
+    expect(result.stop_reason).toBe('max_tokens');
+  });
+
   it('maps finish_reason "stop" to "end_turn"', () => {
     const result = formatOpenAIToAnthropic({
       choices: [{ message: { role: 'assistant', content: 'done' }, finish_reason: 'stop' }],
@@ -181,5 +197,21 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI response)', () => {
       stop_reason: 'end_turn',
     }, 'claude-sonnet-4-20250514');
     expect(result.usage).toEqual({ prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 });
+  });
+
+  // Regression: MEDIUM bug 6 from QA report — Anthropic upstream cache tokens lost in
+  // response translation. cache_read_input_tokens must be preserved in OpenAI format
+  // as prompt_tokens_details.cached_tokens, and prompt_tokens must include cached tokens
+  // (OpenAI convention) so consumers do not under-count.
+  it('preserves Anthropic cache_read_input_tokens as OpenAI prompt_tokens_details.cached_tokens', () => {
+    const result = formatAnthropicToOpenAI({
+      content: [{ type: 'text', text: 'Hello from cache!' }],
+      stop_reason: 'end_turn',
+      usage: { input_tokens: 100, output_tokens: 5, cache_read_input_tokens: 400 },
+    }, 'claude-sonnet-4-20250514');
+    expect(result.usage.prompt_tokens).toBe(500);  // 100 fresh + 400 cached
+    expect(result.usage.completion_tokens).toBe(5);
+    expect(result.usage.total_tokens).toBe(505);
+    expect(result.usage.prompt_tokens_details).toEqual({ cached_tokens: 400 });
   });
 });

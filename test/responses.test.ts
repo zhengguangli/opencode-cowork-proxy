@@ -127,6 +127,52 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
     ]);
   });
 
+  // Regression: CRITICAL bug 2 from QA report — tool calls dropped in non-DeepSeek Responses API
+  // assistant messages. The plain assistant path used to silently drop tool_call content blocks;
+  // only the DeepSeek merge path called extractToolCalls. Both paths must now emit tool_calls.
+  it('extracts tool_call blocks from non-DeepSeek Responses API assistant messages', () => {
+    const result = formatResponsesToChatCompletions({
+      model: 'gpt-4-style',
+      input: [
+        { type: 'message', role: 'user', content: [{ type: 'text', text: 'What is the weather in Paris?' }] },
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            { type: 'output_text', text: 'Let me check.' },
+            { type: 'tool_call', id: 'call_abc', name: 'get_weather', arguments: '{"city":"Paris"}' },
+          ],
+        },
+      ],
+    });
+    expect(result.messages).toHaveLength(2);
+    const assistant = result.messages[1];
+    expect(assistant.role).toBe('assistant');
+    expect(assistant.content).toBe('Let me check.');
+    expect(assistant.tool_calls).toEqual([
+      { id: 'call_abc', type: 'function', function: { name: 'get_weather', arguments: '{"city":"Paris"}' } },
+    ]);
+  });
+
+  it('returns assistant content as null when only tool_call blocks are present', () => {
+    const result = formatResponsesToChatCompletions({
+      model: 'gpt-4-style',
+      input: [
+        { type: 'message', role: 'user', content: [{ type: 'text', text: 'Search cats' }] },
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            { type: 'tool_call', id: 'c1', name: 'search', arguments: '{"q":"cats"}' },
+          ],
+        },
+      ],
+    });
+    const assistant = result.messages[1];
+    expect(assistant.content).toBeNull();
+    expect(assistant.tool_calls).toHaveLength(1);
+  });
+
   // ── Parameters ──
   it('maps max_output_tokens to max_tokens', () => {
     const result = formatResponsesToChatCompletions({
@@ -201,6 +247,27 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
     expect(Array.isArray(result.messages[0].content)).toBe(true);
     expect(result.messages[0].content[0]).toEqual({ type: 'text', text: 'What is this?' });
     expect(result.messages[0].content[1]).toEqual({ type: 'image_url', image_url: { url: 'data:image/png;base64,abc' } });
+  });
+
+  // Regression: MEDIUM bug 4 from QA report — Base64 input_image.source not handled.
+  // The Responses API has a native source-based image format that was previously dropped.
+  it('handles input_image with source.type="base64" (native Responses API format)', () => {
+    const result = formatResponsesToChatCompletions({
+      model: 'qwen3.6-plus',
+      input: [
+        {
+          type: 'message', role: 'user',
+          content: [
+            { type: 'text', text: 'What is this?' },
+            { type: 'input_image', source: { type: 'base64', media_type: 'image/png', data: 'abc123' } },
+          ],
+        },
+      ],
+    });
+    expect(result.messages[0].content[1]).toEqual({
+      type: 'image_url',
+      image_url: { url: 'data:image/png;base64,abc123' },
+    });
   });
 
   // ── System message deduplication ──

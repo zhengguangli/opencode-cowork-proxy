@@ -406,6 +406,57 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic request)', () => {
       name: 'search', description: 'Search', input_schema: { type: 'object' },
     });
   });
+
+  // Regression: CRITICAL bug 1 from QA report — tool_choice format mismatch (OpenAI→Anthropic).
+  // OpenAI: {type:"function", function:{name:"xxx"}} → Anthropic: {type:"tool", name:"xxx"}
+  it('maps tool_choice object format {type:"function", function:{name}} to {type:"tool", name}', () => {
+    const result = formatOpenAIToAnthropic({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'Weather?' }],
+      tool_choice: { type: 'function', function: { name: 'get_weather' } },
+    });
+    expect(result.tool_choice).toEqual({ type: 'tool', name: 'get_weather' });
+  });
+
+  // Regression: tool_choice string "required" → Anthropic "any"
+  it('maps tool_choice string "required" to Anthropic "any"', () => {
+    const result = formatOpenAIToAnthropic({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'Hi' }],
+      tool_choice: 'required',
+    });
+    expect(result.tool_choice).toBe('any');
+  });
+
+  it('passes through tool_choice string "auto" and "none" unchanged', () => {
+    const r1 = formatOpenAIToAnthropic({ model: 'gpt-4', messages: [{ role: 'user', content: 'Hi' }], tool_choice: 'auto' });
+    const r2 = formatOpenAIToAnthropic({ model: 'gpt-4', messages: [{ role: 'user', content: 'Hi' }], tool_choice: 'none' });
+    expect(r1.tool_choice).toBe('auto');
+    expect(r2.tool_choice).toBe('none');
+  });
+
+  // Regression: F2 review fix — defensive guard for missing function.name
+  it('falls back to {type:"tool"} when tool_choice.function.name is missing', () => {
+    const result = formatOpenAIToAnthropic({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'Hi' }],
+      tool_choice: { type: 'function', function: {} },
+    });
+    expect(result.tool_choice.type).toBe('tool');
+    expect(result.tool_choice.name).toBeUndefined();
+  });
+
+  // Regression: passthrough additional fields
+  it('passes through response_format and user (metadata.user_id)', () => {
+    const result = formatOpenAIToAnthropic({
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: 'Hi' }],
+      response_format: { type: 'json_object' },
+      user: 'user-123',
+    });
+    expect(result.response_format).toEqual({ type: 'json_object' });
+    expect(result.metadata).toEqual({ user_id: 'user-123' });
+  });
 });
 
 // Cache-specific tests (Anthropic→OpenAI direction only, since cache injection is relevant here)

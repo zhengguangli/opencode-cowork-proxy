@@ -63,6 +63,30 @@ describe('hasCacheControl', () => {
   it('returns false for empty messages', () => {
     expect(hasCacheControl([])).toBe(false);
   });
+
+  // Regression: LOW bug L3 from QA report — hasCacheControl did not check Responses API input.
+  // The 3-arg signature adds support for the Responses API `input` array of message items.
+  it('detects cache_control in Responses API input format (body.input)', () => {
+    expect(hasCacheControl(
+      [],
+      undefined,
+      { input: [
+        { type: 'message', role: 'user', content: [
+          { type: 'text', text: 'cached prompt', cache_control: { type: 'ephemeral' } },
+        ]},
+      ]},
+    )).toBe(true);
+  });
+
+  it('returns false for Responses API input with no cache_control', () => {
+    expect(hasCacheControl(
+      [],
+      undefined,
+      { input: [
+        { type: 'message', role: 'user', content: [{ type: 'text', text: 'plain' }] },
+      ]},
+    )).toBe(false);
+  });
 });
 
 describe('extractCachedTokens', () => {

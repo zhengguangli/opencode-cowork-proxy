@@ -538,4 +538,115 @@ describe('worker routing', () => {
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
     expect(response.headers.get('Access-Control-Allow-Methods')).toContain('POST');
   });
+
+  // ── Regression tests for QA-flagged routing bug fixes ──
+
+  // Regression: CRITICAL bug C3 from QA report — root / endpoint exposed route topology
+  // to unauthenticated requests. Authenticated requests get full info; unauthenticated
+  // get a minimal {"status":"ok"} response.
+  it('returns full info on root / when authenticated', async () => {
+    const response = await worker.fetch(new Request('https://proxy.example/', {
+      headers: { 'x-api-key': key },
+    }));
+    expect(response.status).toBe(200);
+    const body: any = await response.json();
+    expect(body.name).toBe('opencode-cowork-proxy');
+    expect(body.routes).toBeDefined();
+    expect(body.endpoints).toBeDefined();
+  });
+
+  it('returns minimal {"status":"ok"} on root / when unauthenticated', async () => {
+    const response = await worker.fetch(new Request('https://proxy.example/'));
+    expect(response.status).toBe(200);
+    const body: any = await response.json();
+    // Should NOT leak route topology
+    expect(body.routes).toBeUndefined();
+    expect(body.endpoints).toBeUndefined();
+    expect(body).toEqual({ status: 'ok' });
+  });
+
+  // Regression: HIGH bug H1/H2 from QA report — X-Request-Id and rate-limit headers
+  // from upstream must be forwarded to client on 200 (not just error) responses.
+  it('forwards X-Request-Id and RateLimit-* headers from upstream on 200 responses', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }] }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Request-Id': 'req-test-123',
+          'RateLimit-Limit': '100',
+          'RateLimit-Remaining': '99',
+          'RateLimit-Reset': '30',
+        },
+      }),
+    );
+
+    const request = new Request('https://proxy.example/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key },
+      body: JSON.stringify({ model: 'test', messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    const response = await worker.fetch(request);
+
+    expect(response.headers.get('X-Request-Id')).toBe('req-test-123');
+    expect(response.headers.get('RateLimit-Limit')).toBe('100');
+    expect(response.headers.get('RateLimit-Remaining')).toBe('99');
+    expect(response.headers.get('RateLimit-Reset')).toBe('30');
+  });
+
+  // Regression: HIGH bug H3 from QA report — pass-through paths must check !res.ok
+  // and forward upstream error response (not silently return upstream body).
+  it('forwards upstream error response on pass-through path (e.g. /go/v1/messages)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('{"error":{"message":"upstream rate limited"}}', {
+        status: 429,
+        headers: { 'Content-Type': 'application/json', 'Retry-After': '60' },
+      }),
+    );
+
+    const request = new Request('https://proxy.example/go/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key },
+      body: JSON.stringify({ model: 'test', messages: [{ role: 'user', content: 'hi' }], max_tokens: 10 }),
+    });
+    const response = await worker.fetch(request);
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get('Retry-After')).toBe('60');
+  });
+
+  // Regression: MEDIUM bug M1 from QA report — on /v1/responses, vision model override
+  // must run BEFORE DeepSeek thinking injection. If image is present, the model should
+  // be qwen3.6-plus and the request body should NOT have a thinking parameter.
+  it('applies vision override before thinking injection on /v1/responses', async () => {
+    let capturedBody: any;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      capturedBody = JSON.parse(init?.body as string);
+      return new Response(JSON.stringify({
+        id: 'resp_test', object: 'response', status: 'completed',
+        output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'ok' }] }],
+        usage: { input_tokens: 5, output_tokens: 2 },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+
+    const request = new Request('https://proxy.example/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key },
+      body: JSON.stringify({
+        model: 'deepseek-v4-pro',
+        input: [
+          { type: 'message', role: 'user', content: [
+            { type: 'input_image', image_url: { url: 'data:image/png;base64,abc' } },
+            { type: 'text', text: 'What is this?' },
+          ]},
+        ],
+      }),
+    });
+    await worker.fetch(request);
+
+    // Vision override should have set the model to qwen3.6-plus
+    expect(capturedBody.model).toBe('qwen3.6-plus');
+    // Thinking config must NOT be present (would have been injected for deepseek-v4-pro)
+    expect(capturedBody.thinking).toBeUndefined();
+  });
 });
