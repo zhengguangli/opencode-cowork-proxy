@@ -127,6 +127,95 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
     ]);
   });
 
+  // ── Top-level function_call items → tool_calls in assistant messages ──
+  it('merges function_call item with preceding assistant message', () => {
+    // When the proxy's own response translator outputs function_call items separately
+    // from the message, they come back as input items. We must merge them.
+    const result = formatResponsesToChatCompletions({
+      model: 'deepseek-v4-flash-free',
+      input: [
+        { type: 'message', role: 'user', content: [{ type: 'text', text: 'Weather?' }] },
+        { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '' }] },
+        { type: 'function_call', call_id: 'call_456', name: 'get_weather', arguments: '{"city":"Paris"}' },
+        { type: 'function_call_output', call_id: 'call_456', output: 'Sunny, 22°C' },
+      ],
+    });
+    expect(result.messages).toHaveLength(3);
+    expect(result.messages[1]).toEqual({
+      role: 'assistant',
+      content: null,
+      tool_calls: [{ id: 'call_456', type: 'function', function: { name: 'get_weather', arguments: '{"city":"Paris"}' } }],
+    });
+    expect(result.messages[2]).toEqual({
+      role: 'tool',
+      tool_call_id: 'call_456',
+      content: 'Sunny, 22°C',
+    });
+  });
+
+  it('creates assistant message from function_call when no preceding assistant exists', () => {
+    const result = formatResponsesToChatCompletions({
+      model: 'deepseek-v4-flash-free',
+      input: [
+        { type: 'function_call', id: 'fc_789', call_id: 'call_789', name: 'search', arguments: '{"q":"test"}' },
+        { type: 'function_call_output', call_id: 'call_789', output: 'results' },
+      ],
+    });
+    expect(result.messages).toHaveLength(2);
+    expect(result.messages[0]).toEqual({
+      role: 'assistant',
+      content: null,
+      tool_calls: [{ id: 'call_789', type: 'function', function: { name: 'search', arguments: '{"q":"test"}' } }],
+    });
+    expect(result.messages[1]).toEqual({
+      role: 'tool',
+      tool_call_id: 'call_789',
+      content: 'results',
+    });
+  });
+
+  it('merges function_call with assistant message even when following a user message', () => {
+    const result = formatResponsesToChatCompletions({
+      model: 'deepseek-v4-flash-free',
+      input: [
+        { type: 'message', role: 'user', content: [{ type: 'text', text: 'Weather?' }] },
+        { type: 'function_call', call_id: 'call_001', name: 'get_weather', arguments: '{}' },
+        { type: 'function_call_output', call_id: 'call_001', output: 'Sunny' },
+      ],
+    });
+    expect(result.messages).toHaveLength(3);
+    expect(result.messages[1].role).toBe('assistant');
+    expect(result.messages[1].content).toBeNull();
+    expect(result.messages[1].tool_calls).toHaveLength(1);
+    expect(result.messages[2]).toEqual({
+      role: 'tool',
+      tool_call_id: 'call_001',
+      content: 'Sunny',
+    });
+  });
+
+  it('avoids duplicate tool_calls when both content tool_call and top-level function_call exist', () => {
+    const result = formatResponsesToChatCompletions({
+      model: 'deepseek-v4-flash-free',
+      input: [
+        { type: 'message', role: 'user', content: [{ type: 'text', text: 'Hi' }] },
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            { type: 'output_text', text: '' },
+            { type: 'tool_call', id: 'call_xyz', name: 'search', arguments: '{"q":"test"}' },
+          ],
+        },
+        { type: 'function_call', call_id: 'call_xyz', name: 'search', arguments: '{"q":"test"}' },
+        { type: 'function_call_output', call_id: 'call_xyz', output: 'done' },
+      ],
+    });
+    expect(result.messages).toHaveLength(3);
+    expect(result.messages[1].tool_calls).toHaveLength(1);
+    expect(result.messages[1].tool_calls[0].id).toBe('call_xyz');
+  });
+
   // Regression: CRITICAL bug 2 from QA report — tool calls dropped in non-DeepSeek Responses API
   // assistant messages. The plain assistant path used to silently drop tool_call content blocks;
   // only the DeepSeek merge path called extractToolCalls. Both paths must now emit tool_calls.

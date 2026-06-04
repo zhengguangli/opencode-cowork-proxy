@@ -87,6 +87,37 @@ export function formatResponsesToChatCompletions(body: any): any {
         continue;
       }
 
+      // Handle function_call items → tool_calls within an assistant message
+      // The proxy's own response translator outputs tool calls as separate type:"function_call"
+      // items. When these come back as input, they must be merged with the preceding
+      // assistant message (or create a new one) so that subsequent function_call_output
+      // items have a matching assistant tool_calls to pair with.
+      if (item.type === "function_call") {
+        const toolCall = {
+          id: item.call_id || item.id || "",
+          type: "function",
+          function: {
+            name: item.name || "",
+            arguments: typeof item.arguments === "string" ? item.arguments : JSON.stringify(item.arguments || {}),
+          },
+        };
+        const lastMsg = messages[messages.length - 1];
+        if (lastMsg && lastMsg.role === "assistant") {
+          if (!lastMsg.tool_calls) lastMsg.tool_calls = [];
+          // Avoid duplicate tool_call with the same id
+          if (!lastMsg.tool_calls.some((tc: any) => tc.id === toolCall.id)) {
+            lastMsg.tool_calls.push(toolCall);
+          }
+        } else {
+          messages.push({
+            role: "assistant",
+            content: null,
+            tool_calls: [toolCall],
+          });
+        }
+        continue;
+      }
+
       // Skip other item types (web_search_call, computer_call, etc.)
     }
 
