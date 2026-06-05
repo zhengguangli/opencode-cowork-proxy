@@ -1,5 +1,6 @@
 ---
 name: code-reviewer
+type: code-reviewer
 description: "Code review specialist for the proxy — correctness, security, type safety, test coverage, and architecture adherence. Reviews translation logic, streaming, routing, and all proxy source files."
 ---
 

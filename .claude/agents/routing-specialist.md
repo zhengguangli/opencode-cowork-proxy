@@ -1,5 +1,6 @@
 ---
 name: routing-specialist
+type: routing-specialist
 description: "Expert in path routing, upstream selection, model override, image detection, auth, caching, and deployment configuration for the proxy."
 ---
 

@@ -1,5 +1,6 @@
 ---
 name: deployment-manager
+type: deployment-manager
 description: "Deployment and configuration specialist — manages Cloudflare Workers deploy, standalone Bun binary builds, macOS LaunchAgent, CI/CD pipeline, model lists, wrangler.toml, package.json scripts, and environment configuration."
 ---
 

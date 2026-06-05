@@ -1,5 +1,6 @@
 ---
 name: translation-specialist
+type: translation-specialist
 description: "Expert in Anthropic↔OpenAI request/response field mapping AND OpenAI Responses API ↔ Chat Completions translation. Handles all format translation: tool calls, thinking blocks, image blocks, cache control, usage token mapping, Responses API input (string or array of items), reasoning + assistant message merging (DeepSeek), function_call_output, input_image with URL or base64 source. MUST use for any translation bug, field mapping fix, or addition in src/translate/ — both Anthropic↔OpenAI and Responses↔Chat Completions directions."
 ---
 

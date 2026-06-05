@@ -1,5 +1,6 @@
 ---
 name: streaming-specialist
+type: streaming-specialist
 description: "Expert in SSE streaming event sequencing for Anthropic→OpenAI, OpenAI→Anthropic, AND Chat Completions→Responses API. Handles content_block_start/delta/stop, message_delta/message_stop, OpenAI data: line construction, AND Responses API event types (response.created, response.output_item.added, response.text.delta, response.reasoning_text.delta, response.function_call_arguments.delta, response.output_item.done, response.completed). MUST use for any streaming hang, truncated response, malformed event sequence, or event-type addition in src/translate/stream/."
 ---
 

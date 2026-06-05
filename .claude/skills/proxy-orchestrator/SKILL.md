@@ -25,12 +25,12 @@ Per the harness skill's Phase 3 requirement, **all Agent tool calls must include
 
 | Member | Agent Type | Role | Skills | Output |
 |--------|-----------|------|--------|--------|
-| translation-specialist | built-in (`general-purpose`) | Request/response field mapping | field-mapping | Updated translator source files |
-| streaming-specialist | built-in (`general-purpose`) | SSE streaming event sequencing | stream-debug | Updated stream translator files |
-| routing-specialist | built-in (`general-purpose`) | Path routing, auth, caching, config | — | Updated routing/auth/cache logic |
-| qa-inspector | built-in (`general-purpose`) | Integration cross-boundary verification | — | Verification report |
-| code-reviewer | built-in (`general-purpose`) | Code correctness, security, type safety review | field-mapping, stream-debug (conditional) | Review report with severity classifications |
-| deployment-manager | built-in (`general-purpose`) | Build, deploy, CI/CD, config management | deployment | Deployed Worker/binary, updated configs |
+| translation-specialist | built-in (`translation-specialist`) | Request/response field mapping | field-mapping | Updated translator source files |
+| streaming-specialist | built-in (`streaming-specialist`) | SSE streaming event sequencing | stream-debug | Updated stream translator files |
+| routing-specialist | built-in (`routing-specialist`) | Path routing, auth, caching, config | — | Updated routing/auth/cache logic |
+| qa-inspector | built-in (`qa-inspector`) | Integration cross-boundary verification | — | Verification report |
+| code-reviewer | built-in (`code-reviewer`) | Code correctness, security, type safety review | field-mapping, stream-debug (conditional) | Review report with severity classifications |
+| deployment-manager | built-in (`deployment-manager`) | Build, deploy, CI/CD, config management | deployment | Deployed Worker/binary, updated configs |
 
 ## Workflow Selection
 

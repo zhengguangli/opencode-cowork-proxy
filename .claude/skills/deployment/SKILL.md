@@ -13,7 +13,7 @@ Complete reference for building, deploying, configuring, and maintaining the pro
 |--------|--------|----------|
 | Cloudflare Workers | `bun run deploy` (wrangler) | Production — always-on, global edge network |
 | Vercel | `bunx vercel deploy --prod` | Production — alternative to CF Workers, different egress IP pool |
-| Standalone Bun binary | `bun build --compile` + LaunchAgent | macOS local — for dev, offline, or behind firewall |
+| Standalone Bun binary | `bun run build:binary` + LaunchAgent | macOS local — for dev, offline, or behind firewall |
 | Docker / other | Not yet supported | Future — Bun binary can run in any container |
 
 ---
@@ -66,15 +66,15 @@ curl https://<your-worker>.<your-subdomain>.workers.dev/
 ### Build
 
 ```bash
-bun build --compile --outfile opencode-cowork-proxy server.ts
+bun run build:binary
 ```
 
-This produces a single Mach-O binary with no runtime dependencies.
+This produces a single Mach-O binary with no runtime dependencies (`bun build --compile --outfile opencode-cowork-proxy server.ts`).
 
 ### Install
 
 ```bash
-sudo cp opencode-cowork-proxy /usr/local/bin/opencode-cowork-proxy
+cp opencode-cowork-proxy /usr/local/bin/opencode-cowork-proxy
 ```
 
 ### LaunchAgent Plist
@@ -94,6 +94,8 @@ Location: `~/Library/LaunchAgents/ai.opencode.proxy.plist`
     <dict>
         <key>PORT</key>
         <string>18787</string>
+        <key>VERSION</key>
+        <string>2.1.0</string>
     </dict>
     <key>RunAtLoad</key>
     <true/>
@@ -102,7 +104,7 @@ Location: `~/Library/LaunchAgents/ai.opencode.proxy.plist`
     <key>StandardOutPath</key>
     <string>/usr/local/var/log/opencode-cowork-proxy.log</string>
     <key>StandardErrorPath</key>
-    <string>/usr/local/var/log/opencode-cowork-proxy.log</string>
+    <string>/usr/local/var/log/opencode-cowork-proxy-error.log</string>
 </dict>
 </plist>
 ```
@@ -111,25 +113,27 @@ Location: `~/Library/LaunchAgents/ai.opencode.proxy.plist`
 
 ```bash
 # Load (start + enable auto-start)
-launchctl load ~/Library/LaunchAgents/ai.opencode.proxy.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.opencode.proxy.plist
 
 # Unload (stop + disable auto-start)
-launchctl unload ~/Library/LaunchAgents/ai.opencode.proxy.plist
+launchctl bootout gui/$(id -u)/ai.opencode.proxy
 
 # Check status
 launchctl print gui/$(id -u)/ai.opencode.proxy
 
 # View logs
 tail -f /usr/local/var/log/opencode-cowork-proxy.log
+tail -f /usr/local/var/log/opencode-cowork-proxy-error.log  # errors only
 ```
 
 ### Full Restart Cycle (after rebuild)
 
 ```bash
-bun build --compile --outfile opencode-cowork-proxy server.ts
-sudo cp opencode-cowork-proxy /usr/local/bin/
-launchctl unload ~/Library/LaunchAgents/ai.opencode.proxy.plist
-launchctl load ~/Library/LaunchAgents/ai.opencode.proxy.plist
+bun run build:binary
+cp opencode-cowork-proxy /usr/local/bin/opencode-cowork-proxy
+rm opencode-cowork-proxy
+launchctl bootout gui/$(id -u)/ai.opencode.proxy
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.opencode.proxy.plist
 tail -f /usr/local/var/log/opencode-cowork-proxy.log
 ```
 
@@ -233,6 +237,7 @@ Keep the pipeline linear. Test failures block deploy. Deploy steps are condition
 | Script | Command | Purpose |
 |--------|---------|---------|
 | `dev` | `wrangler dev` | Local dev with CF Workers runtime |
+| `build:binary` | `bun build --compile --outfile opencode-cowork-proxy server.ts` | Build standalone binary (macOS) |
 | `deploy` | `wrangler deploy` | Publish to Cloudflare |
 | `test` | `vitest run` | Run all tests |
 | `test:watch` | `vitest` | Watch mode for TDD |
@@ -297,14 +302,15 @@ npx wrangler rollback
 
 ```bash
 # Reinstall previous version
-sudo cp /usr/local/bin/opencode-cowork-proxy /usr/local/bin/opencode-cowork-proxy.bak  # backup first
+cp /usr/local/bin/opencode-cowork-proxy /usr/local/bin/opencode-cowork-proxy.bak  # backup first
 # Rebuild from git history:
 git checkout <previous-tag>
-bun build --compile --outfile opencode-cowork-proxy server.ts
-sudo cp opencode-cowork-proxy /usr/local/bin/
+bun run build:binary
+cp opencode-cowork-proxy /usr/local/bin/opencode-cowork-proxy
+rm opencode-cowork-proxy
 # Then reload LaunchAgent
-launchctl unload ~/Library/LaunchAgents/ai.opencode.proxy.plist
-launchctl load ~/Library/LaunchAgents/ai.opencode.proxy.plist
+launchctl bootout gui/$(id -u)/ai.opencode.proxy
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.opencode.proxy.plist
 ```
 
 ### CI/CD Rollback

@@ -1,5 +1,6 @@
 ---
 name: qa-inspector
+type: qa-inspector
 description: "QA verification expert for the proxy. Validates cross-boundary integration between routing, request translation, upstream call, response translation, and streaming. Catches boundary mismatches that unit tests miss."
 ---
 
