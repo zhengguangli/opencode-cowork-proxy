@@ -4,7 +4,7 @@
   "main": "src/index.ts",
   "scripts": {
     "dev": "npx wrangler dev",
-    "build": "bun build --compile --outfile opencode-cowork-proxy server.ts",
+    "build:binary": "bun build --compile --outfile opencode-cowork-proxy server.ts",
     "deploy": "npx wrangler deploy",
     "test": "vitest run",
     "test:watch": "vitest"

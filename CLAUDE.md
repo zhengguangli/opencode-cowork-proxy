@@ -21,14 +21,14 @@ bun test               # Run all tests (vitest)
 bun run test:watch     # Watch mode
 bun run dev            # wrangler dev (CF Workers runtime)
 bun run server.ts      # Bun dev server (port 8787, no CF runtime)
-bun build --compile --outfile opencode-cowork-proxy server.ts  # Build standalone binary
+bun run build:binary     # Build standalone binary (macOS)
 bun run deploy         # wrangler deploy to Cloudflare (config: wrangler.toml)
 bunx vercel deploy --prod  # Deploy to Vercel (alternative to Cloudflare)
 ```
 
 **Deployment pipeline:** `.github/workflows/release.yml` uses `oven-sh/setup-bun@v1` — runs `bun install --frozen-lockfile`, `bun test`, then deploys to Cloudflare Workers (optional, needs `CF_API_TOKEN`) and Vercel (needs `VERCEL_TOKEN`).
 
-**Local deployment (macOS):** Build a standalone binary with `bun build --compile --outfile opencode-cowork-proxy server.ts`, copy to `/usr/local/bin/`, and manage via `launchctl` with the `ai.opencode.proxy` LaunchAgent (port 18787). Check status: `launchctl print gui/$(id -u)/ai.opencode.proxy`.
+**Local deployment (macOS):** Build a standalone binary with `bun run build:binary`, copy to `/usr/local/bin/`, and manage via `launchctl` with the `ai.opencode.proxy` LaunchAgent (port 18787). Check status: `launchctl print gui/$(id -u)/ai.opencode.proxy`.
 
 **Vercel deployment (alternative to Cloudflare):** `api/[[...route]].ts` entry exports `app.fetch` directly (no `hono/vercel` adapter needed — it can cause builds to hang). Deploy with `bunx vercel deploy --prod`. Production URL: `https://opencode-cowork-proxy.vercel.app`. Useful when Cloudflare Workers' shared egress IPs trigger upstream rate limiting (429).
 
