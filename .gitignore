@@ -6,6 +6,7 @@ dist/
 opencode-cowork-proxy
 .vercel
 .wrangler/
+.gstack/
 package-lock.json
 _workspace/
 

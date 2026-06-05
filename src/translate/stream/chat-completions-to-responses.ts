@@ -11,6 +11,7 @@
  * - Usage in final chunk → response.completed
  */
 import { mapUsage } from '../../cache';
+const IS_DEBUG = typeof process !== 'undefined' && process.env?.DEBUG;
 
 type ActiveItemType = "text" | "reasoning" | "function_call" | null;
 
@@ -271,13 +272,13 @@ export function streamChatCompletionsToResponses(
         const delta = parsed.choices?.[0]?.delta;
         if (!delta) return;
 
-        if (delta.reasoning_content) {
+        if (IS_DEBUG && delta.reasoning_content) {
           console.log(`[STREAM-DEBUG] reasoning_content chunk: "${delta.reasoning_content?.slice(0,100)}"`);
         }
-        if (delta.content && delta.content.includes('<think>')) {
+        if (IS_DEBUG && delta.content && delta.content.includes('<think>')) {
           console.log(`[STREAM-DEBUG] ⚠️ FOUND <think> in content: "${delta.content.slice(0,100)}"`);
         }
-        if (delta.content && !delta.reasoning_content) {
+        if (IS_DEBUG && delta.content && !delta.reasoning_content) {
           console.log(`[STREAM-DEBUG] text content chunk: "${delta.content.slice(0,100)}"`);
         }
 

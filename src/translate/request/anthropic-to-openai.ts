@@ -39,7 +39,7 @@ export function formatAnthropicToOpenAI(body: any): any {
               toolCalls.push({
                 id: part.id,
                 type: "function",
-                function: { name: part.name, arguments: typeof part.input === "string" ? part.input : JSON.stringify(part.input) },
+                function: { name: part.name, arguments: part.input != null ? (typeof part.input === "string" ? part.input : JSON.stringify(part.input)) : "{}" },
               });
             }
           });

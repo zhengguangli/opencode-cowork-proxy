@@ -9,6 +9,7 @@ import { streamAnthropicToOpenAI } from './translate/stream/anthropic-to-openai'
 import { formatResponsesToChatCompletions } from './translate/request/responses-to-chat-completions';
 import { formatChatCompletionsToResponses } from './translate/response/chat-completions-to-responses';
 import { streamChatCompletionsToResponses } from './translate/stream/chat-completions-to-responses';
+import { VERSION } from './version';
 
 // NOTE: These upstream URLs intentionally do NOT include /v1. Each route handler appends
 // the appropriate path segment (e.g., /v1/messages, /chat/completions). This prevents
@@ -28,6 +29,7 @@ const UPSTREAM_FORWARD_HEADERS = [
   "RateLimit-Remaining",
   "RateLimit-Reset",
 ];
+const IS_DEBUG = typeof process !== 'undefined' && process.env?.DEBUG;
 
 type RouteConfig = {
   path: string;
@@ -416,28 +418,29 @@ async function handleRequest(request: Request): Promise<Response> {
     const req = parsed.data;
 
     const originalModel = req.model;
-    console.log(`[RESPONSES] Incoming model=${req.model}, originalModel=${originalModel}, route.modelOverride=${route.modelOverride}`);
-    console.log(`[RESPONSES] Input type=${typeof req.input}, has thinking=${!!req.thinking}`);
+    if (IS_DEBUG) {
+      console.log(`[RESPONSES] Incoming model=${req.model}, originalModel=${originalModel}, route.modelOverride=${route.modelOverride}`);
+      console.log(`[RESPONSES] Input type=${typeof req.input}, has thinking=${!!req.thinking}`);
 
-    // Log raw input structure for debugging
-    if (Array.isArray(req.input)) {
-      for (let ii = 0; ii < req.input.length; ii++) {
-        const item = req.input[ii];
-        if (item.type === 'message') {
-          const contentPreview = Array.isArray(item.content)
-            ? item.content.map((p: any) => p.type).join(',')
-            : typeof item.content;
-          console.log(`[RESPONSES]   input[${ii}] type=${item.type} role=${item.role} content_types=[${contentPreview}]`);
-        } else if (item.type === 'reasoning') {
-          console.log(`[RESPONSES]   input[${ii}] type=${item.type} reasoning_len=${(item.reasoning_text||'').length}`);
-        } else {
-          console.log(`[RESPONSES]   input[${ii}] type=${item.type}`);
+      if (Array.isArray(req.input)) {
+        for (let ii = 0; ii < req.input.length; ii++) {
+          const item = req.input[ii];
+          if (item.type === 'message') {
+            const contentPreview = Array.isArray(item.content)
+              ? item.content.map((p: any) => p.type).join(',')
+              : typeof item.content;
+            console.log(`[RESPONSES]   input[${ii}] type=${item.type} role=${item.role} content_types=[${contentPreview}]`);
+          } else if (item.type === 'reasoning') {
+            console.log(`[RESPONSES]   input[${ii}] type=${item.type} reasoning_len=${(item.reasoning_text||'').length}`);
+          } else {
+            console.log(`[RESPONSES]   input[${ii}] type=${item.type}`);
+          }
         }
+      } else if (typeof req.input === 'string') {
+        console.log(`[RESPONSES]   input string len=${req.input.length}`);
+      } else {
+        console.log(`[RESPONSES]   input other type=${typeof req.input}`);
       }
-    } else if (typeof req.input === 'string') {
-      console.log(`[RESPONSES]   input string len=${req.input.length}`);
-    } else {
-      console.log(`[RESPONSES]   input other type=${typeof req.input}`);
     }
 
     if (route.modelOverride) req.model = route.modelOverride;
@@ -454,13 +457,15 @@ async function handleRequest(request: Request): Promise<Response> {
     }
 
     const chatReq = formatResponsesToChatCompletions(req);
-    console.log(`[RESPONSES] ChatReq model=${chatReq.model}, messages count=${chatReq.messages?.length}`);
-    for (let mi = 0; mi < (chatReq.messages?.length || 0); mi++) {
-      const m = chatReq.messages[mi];
-      const preview = m.role === 'user' ? `"${(m.content || '').slice(0, 120)}"`
-        : m.role === 'assistant' ? `len=${(m.content || '').length} reasoning=${!!m.reasoning_content} tool_calls=${(m.tool_calls||[]).length}`
-        : `"${(m.content || '').slice(0, 80)}"`;
-      console.log(`[RESPONSES]   msg[${mi}] role=${m.role} content=${preview}`);
+    if (IS_DEBUG) {
+      console.log(`[RESPONSES] ChatReq model=${chatReq.model}, messages count=${chatReq.messages?.length}`);
+      for (let mi = 0; mi < (chatReq.messages?.length || 0); mi++) {
+        const m = chatReq.messages[mi];
+        const preview = m.role === 'user' ? `"${(m.content || '').slice(0, 120)}"`
+          : m.role === 'assistant' ? `len=${(m.content || '').length} reasoning=${!!m.reasoning_content} tool_calls=${(m.tool_calls||[]).length}`
+          : `"${(m.content || '').slice(0, 80)}"`;
+        console.log(`[RESPONSES]   msg[${mi}] role=${m.role} content=${preview}`);
+      }
     }
     const upstreamSignal = chatReq.stream ? createStreamSignal(request) : AbortSignal.timeout(60_000);
     const upstreamRes = await safeUpstreamFetch(`${upstream}/v1/chat/completions`, {
@@ -475,7 +480,7 @@ async function handleRequest(request: Request): Promise<Response> {
     if (!upstreamRes.ok) return upstreamErrorResponse(upstreamRes, await upstreamRes.text());
 
     if (chatReq.stream) {
-      console.log(`[RESPONSES] Streaming response`);
+      if (IS_DEBUG) console.log(`[RESPONSES] Streaming response`);
       const streamHeaders = new Headers({
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
@@ -488,19 +493,23 @@ async function handleRequest(request: Request): Promise<Response> {
     }
 
     const data: any = await upstreamRes.json();
-    console.log(`[RESPONSES] Upstream response keys=${Object.keys(data).join(',')}`);
-    console.log(`[RESPONSES] Upstream reasoning_content=${!!data.choices?.[0]?.message?.reasoning_content}`);
-    const upstreamContent = data.choices?.[0]?.message?.content || '';
-    console.log(`[RESPONSES] Upstream content preview=${upstreamContent.slice(0, 200)}`);
-    if (upstreamContent.includes('<think>')) {
-      console.log(`[RESPONSES] ⚠️  FOUND <think> tags in upstream content!`);
+    if (IS_DEBUG) {
+      console.log(`[RESPONSES] Upstream response keys=${Object.keys(data).join(',')}`);
+      console.log(`[RESPONSES] Upstream reasoning_content=${!!data.choices?.[0]?.message?.reasoning_content}`);
+      const upstreamContent = data.choices?.[0]?.message?.content || '';
+      console.log(`[RESPONSES] Upstream content preview=${upstreamContent.slice(0, 200)}`);
+      if (upstreamContent.includes('<think>')) {
+        console.log(`[RESPONSES] ⚠️  FOUND <think> tags in upstream content!`);
+      }
     }
 
     const respData = formatChatCompletionsToResponses(data, originalModel);
-    console.log(`[RESPONSES] Translated output item types=${respData.output?.map((o: any) => o.type).join(',')}`);
-    const textOutput = respData.output?.find((o: any) => o.type === 'message')?.content?.[0]?.text || '';
-    if (textOutput.includes('<think>')) {
-      console.log(`[RESPONSES] ⚠️  FOUND <think> tags in translated output text!`);
+    if (IS_DEBUG) {
+      console.log(`[RESPONSES] Translated output item types=${respData.output?.map((o: any) => o.type).join(',')}`);
+      const textOutput = respData.output?.find((o: any) => o.type === 'message')?.content?.[0]?.text || '';
+      if (textOutput.includes('<think>')) {
+        console.log(`[RESPONSES] ⚠️  FOUND <think> tags in translated output text!`);
+      }
     }
 
     const respHeaders = new Headers({ "Content-Type": "application/json" });
@@ -557,7 +566,7 @@ async function handleRequest(request: Request): Promise<Response> {
   if (route.path === '/' && request.method === 'GET') {
     return new Response(JSON.stringify({
       name: "opencode-cowork-proxy",
-      version: "2.0.0",
+      version: VERSION,
       upstream,
       routes: {
         "/go": GO_UPSTREAM,
