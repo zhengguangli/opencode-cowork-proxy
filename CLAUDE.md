@@ -20,7 +20,7 @@ bun install --frozen-lockfile  # CI-style clean install (verifies lockfile)
 bun test               # Run all tests (vitest)
 bun run test:watch     # Watch mode
 bun run dev            # wrangler dev (CF Workers runtime)
-bun run server.ts      # Bun dev server (port 8787, no CF runtime)
+DEBUG=true bun run server.ts  # Bun dev server with verbose Responses API logging
 bun run build:binary     # Build standalone binary (macOS)
 bun run deploy         # wrangler deploy to Cloudflare (config: wrangler.toml)
 bunx vercel deploy --prod  # Deploy to Vercel (alternative to Cloudflare)
@@ -67,6 +67,16 @@ Three non-translator modules support the core logic:
 - **`index.ts`** — The `routeConfig()` function parses URL path prefixes (`/go`, `/zen`, none) to determine upstream URL. It also handles model override (model ID in URL path) and vision model forcing (`qwen3.6-plus` when images detected).
 - **`auth.ts`** — Pure functions: `extractApiKey()` (checks `X-Api-Key` or `Authorization: Bearer`), `validateApiKey()` (min 32 chars), `authErrorResponse()`.
 - **`cache.ts`** — Token extraction functions handle the messy reality that different OpenAI-compatible providers report usage in different field shapes (`prompt_tokens`, `input_tokens`, `promptTokens`...). Uses a `tokenCount()` helper that tries multiple field paths and picks the first numeric value. The `extractUncachedInputTokens()` function subtracts cached tokens from input tokens to avoid double-counting when mapping OpenAI usage to Anthropic format.
+
+### Entry Points
+
+The project has three entry points for different deployment targets:
+
+| Entry Point | Target | Runtime | Run Command |
+|------------|--------|---------|-------------|
+| `src/index.ts` | CF Workers, Vercel | Hono (Worker runtime) | — |
+| `server.ts` | Bun standalone, dev | Bun built-in HTTP | `bun run server.ts` |
+| `api/[[...route]].ts` | Vercel only | Hono (serverless) | — |
 
 ### Error Relay
 
