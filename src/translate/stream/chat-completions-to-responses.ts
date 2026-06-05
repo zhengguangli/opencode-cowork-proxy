@@ -42,6 +42,8 @@ export function streamChatCompletionsToResponses(
       let activeItemIndex = -1;
       let textAccum = "";
       let reasoningAccum = "";
+      let thinkTagBuffer = "";
+      let inThinkTag = false;
       let lastUsage: any = null;
       let finishReason: string | null = null;
       let toolCallAccum = new Map<
@@ -204,6 +206,57 @@ export function streamChatCompletionsToResponses(
         activeItemType = null;
       }
 
+      function stripThinkTags(raw: string): string | null {
+        // null = content was entirely consumed by a think block (nothing to emit)
+        if (!raw) return raw;
+
+        let result = "";
+        let remaining = raw;
+
+        while (remaining.length > 0) {
+          if (inThinkTag) {
+            // We're inside a think block — look for closing tag
+            const closeIdx = remaining.indexOf('</think>');
+            if (closeIdx !== -1) {
+              // Found closing tag — buffer everything up to it and stop thinking
+              thinkTagBuffer += remaining.slice(0, closeIdx);
+              inThinkTag = false;
+              remaining = remaining.slice(closeIdx + 8); // 8 = len('</think>')
+              thinkTagBuffer = "";
+            } else {
+              // Still inside the think block — buffer and discard
+              thinkTagBuffer += remaining;
+              remaining = "";
+            }
+          } else {
+            // Not in a think block — look for opening tag
+            const openIdx = remaining.indexOf('<think>');
+            if (openIdx !== -1) {
+              // Found opening tag — emit text before it, buffer the rest
+              result += remaining.slice(0, openIdx);
+              thinkTagBuffer = remaining.slice(openIdx + 7); // 7 = len('<think>')
+              inThinkTag = true;
+              // Check if this chunk also contains the closing tag
+              const closeIdx = thinkTagBuffer.indexOf('</think>');
+              if (closeIdx !== -1) {
+                // <think> and </think> in same chunk
+                remaining = thinkTagBuffer.slice(closeIdx + 8);
+                inThinkTag = false;
+                thinkTagBuffer = "";
+                continue; // re-process remaining after </think>
+              }
+              remaining = "";
+            } else {
+              // No think tags in remaining text — emit as-is
+              result += remaining;
+              remaining = "";
+            }
+          }
+        }
+
+        return result || null; // null if nothing left after stripping
+      }
+
       function processStreamChunk(parsed: any) {
         // Capture usage from final chunk
         if (parsed.usage) {
@@ -217,6 +270,16 @@ export function streamChatCompletionsToResponses(
 
         const delta = parsed.choices?.[0]?.delta;
         if (!delta) return;
+
+        if (delta.reasoning_content) {
+          console.log(`[STREAM-DEBUG] reasoning_content chunk: "${delta.reasoning_content?.slice(0,100)}"`);
+        }
+        if (delta.content && delta.content.includes('<think>')) {
+          console.log(`[STREAM-DEBUG] ⚠️ FOUND <think> in content: "${delta.content.slice(0,100)}"`);
+        }
+        if (delta.content && !delta.reasoning_content) {
+          console.log(`[STREAM-DEBUG] text content chunk: "${delta.content.slice(0,100)}"`);
+        }
 
         // Handle reasoning_content (DeepSeek) — comes before content
         if (delta.reasoning_content) {
@@ -276,28 +339,33 @@ export function streamChatCompletionsToResponses(
         }
 
         // Handle text content — skip empty priming chunks to avoid creating spurious items
-        const hasTextContent = delta.content !== undefined && delta.content !== null;
+        // Strip inline <think>...</think> tags from models that embed reasoning in text (e.g., minimax)
+        const rawContent = delta.content;
+        const cleanedContent = rawContent !== undefined && rawContent !== null
+          ? stripThinkTags(String(rawContent))
+          : rawContent;
+        const hasTextContent = cleanedContent !== undefined && cleanedContent !== null;
         if (hasTextContent) {
           // Skip empty priming content when reasoning is active — prevents premature reasoning flush
-          if (activeItemType === "reasoning" && delta.content === "") {
+          if (activeItemType === "reasoning" && cleanedContent === "") {
             // Don't flush reasoning for empty priming content
           } else if (activeItemType && activeItemType !== "text") {
             flushActiveItem(true);
           }
 
-          if (delta.content === "" && !activeItemType) {
+          if (cleanedContent === "" && !activeItemType) {
             // Empty priming chunk — don't create text item yet
           } else if (!activeItemType) {
             startTextItem();
-            textAccum = delta.content || "";
+            textAccum = cleanedContent || "";
           } else {
-            textAccum += delta.content || "";
+            textAccum += cleanedContent || "";
           }
 
-          if (delta.content && activeItemType === "text") {
+          if (cleanedContent && activeItemType === "text") {
             enqueueSSE(controller, "response.text.delta", {
               type: "response.text.delta",
-              delta: delta.content,
+              delta: cleanedContent,
               index: activeItemIndex,
             });
           }

@@ -10,6 +10,11 @@
  */
 import { mapUsage } from '../../cache';
 
+/** Strip <think>...</think> blocks from text content (Minimax-style reasoning in content) */
+function stripThinkTags(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+}
+
 export function formatChatCompletionsToResponses(completion: any, model: string): any {
   const choice = completion.choices?.[0] || {};
   const message = choice.message || {};
@@ -28,14 +33,15 @@ export function formatChatCompletionsToResponses(completion: any, model: string)
   }
 
   // 2. Content → type:"message" output item with output_text content block
-  if (message.content || message.tool_calls) {
+  const contentText = message.content ? stripThinkTags(message.content) : message.content;
+  if (contentText || message.tool_calls) {
     const contentBlocks: any[] = [];
 
     // Text content
-    if (message.content) {
+    if (contentText) {
       contentBlocks.push({
         type: "output_text",
-        text: message.content,
+        text: contentText,
       });
     }
 

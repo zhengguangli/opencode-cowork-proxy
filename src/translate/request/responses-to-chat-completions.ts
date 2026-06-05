@@ -203,7 +203,7 @@ function extractTextContent(content: any): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     return content
-      .filter((p: any) => p.type === "text")
+      .filter((p: any) => p.type === "text" || p.type === "input_text")
       .map((p: any) => p.text || "")
       .join("\n");
   }
@@ -213,7 +213,7 @@ function extractTextContent(content: any): string {
 function extractTextParts(content: any): string | null {
   if (Array.isArray(content)) {
     const texts = content
-      .filter((p: any) => p.type === "output_text")
+      .filter((p: any) => p.type === "output_text" || p.type === "input_text" || p.type === "text")
       .map((p: any) => p.text || "");
     return texts.length > 0 ? texts.join("\n") : null;
   }
@@ -235,7 +235,7 @@ function translateUserContent(content: any): any {
   const textParts: string[] = [];
 
   for (const part of content) {
-    if (part.type === "text") {
+    if (part.type === "text" || part.type === "input_text") {
       textParts.push(part.text || "");
     } else if (part.type === "input_image") {
       hasImages = true;
