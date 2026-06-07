@@ -309,7 +309,10 @@ describe('worker routing', () => {
     ]);
   });
 
-  it('overrides model to qwen3.6-plus when image attachments are present on the zen path', async () => {
+  // Regression: BUG — /zen upstream only has mimo-v2.5-free (not qwen3.6-plus).
+  // Forcing qwen3.6-plus on /zen image requests caused 404 from upstream.
+  // Vision model must be upstream-aware.
+  it('overrides model to mimo-v2.5-free when image attachments are present on the zen path', async () => {
     let capturedBody: any = null;
     vi.spyOn(globalThis, 'fetch').mockImplementation(
       async (_url, init: any) => {
@@ -338,7 +341,7 @@ describe('worker routing', () => {
     });
 
     await worker.fetch(request);
-    expect(capturedBody.model).toBe('qwen3.6-plus');
+    expect(capturedBody.model).toBe('mimo-v2.5-free');
   });
 
   it('routes /v1/responses to upstream chat/completions', async () => {
@@ -494,6 +497,41 @@ describe('worker routing', () => {
 
     await worker.fetch(request);
     expect(capturedBody.model).toBe('qwen3.6-plus');
+  });
+
+  // Regression: BUG — same as zen/messages test, but for the Responses API path.
+  // /zen/v1/responses with an image must route to mimo-v2.5-free, not qwen3.6-plus.
+  it('overrides model to mimo-v2.5-free when images present in /zen/v1/responses', async () => {
+    let capturedBody: any = null;
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async (_url, init: any) => {
+        capturedBody = JSON.parse(init.body);
+        return new Response(JSON.stringify({
+          choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      },
+    );
+
+    const request = new Request('https://proxy.example/zen/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key },
+      body: JSON.stringify({
+        model: 'mimo-v2.5-free',
+        input: [{
+          type: 'message', role: 'user',
+          content: [
+            { type: 'input_image', image_url: { url: 'data:image/png;base64,abc' } },
+            { type: 'text', text: 'What is this?' },
+          ],
+        }],
+      }),
+    });
+
+    await worker.fetch(request);
+    expect(capturedBody.model).toBe('mimo-v2.5-free');
   });
 
   it('returns 401 for missing API key', async () => {
@@ -742,5 +780,38 @@ describe('worker routing', () => {
 
     await worker.fetch(request);
     expect(capturedBody.model).toBe('qwen3.6-plus');
+  });
+
+  // Regression: BUG — pass-through path on /zen must also pick the free vision model.
+  // /zen/v1/chat/completions with an OpenAI-format image_url should use mimo-v2.5-free.
+  it('overrides model to mimo-v2.5-free for OpenAI pass-through with images on /zen', async () => {
+    let capturedBody: any = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async (_url, init: any) => {
+        capturedBody = JSON.parse(init.body);
+        return new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      },
+    );
+
+    const request = new Request('https://proxy.example/zen/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key },
+      body: JSON.stringify({
+        model: 'mimo-v2.5-free',
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: 'What is in this image?' },
+            { type: 'image_url', image_url: { url: 'data:image/png;base64,abc123' } },
+          ],
+        }],
+      }),
+    });
+
+    await worker.fetch(request);
+    expect(capturedBody.model).toBe('mimo-v2.5-free');
   });
 });

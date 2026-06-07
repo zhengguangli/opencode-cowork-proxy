@@ -17,7 +17,22 @@ import { VERSION } from './version';
 const GO_UPSTREAM = "https://opencode.ai/zen/go";
 const ZEN_UPSTREAM = "https://opencode.ai/zen";
 const DEFAULT_UPSTREAM = GO_UPSTREAM;
-const VISION_MODEL = "qwen3.6-plus";
+const GO_VISION_MODEL = "qwen3.6-plus";
+// /zen upstream's qwen3.6-plus-free promotion ended, so we fall back to mimo-v2.5-free
+// (a multimodal model — supports image inputs) which is genuinely free on /zen.
+const ZEN_VISION_MODEL = "mimo-v2.5-free";
+
+/**
+ * Selects the vision model based on the upstream host. /go has qwen3.6-plus;
+ * /zen has mimo-v2.5-free (a free multimodal model — qwen3.6-plus-free's promotion
+ * ended on 2026-06-07). This is required because /zen's upstream rejects unknown
+ * model IDs, so sending qwen3.6-plus from a /zen request fails on image-bearing requests.
+ */
+function getVisionModel(upstream: string): string {
+  if (upstream.includes("/zen/go")) return GO_VISION_MODEL;
+  if (upstream.includes("/zen")) return ZEN_VISION_MODEL;
+  return GO_VISION_MODEL;
+}
 
 // Regex to match API version prefixes (v1, v2, v3, etc.) — more future-proof than a fixed Set
 const API_VERSION_PATTERN = /^v\d+$/;
@@ -268,7 +283,7 @@ async function handleRequest(request: Request): Promise<Response> {
       const originalModel = req.model;
       if (route.modelOverride) req.model = route.modelOverride;
       if (hasImages(req)) {
-        req.model = VISION_MODEL;
+        req.model = getVisionModel(upstream);
       }
       const openaiReq = formatAnthropicToOpenAI(req);
       const upstreamSignal = openaiReq.stream ? createStreamSignal(request) : AbortSignal.timeout(60_000);
@@ -314,7 +329,7 @@ async function handleRequest(request: Request): Promise<Response> {
       const needsAnthMod = !!(route.modelOverride || anthHasImages);
       if (needsAnthMod) {
         if (route.modelOverride) parsedBody.model = route.modelOverride;
-        if (anthHasImages) parsedBody.model = VISION_MODEL;
+        if (anthHasImages) parsedBody.model = getVisionModel(upstream);
       }
       const anthBody = needsAnthMod ? JSON.stringify(parsedBody) : anthRawBody;
       const anthIsStreaming = !!(parsedBody?.stream);
@@ -346,7 +361,7 @@ async function handleRequest(request: Request): Promise<Response> {
 
       const originalModel = req.model;
       if (route.modelOverride) req.model = route.modelOverride;
-      if (hasOpenAIImages(req)) req.model = VISION_MODEL;
+      if (hasOpenAIImages(req)) req.model = getVisionModel(upstream);
       const anthReq = formatOpenAIToAnthropic(req);
       const upstreamSignal = anthReq.stream ? createStreamSignal(request) : AbortSignal.timeout(60_000);
       const res = await safeUpstreamFetch(`${upstream}/v1/messages`, {
@@ -390,7 +405,7 @@ async function handleRequest(request: Request): Promise<Response> {
     const needsOaiMod = !!(route.modelOverride || oaiHasImages);
     if (needsOaiMod) {
       if (route.modelOverride) parsedOaiBody.model = route.modelOverride;
-      if (oaiHasImages) parsedOaiBody.model = VISION_MODEL;
+      if (oaiHasImages) parsedOaiBody.model = getVisionModel(upstream);
     }
     const oaiBody = needsOaiMod ? JSON.stringify(parsedOaiBody) : oaiRawBody;
     const oaiIsStreaming = !!(parsedOaiBody?.stream);
@@ -448,7 +463,7 @@ async function handleRequest(request: Request): Promise<Response> {
     // Vision model override must be checked BEFORE DeepSeek thinking injection,
     // to avoid injecting "thinking" on a model that is no longer a DeepSeek model
     if (hasResponsesImages(req)) {
-      req.model = VISION_MODEL;
+      req.model = getVisionModel(upstream);
     }
 
     // DeepSeek compatibility: auto-inject thinking for reasoning models
