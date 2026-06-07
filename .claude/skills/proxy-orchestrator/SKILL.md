@@ -1,249 +1,221 @@
 ---
 name: proxy-orchestrator
-description: "Orchestrator for all OpenCode Cowork Proxy work — translation (Anthropic↔OpenAI AND OpenAI Responses API↔Chat Completions), streaming (all 3 SSE formats), routing, testing, deployment, code review, investigation-only diagnosis, performance audit, and configuration. Handles adding models, fixing translation bugs, debugging streaming hangs, updating routing, running tests, deploying to Cloudflare, building standalone binary, managing LaunchAgent, running code review, and impact analysis. Follow-up: rerun, re-execute, update, modify, fix results, improve, deploy again, review again based on previous output."
+description: "Orchestrator for all OpenCode Cowork Proxy work — translation (Anthropic↔OpenAI AND OpenAI Responses API↔Chat Completions), streaming (all 3 SSE formats), routing, model management, testing, deployment, code review, investigation-only diagnosis, performance audit, and configuration. Handles adding models, fixing translation bugs, debugging streaming hangs, updating routing, running tests, deploying to Cloudflare / Vercel / standalone binary, running code review, and impact analysis. Use for any proxy work request, including follow-ups: rerun, re-execute, update, modify, fix results, improve, deploy again, review again, rollback, or 'still get {wrong behavior}' on previous output."
 ---
 
 # OpenCode Cowork Proxy Orchestrator
 
-Orchestration skill that coordinates the proxy agent team to handle all proxy-related work: translation fixes (Anthropic↔OpenAI AND OpenAI Responses API↔Chat Completions), streaming debugging (all 3 SSE formats), routing changes, deployment, configuration, code review, performance audit, investigation-only diagnosis, and model management.
+Coordinates the proxy agent team across all proxy-related work. Five workflows cover the common cases; one bespoke mode (investigate-only) is preserved for analysis without commitment to a fix.
 
 ## Model Parameter Reminder
 
-Per the harness skill's Phase 3 requirement, **all Agent tool calls must include `model: "opus"`**. Harness quality is directly tied to agent reasoning capability, and opus guarantees the highest quality. This applies to all phases of every workflow below.
+**All `Agent` tool calls MUST include `model: "opus"`.** Harness quality is directly tied to agent reasoning capability, and opus guarantees the highest quality. This applies to every phase of every workflow.
 
-## Execution Mode: Hybrid
+## Execution Mode: Hybrid (per phase)
 
-| Phase | Mode | Reason |
-|-------|------|--------|
-| Phase 1 (Diagnosis) | Sub-agents | Parallel scoping — each specialist independently diagnoses the issue |
-| Phase 2 (Implementation) | Sub-agents | Parallel implementation coordinated via file-based transfer (no team; sub-agents write to `_workspace/` and read each other's notes) |
-| Phase 3 (Code Review) | Sub-agents | Independent review before QA — code-reviewer evaluates correctness, security, type safety |
-| Phase 4 (Verification) | Sub-agents | QA agent independently verifies with objectivity |
-| Phase 5 (Cleanup) | Direct | Synthesize results, no orchestration needed |
+| Phase | Mode | Why |
+|-------|------|-----|
+| Phase 0 (Context Check) | Direct | Simple state inspection, no orchestration needed |
+| Phase 1 (Diagnosis) | Sub-agents in parallel | Independent scoping — each specialist reads its own files |
+| Phase 2 (Implementation) | Sub-agents in parallel | Independent implementation, file-based coordination via `_workspace/` |
+| Phase 3 (Code Review) | Single sub-agent | One reviewer evaluates all changes for static issues |
+| Phase 4 (Verification) | Single sub-agent | QA runs `bun test` and cross-boundary verification |
+| Phase 5 (Cleanup) | Direct | Synthesize and report, no orchestration needed |
 
-## Agent Composition
-
-| Member | Agent Type | Role | Skills | Output |
-|--------|-----------|------|--------|--------|
-| translation-specialist | built-in (`translation-specialist`) | Request/response field mapping | field-mapping | Updated translator source files |
-| streaming-specialist | built-in (`streaming-specialist`) | SSE streaming event sequencing | stream-debug | Updated stream translator files |
-| routing-specialist | built-in (`routing-specialist`) | Path routing, auth, caching, config | — | Updated routing/auth/cache logic |
-| qa-inspector | built-in (`qa-inspector`) | Integration cross-boundary verification | — | Verification report |
-| code-reviewer | built-in (`code-reviewer`) | Code correctness, security, type safety review | field-mapping, stream-debug (conditional) | Review report with severity classifications |
-| deployment-manager | built-in (`deployment-manager`) | Build, deploy, CI/CD, config management | deployment | Deployed Worker/binary, updated configs |
-
-## Workflow Selection
-
-Determine the execution path based on the user's request:
-
-| Request Type | Execute Path |
-|-------------|-------------|
-| Bug fix / new feature | Full flow: Diagnosis → Implementation → Review → QA → Cleanup |
-| Code review only | Skip to Phase 3 (Code Review) |
-| Deployment / config change | deployment-manager solo (with deployment skill) |
-| Model update | routing-specialist + deployment-manager (see "Add New Model" workflow) |
-| Add new translator | translation-specialist + streaming-specialist + code-reviewer + qa-inspector |
-| **Investigate / diagnose only** (no fix) | Phase 1 only (parallel diagnosis); user reviews findings, then chooses fix or no-op |
-| **Performance audit** | code-reviewer (perf checklist) + qa-inspector (boundary perf) + cache.ts inspection |
+We deliberately do NOT use the full agent-team pattern (`TeamCreate` + `SendMessage`) — the team coordination overhead exceeds the benefit for this size of work. Sub-agents with file-based coordination are simpler and faster.
 
 ---
 
-## Workflow: Fix / Feature (Complete Flow)
+## Agent Team
 
-### Phase 0: Context Check
+| Agent | Type | Role | Loaded Skills |
+|-------|------|------|---------------|
+| `translation-specialist` | `translation-specialist` | Field mapping for all 3 format pairs | `field-mapping` |
+| `streaming-specialist` | `streaming-specialist` | SSE event sequencing, streaming state machines | `stream-debug` |
+| `routing-specialist` | `routing-specialist` | Path routing, auth, caching, vision model forcing | `model-registry` |
+| `qa-inspector` | `qa-inspector` | Cross-boundary integration verification (general-purpose) | `field-mapping`, `stream-debug` |
+| `code-reviewer` | `code-reviewer` | Correctness, security, type safety, test coverage | `field-mapping`, `stream-debug` |
+| `deployment-manager` | `deployment-manager` | CF Workers / Vercel / binary deploy, CI/CD, LaunchAgent | `deployment`, `model-registry` |
 
-Check existing workspace state to determine execution mode:
+**Critical agents that must use specific types:**
+- `qa-inspector` MUST use `general-purpose` (read-only `Explore` cannot run `bun test` or construct mock streams)
+- `code-reviewer` may use `general-purpose` (needs Grep, Read, AND the ability to read the diff)
+- Other specialists can use their matching built-in type or `general-purpose`
 
-1. Check if `_workspace/` directory exists
+---
+
+## Phase 0: Context Check (Always Run First)
+
+1. Check if `_workspace/` exists in the working directory
 2. Determine execution mode:
-   - **`_workspace/` does not exist** → Initial execution. Proceed to Phase 1
-   - **`_workspace/` exists + user requests partial modification** → Partial re-execution. Only re-call the relevant specialist(s), overwrite only the modified output
-   - **`_workspace/` exists + new input provided** → New execution. Move existing `_workspace/` to `_workspace_{YYYYMMDD_HHMMSS}/`, then proceed to Phase 1
-   - **User asks for follow-up** → Check if the issue is in the same area (re-call same specialist) or a new area (run full flow)
+   - **`_workspace/` does not exist** → Initial execution. Proceed to Phase 1.
+   - **`_workspace/` exists + user requests partial modification** (e.g., "fix only the streaming issue") → Partial re-execution. Skip Phase 1, jump to relevant sub-section of Phase 2.
+   - **`_workspace/` exists + user provides new input** → New execution. Move existing `_workspace/` to `_workspace_{YYYYMMDD_HHMMSS}/`, then proceed to Phase 1.
+   - **User asks for follow-up** ("still broken", "rerun the fix") → Read the latest `_workspace/04_qa_report.md` to understand current state, then decide:
+     - Same root cause? Re-call the relevant specialist with the specific failure mode.
+     - New failure mode? Run Phase 1 (parallel diagnosis) again.
 
-### Phase 1: Diagnosis
+---
 
-**Execution Mode:** Sub-agents (parallel scoping)
+## Workflow: Fix / Feature (Default)
 
-Run affected specialists in parallel to scope the issue:
+### Phase 1: Parallel Diagnosis
 
-| Agent | Input | Output |
-|-------|-------|--------|
-| translation-specialist | Issue description + relevant payloads | `_workspace/01_translation_diagnosis.md` |
-| streaming-specialist | Issue description + stream traces | `_workspace/01_streaming_diagnosis.md` |
-| routing-specialist | Issue description + routing config | `_workspace/01_routing_diagnosis.md` |
+**Spawn the relevant specialists in parallel** (skip unaffected ones):
 
-Each agent independently:
-1. Reads the affected source files (use `src/translate/`, `src/auth.ts`, `src/cache.ts`, `src/index.ts`)
-2. Identifies the root cause
-3. Proposes a fix approach
-4. Estimates test impact
+| Issue type | Spawn |
+|------------|-------|
+| Field mapping, response shape, content block handling | `translation-specialist` |
+| Streaming hang, truncation, malformed events, `<think>` leakage | `streaming-specialist` |
+| Model override, vision forcing, routing path, auth, cache | `routing-specialist` |
+| Configuration, deploy failure, env var, port, model availability | `deployment-manager` |
+| Unknown / cross-cutting | Spawn all 4 |
 
-Select only the specialists relevant to the issue. Do not spawn unaffected specialists.
+Each agent writes a diagnosis to `_workspace/01_{specialist}_diagnosis.md` containing:
+- Root cause
+- Affected files (with line numbers)
+- Proposed fix approach
+- Test impact (which existing tests will need updates, what new tests to add)
 
-### Phase 2: Implementation
+### Phase 2: Parallel Implementation
 
-**Execution Mode:** Sub-agents (parallel implementation, coordinated via file-based transfer)
+Spawn the affected specialists as **parallel sub-agents** (use `Agent` tool with `run_in_background: true` if available, or sequential parallel calls):
 
-Spawn affected specialists as parallel agents to implement fixes. Each agent:
-1. Reads the Phase 1 diagnosis for their area
-2. Implements the fix in the relevant source files (translator, stream, routing, or auth/cache)
-3. Adds or updates test cases
-4. Saves implementation summary to `_workspace/02_{specialist}_changes.md`
+1. Each reads its Phase 1 diagnosis
+2. Implements the fix in `src/translate/`, `src/index.ts`, `src/auth.ts`, `src/cache.ts`, or other relevant files
+3. Adds or updates test cases in `test/`
+4. Writes an implementation summary to `_workspace/02_{specialist}_changes.md`
 
 **Coordination rules:**
-- translation-specialist: If a change affects streaming event shapes, write the new event schema to `_workspace/02_event_schema.md` for streaming-specialist
-- streaming-specialist: If a change requires new field mappings (e.g., new content block type), request them from translation-specialist by writing to `_workspace/02_field_mapping_request.md`
-- routing-specialist: If routing config changes affect which translator path is used, write the new routing spec to `_workspace/02_routing_spec.md`
-- All agents: For cross-boundary changes (a translator change that also touches streaming), implement your part and leave notes for the downstream agent
-
-**Important:** Do NOT form a team with TeamCreate. Use Agent tool calls with `run_in_background: true` for independent work, or parallel Workflow agent() calls. Use file-based transfer for coordination.
+- `translation-specialist` → if change affects streaming event shapes, write the new schema to `_workspace/02_event_schema.md` for `streaming-specialist`
+- `streaming-specialist` → if a change requires new field mappings, request them from `translation-specialist` by writing to `_workspace/02_field_mapping_request.md`
+- `routing-specialist` → if a routing change selects a different translator path, write the new spec to `_workspace/02_routing_spec.md`
+- **Do not** modify each other's files — coordinate via the workspace files
 
 ### Phase 3: Code Review
 
-**Execution Mode:** Sub-agents (independent review)
+Spawn `code-reviewer` as a single sub-agent. It:
+- Reads all `_workspace/02_*.md` files
+- Reviews the diff (`git diff main..HEAD` or working tree)
+- Generates `_workspace/03_review_report.md` with severity-classified findings
 
-1. Spawn code-reviewer as a sub-agent
-2. code-reviewer:
-   - Reads all changed source files (review the diff between current state and `_workspace/` implementation notes)
-   - Reviews per its checklist: correctness, security, type safety, test coverage, architecture adherence
-   - Generates `_workspace/03_review_report.md` with severity-classified findings
-3. If CRITICAL or HIGH findings exist → go back to Phase 2 for fixes
-4. If only MEDIUM or LOW findings → proceed to Phase 4 (QA may catch the same issues)
+**Decision:**
+- CRITICAL or HIGH → go back to Phase 2 for fixes
+- Only MEDIUM or LOW → proceed to Phase 4 (QA may catch the same issues)
 
-### Phase 4: Verification
+### Phase 4: Verification (QA)
 
-**Execution Mode:** Sub-agents (objective verification)
+Spawn `qa-inspector` as a single sub-agent (use `general-purpose` type). It:
+- Reads all updated source files + the review report
+- Runs the full test suite: `bun test`
+- Performs cross-boundary verification per the qa-inspector checklist
+- Generates `_workspace/04_qa_report.md` with:
+  - Pass/fail/unverified counts per checklist section
+  - `bun test` output (pass: N / fail: N)
+  - File:line references for any failures
+  - Recommended fixes for any failures
 
-1. Spawn qa-inspector as a sub-agent
-2. QA agent:
-   - Reads all updated source files
-   - Runs cross-boundary verification per `qa-inspector`'s checklist
-   - Runs `bun test` on all test files
-   - Generates `_workspace/04_qa_report.md`
-3. Review QA report:
-   - If test failures found → identify which specialist(s) need to fix → loop back to Phase 2
-   - If cross-boundary issues found → notify the affected specialists → loop back to Phase 2
-   - All clean → proceed to Phase 5
+**Decision:**
+- Test failures → identify which specialist(s) need to fix → loop back to Phase 2
+- Cross-boundary issues → notify affected specialists → loop back to Phase 2
+- All clean → proceed to Phase 5
 
-### Phase 5: Cleanup
+### Phase 5: Cleanup & Report
 
-1. Preserve `_workspace/` for audit trail
-2. Summarize changes to the user:
-   - What was changed (files, lines)
+1. Preserve `_workspace/` for audit trail (do not delete)
+2. Report to user:
+   - What changed (files, lines)
    - Review result (critical/high/medium/low counts)
    - Test results (pass/fail counts)
    - QA report summary
-   - Next steps or known limitations
+   - Any next steps or known limitations
 
 ---
 
-## Workflow: Code Review Only
+## Workflow: Investigate Only (No Fix)
 
-**Execution Mode:** Single agent
+Use when the user wants to understand an issue without committing to a fix. Examples:
+- "What's wrong with the streaming on this model?"
+- "Investigate the token counting"
+- "Why is `/v1/responses` returning 500?"
+- "Is this a real bug or am I misreading the code?"
 
-1. Identify the scope: What changed? (current git diff, specific files, or the whole codebase)
-2. If scope is the current working tree diff:
-   - Run `git diff` to get the changes
-   - Pass the diff to code-reviewer as input
-3. code-reviewer generates `_workspace/03_review_report.md`
-4. Present findings with severity classifications
-5. If the user wants fixes, transition to Fix/Feature workflow Phase 2
+**Steps:**
+1. Phase 0 (Context Check)
+2. Phase 1 only (parallel diagnosis) — specialists write findings
+3. **Stop.** Do not proceed to Phase 2.
+4. Present findings with severity classifications and recommended fixes
+5. Wait for user decision: "fix it", "skip", "fix only #3", etc.
 
----
-
-## Workflow: Deployment Only
-
-**Execution Mode:** Single agent
-
-1. deployment-manager reads the deployment skill for step-by-step instructions
-2. Determine deployment target:
-   - **Cloudflare Workers** → Verify tests pass, run `bun run deploy`, verify response
-   - **Vercel** → Run `bunx vercel deploy --prod`, verify response at `opencode-cowork-proxy.vercel.app`
-   - **Standalone binary** → `bun build --compile`, copy to `/usr/local/bin/`, reload LaunchAgent
-   - **All three** → Do Cloudflare → Vercel → binary
-3. For config changes (upstream URLs, model lists, dependencies):
-   - Make the change in the relevant config file
-   - Update README.md if documentation changes are needed
-   - Verify with tests or build
-4. Report deployment status, configuration impact, and any issues found
-
----
-
-## Workflow: Investigate Only (Diagnosis, No Fix)
-
-**Execution Mode:** Sub-agents (parallel scoping)
-
-Use when the user wants to understand an issue without committing to a fix. Examples: "What's wrong with the streaming on this model?", "Investigate the token counting", "Why is /v1/responses returning 500?".
-
-### Steps
-
-1. **Phase 0: Context Check** — same as Fix/Feature flow
-2. **Phase 1: Parallel Diagnosis** — spawn the relevant specialist(s):
-   - Translation issue → `translation-specialist` writes `_workspace/01_translation_diagnosis.md`
-   - Streaming issue → `streaming-specialist` writes `_workspace/01_streaming_diagnosis.md`
-   - Routing/config issue → `routing-specialist` writes `_workspace/01_routing_diagnosis.md`
-   - Performance issue → `code-reviewer` writes `_workspace/01_perf_audit.md`
-3. **Stop** — do not proceed to Phase 2 (Implementation) unless the user explicitly requests a fix
-4. **Present findings** to the user with severity classifications and recommended fixes
-5. **Wait for user decision** — user can say "fix it", "skip", "fix only #3", etc.
-
-### Why This Exists
-
-Diagnosis is often cheap (read code, no edits) and answers "should I even fix this?". Without a dedicated workflow, users get either a half-baked fix when they wanted analysis, or no analysis because the orchestrator jumped straight to implementation.
+**Why this exists:** Diagnosis is often cheap (read code, no edits) and answers "should I even fix this?". Without a dedicated workflow, users get either a half-baked fix when they wanted analysis, or no analysis because the orchestrator jumped straight to implementation.
 
 ---
 
 ## Workflow: Performance Audit
 
-**Execution Mode:** Sub-agents (parallel perf-focused)
+Use when the user asks for a performance review, a recent commit mentions perf, or `cache.ts` / streaming latency becomes a concern.
 
-Use when the user asks for a performance review, a recent commit mentions perf, or `cache.ts` / streaming latency becomes a concern. Examples: "Audit the streaming performance", "Find perf regressions in the last 5 commits", "Is there redundant work in the translator chain?".
-
-### Steps
-
-1. **Phase 0: Context Check** — same as Fix/Feature flow
-2. **Phase 1: Parallel Perf Review** — spawn in parallel:
-   - `code-reviewer` writes `_workspace/01_perf_audit.md` covering: redundant string parsing, O(n²) loops in hot paths, unnecessary object clones, missing `await` in critical sections, missing stream backpressure
-   - `qa-inspector` writes `_workspace/01_perf_qa.md` covering: cross-boundary perf issues (double translation, redundant upstream fetches, missing cache hits), latency budgets per format pair
-   - `routing-specialist` writes `_workspace/01_perf_routing.md` covering: path-prefix lookup cost, `routeConfig()` allocation, auth/cache overhead per request
-3. **Phase 2: Synthesis** — orchestrator (or main agent) reads the three reports and ranks findings by:
-   - Hot path frequency (every request vs cold path)
-   - Latency impact (microseconds vs milliseconds)
-   - Fix cost (one-line vs refactor)
-4. **Phase 3: Recommended Fixes** — present ranked findings to user; user chooses which to apply
-5. **Phase 4: Implementation** (if user approves) — feed approved findings into the Fix/Feature flow as Phase 2 input
-
-### Reference
-
-The recent commit `c526148 perf: apply 4 performance optimizations from code review` is an example of this workflow's output (4 perf fixes applied after a comprehensive code review).
+**Steps:**
+1. Phase 0 (Context Check)
+2. Phase 1 (Parallel Perf Review) — spawn in parallel:
+   - `code-reviewer` → `_workspace/01_perf_audit.md` (redundant parsing, O(n²) loops, unnecessary clones, missing `await`, stream backpressure)
+   - `qa-inspector` → `_workspace/01_perf_qa.md` (double translation, redundant upstream fetches, missing cache hits, latency budgets)
+   - `routing-specialist` → `_workspace/01_perf_routing.md` (path-prefix lookup cost, `routeConfig()` allocation, auth/cache overhead per request)
+3. Phase 2 (Synthesis) — orchestrator ranks findings by: hot path frequency × latency impact × fix cost
+4. Phase 3 (Recommended Fixes) — present ranked findings; user chooses which to apply
+5. Phase 4 (Implementation, if user approves) — feed approved findings into the Fix/Feature flow as Phase 2 input
 
 ---
 
 ## Workflow: Add New Model
 
-**Execution Mode:** Sub-agents (routing + deployment)
-
 Use when adding a new model to the proxy. Examples: "Add `qwen3.7-max` to the Go path", "Register `big-pickle` as a free model on Zen", "Make `ring-2.6-1t-free` available".
 
-### Steps
-
-1. **Phase 0: Context Check** — same as Fix/Feature flow
-2. **Phase 1: Routing Spec** — `routing-specialist`:
-   - Verifies the model exists in the upstream list (opencode.ai/models for Go, opencode.ai/docs/zen for Zen)
+**Steps:**
+1. Phase 0 (Context Check)
+2. Phase 1 (Routing Spec) — `routing-specialist`:
+   - Verifies the model exists in the upstream list (use the `model-registry` skill)
    - Determines routing target (`/go`, `/zen`, or both)
-   - Identifies any model-specific quirks (vision support, thinking config, rate limits)
-   - Writes `_workspace/01_routing_spec.md` with the proposed routing config
-3. **Phase 2: Documentation** — `routing-specialist` updates `README.md` model tables
-4. **Phase 3: Code Updates** — if the model requires special handling (e.g., vision forcing), `routing-specialist` updates `src/index.ts` (e.g., add to `hasImages` → vision model map)
-5. **Phase 4: Deploy** — `deployment-manager` runs tests, deploys, verifies
-6. **Phase 5: Cleanup** — preserve `_workspace/`, summarize to user with model availability URL
+   - Identifies model-specific quirks (vision, thinking, rate limits)
+   - Writes `_workspace/01_routing_spec.md`
+3. Phase 2 (Documentation) — `routing-specialist` updates README.md model tables
+4. Phase 3 (Code Updates) — if the model requires special handling (e.g., vision forcing), `routing-specialist` updates `src/index.ts` (`getVisionModel()` function)
+5. Phase 4 (Deploy) — `deployment-manager` runs `bun test`, deploys to targets, verifies
+6. Phase 5 (Cleanup) — preserve `_workspace/`, update `model-registry` skill with the new model entry
 
-### Important
+**Important:**
+- Update `model-registry` skill so other agents know the new model exists
+- Vision-capable models added to `/zen` may need to be added to the `getVisionModel()` map
+- Models added to BOTH upstreams (e.g., `qwen3.6-plus` is on both) don't need a `getVisionModel()` update
 
-- The model list in `README.md` is the user-facing source of truth. Update it even for "obvious" model additions.
-- New free models on Zen should also be added to the model override path (`/zen/{model}/v1/messages`) so clients can pin them.
-- Vision-capable models must be added to the image-detection → vision-model force map, otherwise clients sending images to a non-vision model will get errors.
+---
+
+## Workflow: Deployment Only
+
+Use for: deploy requests, build failures, CI/CD issues, LaunchAgent setup.
+
+**Steps:**
+1. `deployment-manager` reads the `deployment` skill for step-by-step instructions
+2. Determine target(s): Cloudflare Workers / Vercel / standalone binary / all three
+3. For each target: `bun test` → deploy → verify with `curl` on the deployed URL
+4. For config changes (upstream URLs, model lists, env vars, port):
+   - Edit the relevant config file
+   - Update README.md and `model-registry` skill
+   - Verify with `bun test` or build
+5. Report deploy status, configuration impact, and any issues
+
+---
+
+## Workflow: Code Review Only
+
+Use when the user wants a review of changes (current diff or specific files) without committing to follow-up work.
+
+**Steps:**
+1. Identify scope: current working tree diff, specific files, or full codebase
+2. `code-reviewer` reads the diff, evaluates per its checklist
+3. Review report written to `_workspace/03_review_report.md`
+4. Present severity-classified findings
+5. If the user wants fixes, transition to Fix/Feature workflow Phase 2
 
 ---
 
@@ -251,14 +223,19 @@ Use when adding a new model to the proxy. Examples: "Add `qwen3.7-max` to the Go
 
 ```
 Fix/Feature Flow:
-  [Issue] → Phase 1: parallel(diagnosis)  →  Phase 2: parallel(fix)  
-    → Phase 3: code-review  →  Phase 4: qa-verify  →  Phase 5: cleanup
+  [Issue] → Phase 0 (context) → Phase 1 (parallel diagnose) → Phase 2 (parallel implement)
+    → Phase 3 (review) → Phase 4 (QA + bun test) → Phase 5 (cleanup + report)
 
-Code Review Flow:
-  [Review request] → code-reviewer → review report
+Investigate Flow:
+  [Issue] → Phase 0 → Phase 1 → STOP (wait for user decision)
 
-Deployment Flow (one or more targets):
-  [Deploy request] → deployment-manager → CF Workers / Vercel / binary → status report
+Performance Audit Flow:
+  [Perf request] → Phase 0 → Phase 1 (3 parallel perf reviews) → Phase 2 (synthesize)
+    → Phase 3 (recommend) → Phase 4 (optional Fix/Feature)
+
+Add Model Flow:
+  [New model] → Phase 0 → Phase 1 (routing spec) → Phase 2 (docs) → Phase 3 (code)
+    → Phase 4 (deploy) → Phase 5 (update model-registry)
 ```
 
 ## Error Handling
@@ -266,73 +243,83 @@ Deployment Flow (one or more targets):
 | Situation | Strategy |
 |-----------|----------|
 | 1 specialist can't reproduce the issue | Document uncertainty, proceed with implementation from other specialists' findings |
-| QA finds failing test | Check review report for same finding → route to appropriate specialist with specific test output → fix → re-verify |
-| Code review finds critical issue | Block QA, fix first, then re-review, then QA |
-| Timeout | Use current partial results, report what was completed and what was not |
-| bun test has pre-existing failures | Document as pre-existing, verify new code doesn't add new failures |
-| Implementation too large for one session | Save `_workspace/`, flag incomplete items for next session |
-| Deploy failure mid-pipeline | Report the failure with error details, suggest next action (rollback, fix, retry) |
+| QA finds a failing test | Check review report for the same finding; route to the right specialist with the test output; fix; re-verify |
+| Code review finds CRITICAL | Block QA, fix first, re-review, then QA |
+| Timeout | Use current partial results; report what's complete and what isn't |
+| `bun test` has pre-existing failures | Document as pre-existing; verify new code doesn't add new failures |
+| Implementation too large for one session | Save `_workspace/`, flag incomplete items for the next session |
+| Deploy failure mid-pipeline | Report the failure with error details; suggest next action (rollback, fix, retry) |
+| Specialist outputs conflict | The orchestrator synthesizes; surface the conflict in the cleanup report for user decision |
+
+---
 
 ## Test Scenarios
 
-### Normal Flow: Adding streaming support for a new field
-1. User describes the new field and its expected format in both Anthropic and OpenAI
-2. Phase 1: translation-specialist maps the field, streaming-specialist evaluates delta events
-3. Phase 2: translation-specialist + streaming-specialist implement request/stream/response translation
-4. Phase 3: code-reviewer reviews for correctness and test coverage
-5. Phase 4: QA cross-verifies end-to-end, runs `bun test`
-6. All tests pass → changes summarized
+### Normal Flow: Adding a new translator field
+1. User describes the new field and its expected format in all 3 formats
+2. Phase 1: `translation-specialist` maps the field; `streaming-specialist` evaluates delta events
+3. Phase 2: Both implement request/stream/response translation
+4. Phase 3: `code-reviewer` reviews for correctness and test coverage
+5. Phase 4: QA runs `bun test` and cross-verifies end-to-end
+6. All tests pass → summary
 
 ### Error Flow: Debugging a streaming hang
 1. User reports streaming hangs with specific model/endpoint
-2. Phase 1: streaming-specialist identifies missing `content_block_stop` in OpenAI→Anthropic direction
-3. Phase 2: streaming-specialist fixes the block sequence; translation-specialist checks field mapping if needed
-4. Phase 3: code-reviewer verifies the block lifecycle is correct
-5. Phase 4: QA runs stream test with the exact payload shape, hang reproduced → verified fixed
+2. Phase 1: `streaming-specialist` identifies missing `content_block_stop` in OpenAI→Anthropic direction
+3. Phase 2: `streaming-specialist` fixes the block sequence; `translation-specialist` checks field mapping
+4. Phase 3: `code-reviewer` verifies the block lifecycle is correct
+5. Phase 4: QA runs stream test with the exact payload shape, reproduces hang, verifies fix
 6. If QA fails → loop back to Phase 2
 
-### Deployment Flow: Deploy with new model or target
-1. User asks to deploy (to CF Workers, Vercel, or binary)
-2. routing-specialist handles model/routing changes; deployment-manager handles the deploy
-3. deployment-manager runs `bun test`, deploys to the target, verifies
-4. Status reported with deploy URL and model availability
+### Deployment Flow: Add a new model and deploy
+1. User asks to add `ring-2.6-1t-free` to Zen
+2. Phase 1: `routing-specialist` verifies upstream support, writes routing spec
+3. Phase 2: README.md model table updated
+4. Phase 3: `routing-specialist` updates `model-registry` skill
+5. Phase 4: `deployment-manager` runs `bun test`, deploys, verifies
+6. Summary reported with deploy URL and model availability
 
-### Code Review Flow: Review routing change
-1. User asks to review the current routing changes
-2. code-reviewer reads the diff, checks model override chain, error handling, auth flow
+### Code Review Flow: Review a routing change
+1. User asks to review current routing changes
+2. `code-reviewer` reads the diff, checks model override chain, error handling, auth flow
 3. Review report generated with severity-classified findings
 4. Findings presented to user for action
 
-### Investigate Flow: Diagnose streaming hang
-1. User reports streaming hangs with no specific request for a fix
-2. Phase 1 only: streaming-specialist inspects the stream logic, writes diagnosis
-3. Findings presented with severity and recommended fix
-4. User decides whether to proceed to Fix/Feature flow
+### Investigate Flow: Diagnose why images cause errors
+1. User reports "when I use images, I get errors" (no fix requested yet)
+2. Phase 1: `routing-specialist` inspects vision model forcing; `translation-specialist` inspects image block translation
+3. Specialists write findings — e.g., "hardcoded VISION_MODEL doesn't match /zen catalog"
+4. **STOP.** Present findings with severity and recommended fix.
+5. User decides whether to proceed to Fix/Feature flow
 
 ### Performance Audit Flow: Audit translator latency
 1. User asks for a performance review
-2. code-reviewer + qa-inspector + routing-specialist run in parallel
+2. Phase 1: `code-reviewer` + `qa-inspector` + `routing-specialist` run in parallel
 3. Findings ranked by hot path frequency × latency impact × fix cost
 4. User picks which to apply; approved findings feed into Fix/Feature Phase 2
 
-### Add New Model Flow: Register a new Zen free model
-1. User says "add `ring-2.6-1t-free` to Zen"
-2. routing-specialist verifies upstream support, writes routing spec
-3. README.md model table updated
-4. deployment-manager deploys, verifies model availability
-5. Summary reported to user with the deploy URL and the new model path
+### Vision Model Failure Flow: Free promotion ends
+1. User reports image requests fail with "Free promotion has ended" error
+2. Phase 1: `routing-specialist` reads `model-registry`, identifies the failed model
+3. Phase 2: `routing-specialist` updates `getVisionModel()` to a working alternative
+4. Phase 3: `code-reviewer` verifies the change
+5. Phase 4: `qa-inspector` runs regression tests, verifies routing decisions
+6. Phase 5: Report fix + suggest `deployment-manager` redeploy
 
-## Description Follow-up Keywords
+---
 
-- "fix streaming hang", "debug streaming", "stream not working"
-- "add model", "new model", "update model list"
-- "fix translation", "wrong field", "field mapping bug"
+## Description Follow-up Keywords (Aggressive Triggering)
+
+The description is the only trigger mechanism. It MUST include follow-up expressions to handle re-runs, modifications, and rollbacks:
+
+- "fix streaming hang", "debug streaming", "stream not working", "stream truncated"
+- "add model", "new model", "update model list", "register model"
+- "fix translation", "wrong field", "field mapping bug", "shape mismatch"
 - "deploy", "deployment", "update config", "change upstream", "Cloudflare", "LaunchAgent", "Vercel"
 - "build", "binary", "standalone"
-- "review", "code review", "review changes", "audit"
+- "review", "code review", "review changes", "audit", "perf audit"
 - "add test", "fix test", "test failing"
-- "fix the response", "results are wrong"
-- "rerun the fix", "re-execute the translation update"
-- "deploy again", "redeploy"
-- "rollback", "revert"
+- "fix the response", "results are wrong", "still broken"
+- "rerun the fix", "re-execute", "redeploy", "deploy again", "rollback", "revert"
+- "investigate", "diagnose", "why is {X} happening", "what's wrong with {Y}"
 - Recurring expressions: "same bug with {other-model}", "still get {wrong behavior}"

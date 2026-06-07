@@ -6,9 +6,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Goal:** Anthropic↔OpenAI and OpenAI Responses API translation gateway (Hono app, deployable to Cloudflare Workers, Vercel, or macOS standalone binary).
 
-**Trigger:** For proxy-related work (translation bugs, streaming issues, routing changes, model updates, code review, deployment, testing), invoke the `proxy-orchestrator` skill. Specialized skills also available: `deployment` (build, CI/CD, LaunchAgent, Cloudflare deploy), `field-mapping` (Anthropic↔OpenAI field reference for translation work), `stream-debug` (SSE streaming diagnosis). Simple questions can be answered directly.
+**Trigger:** For proxy-related work (translation bugs, streaming issues, routing changes, model updates, code review, deployment, testing, performance audit, investigation-only diagnosis), invoke the `proxy-orchestrator` skill. Specialized skills: `field-mapping` (Anthropic↔OpenAI/Responses field reference), `stream-debug` (SSE streaming diagnosis), `deployment` (CF/Vercel/binary + LaunchAgent + CI/CD), `model-registry` (which models exist on which upstream + vision model selection). Simple questions can be answered directly.
 
-**Agent Team (6 members):** `translation-specialist`, `streaming-specialist`, `routing-specialist`, `qa-inspector`, `code-reviewer`, `deployment-manager` — definitions in `.claude/agents/`. Orchestration rules in `skills/proxy-orchestrator/SKILL.md`.
+**Agent Team (6 members):** `translation-specialist`, `streaming-specialist`, `routing-specialist`, `qa-inspector`, `code-reviewer`, `deployment-manager` — definitions in `.claude/agents/`. Orchestration rules + workflows in `.claude/skills/proxy-orchestrator/SKILL.md`. All Agent calls use `model: "opus"`.
+
+**Harness Change History:**
+
+| Date | Change | Target | Reason |
+|------|--------|--------|--------|
+| 2026-06-05 | Initial configuration (6 agents, 3 skills) | All | First harness built |
+| 2026-06-07 | Full rebuild from scratch | All | Tightened agent descriptions, added `model-registry` skill (addresses vision-model hardcoding bug class), unified SKILL.md format, added follow-up keywords, added performance-audit workflow |
+| 2026-06-07 | Added `model-registry` skill | New skill | Source of truth for upstream model catalogs + vision model selection rules; prevents regression of the `VISION_MODEL` hardcoding bug fixed in commit 3b5743b |
 
 **Notable recent changes (June 5, 2026):** Version bumped to 2.0.0. Added Minimax `<think>` tag stripping in response/stream translators (with cross-chunk stream buffer handling), `input_text` content block support in Responses API request translation, and expanded Responses API debug logging. Vercel deployment target added (solves CF Workers 429 rate limiting), CI/CD switched from npm to bun (requires `CF_API_TOKEN` + `VERCEL_TOKEN` GitHub secrets), belt-and-suspenders image detection on pass-through paths, 15 routing + 8 translation bug fixes, 24 regression tests added, dev branch workflow (PR triggers test only, merge triggers full deploy), harness skills updated to reflect bun+Vercel. See `_workspace_archive/` for full change history.
 
