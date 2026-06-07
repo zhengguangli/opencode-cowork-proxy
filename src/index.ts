@@ -22,13 +22,69 @@ const GO_VISION_MODEL = "qwen3.6-plus";
 // (a multimodal model — supports image inputs) which is genuinely free on /zen.
 const ZEN_VISION_MODEL = "mimo-v2.5-free";
 
+// Vision-capable models per upstream. Source of truth: .claude/skills/model-registry/SKILL.md
+// (section "Vision-Capable Models"). Update both this code and the skill when adding models.
+// Conservative: unknown models are treated as NOT vision-capable (safe default — forced override).
+// Model names must match exactly what the upstream accepts in the request body model field.
+const VISION_CAPABLE_GO = new Set<string>([
+  // Anthropic Claude — all current tiers support vision
+  "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-opus-4-5", "claude-opus-4-1",
+  "claude-sonnet-4-6", "claude-sonnet-4-5", "claude-sonnet-4",
+  "claude-haiku-4-5",
+  // Google Gemini
+  "gemini-3.5-flash", "gemini-3.1-pro", "gemini-3-flash",
+  // OpenAI GPT-5.x (paid variants; nano variants NOT vision-capable and excluded)
+  "gpt-5.5", "gpt-5.5-pro",
+  "gpt-5.4", "gpt-5.4-pro", "gpt-5.4-mini",
+  "gpt-5.3-codex-spark", "gpt-5.3-codex",
+  "gpt-5.2", "gpt-5.2-codex",
+  "gpt-5.1", "gpt-5.1-codex-max", "gpt-5.1-codex", "gpt-5.1-codex-mini",
+  "gpt-5", "gpt-5-codex",
+  // Qwen
+  "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus", "qwen3.5-plus",
+  // Xiaomi mimo
+  "mimo-v2-pro", "mimo-v2-omni", "mimo-v2.5-pro", "mimo-v2.5",
+  // Other
+  "hy3-preview",
+]);
+
+// /zen has paid + free models. Free vision-capable models are listed at the bottom.
+const VISION_CAPABLE_ZEN = new Set<string>([
+  // Same paid models as /go
+  "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-opus-4-5", "claude-opus-4-1",
+  "claude-sonnet-4-6", "claude-sonnet-4-5", "claude-sonnet-4",
+  "claude-haiku-4-5",
+  "gemini-3.5-flash", "gemini-3.1-pro", "gemini-3-flash",
+  "gpt-5.5", "gpt-5.5-pro",
+  "gpt-5.4", "gpt-5.4-pro", "gpt-5.4-mini",
+  "gpt-5.3-codex-spark", "gpt-5.3-codex",
+  "gpt-5.2", "gpt-5.2-codex",
+  "gpt-5.1", "gpt-5.1-codex-max", "gpt-5.1-codex", "gpt-5.1-codex-mini",
+  "gpt-5", "gpt-5-codex",
+  "qwen3.6-plus", "qwen3.5-plus",
+  // Free vision-capable models on /zen
+  "mimo-v2.5-free",
+]);
+
 /**
- * Selects the vision model based on the upstream host. /go has qwen3.6-plus;
- * /zen has mimo-v2.5-free (a free multimodal model — qwen3.6-plus-free's promotion
- * ended on 2026-06-07). This is required because /zen's upstream rejects unknown
- * model IDs, so sending qwen3.6-plus from a /zen request fails on image-bearing requests.
+ * Selects the vision model for an image-bearing request.
+ *
+ * If the requested model (from body, or after URL path override) is already
+ * vision-capable on the routed upstream, returns it unchanged — no override.
+ * Otherwise falls back to the default vision model for the upstream.
+ *
+ * This avoids pointless overrides when the user explicitly requests a
+ * vision-capable model (e.g., claude-sonnet-4-6, qwen3.6-plus), while
+ * still routing non-vision requests to a model that can handle images.
+ *
+ * /zen's upstream rejects unknown model IDs, so we still need the fallback
+ * for cases where the user requests a non-vision model on /zen with an image.
  */
-function getVisionModel(upstream: string): string {
+function getVisionModel(upstream: string, requestedModel?: string | null): string {
+  if (requestedModel) {
+    if (upstream.includes("/zen/go") && VISION_CAPABLE_GO.has(requestedModel)) return requestedModel;
+    if (upstream.includes("/zen") && VISION_CAPABLE_ZEN.has(requestedModel)) return requestedModel;
+  }
   if (upstream.includes("/zen/go")) return GO_VISION_MODEL;
   if (upstream.includes("/zen")) return ZEN_VISION_MODEL;
   return GO_VISION_MODEL;
@@ -283,7 +339,7 @@ async function handleRequest(request: Request): Promise<Response> {
       const originalModel = req.model;
       if (route.modelOverride) req.model = route.modelOverride;
       if (hasImages(req)) {
-        req.model = getVisionModel(upstream);
+        req.model = getVisionModel(upstream, req.model);
       }
       const openaiReq = formatAnthropicToOpenAI(req);
       const upstreamSignal = openaiReq.stream ? createStreamSignal(request) : AbortSignal.timeout(60_000);
@@ -329,7 +385,7 @@ async function handleRequest(request: Request): Promise<Response> {
       const needsAnthMod = !!(route.modelOverride || anthHasImages);
       if (needsAnthMod) {
         if (route.modelOverride) parsedBody.model = route.modelOverride;
-        if (anthHasImages) parsedBody.model = getVisionModel(upstream);
+        if (anthHasImages) parsedBody.model = getVisionModel(upstream, parsedBody.model);
       }
       const anthBody = needsAnthMod ? JSON.stringify(parsedBody) : anthRawBody;
       const anthIsStreaming = !!(parsedBody?.stream);
@@ -361,7 +417,7 @@ async function handleRequest(request: Request): Promise<Response> {
 
       const originalModel = req.model;
       if (route.modelOverride) req.model = route.modelOverride;
-      if (hasOpenAIImages(req)) req.model = getVisionModel(upstream);
+      if (hasOpenAIImages(req)) req.model = getVisionModel(upstream, req.model);
       const anthReq = formatOpenAIToAnthropic(req);
       const upstreamSignal = anthReq.stream ? createStreamSignal(request) : AbortSignal.timeout(60_000);
       const res = await safeUpstreamFetch(`${upstream}/v1/messages`, {
@@ -405,7 +461,7 @@ async function handleRequest(request: Request): Promise<Response> {
     const needsOaiMod = !!(route.modelOverride || oaiHasImages);
     if (needsOaiMod) {
       if (route.modelOverride) parsedOaiBody.model = route.modelOverride;
-      if (oaiHasImages) parsedOaiBody.model = getVisionModel(upstream);
+      if (oaiHasImages) parsedOaiBody.model = getVisionModel(upstream, parsedOaiBody.model);
     }
     const oaiBody = needsOaiMod ? JSON.stringify(parsedOaiBody) : oaiRawBody;
     const oaiIsStreaming = !!(parsedOaiBody?.stream);
@@ -463,7 +519,7 @@ async function handleRequest(request: Request): Promise<Response> {
     // Vision model override must be checked BEFORE DeepSeek thinking injection,
     // to avoid injecting "thinking" on a model that is no longer a DeepSeek model
     if (hasResponsesImages(req)) {
-      req.model = getVisionModel(upstream);
+      req.model = getVisionModel(upstream, req.model);
     }
 
     // DeepSeek compatibility: auto-inject thinking for reasoning models

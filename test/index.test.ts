@@ -814,4 +814,178 @@ describe('worker routing', () => {
     await worker.fetch(request);
     expect(capturedBody.model).toBe('mimo-v2.5-free');
   });
+
+  // ========================================================================
+  // Vision-aware model override: if requested model is already vision-capable
+  // on the routed upstream, keep it (no override). Otherwise fall back to
+  // the default vision model. See VISION_CAPABLE_GO/ZEN in src/index.ts.
+  // ========================================================================
+
+  it('keeps vision-capable model claude-sonnet-4-6 when image is in /v1/messages on /go', async () => {
+    let capturedBody: any = null;
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async (_url, init: any) => {
+        capturedBody = JSON.parse(init.body);
+        return new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      },
+    );
+
+    const request = new Request('https://proxy.example/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: 'What is in this image?' },
+            { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'abc123' } },
+          ],
+        }],
+        max_tokens: 1024,
+      }),
+    });
+
+    await worker.fetch(request);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // claude-sonnet-4-6 is in VISION_CAPABLE_GO — no override should happen
+    expect(capturedBody.model).toBe('claude-sonnet-4-6');
+  });
+
+  it('keeps vision-capable model qwen3.6-plus when image is in /zen/v1/chat/completions', async () => {
+    let capturedBody: any = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async (_url, init: any) => {
+        capturedBody = JSON.parse(init.body);
+        return new Response(JSON.stringify({ choices: [{ message: 'ok', finish_reason: 'stop' }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      },
+    );
+
+    const request = new Request('https://proxy.example/zen/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key },
+      body: JSON.stringify({
+        model: 'qwen3.6-plus',
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Describe this image.' },
+            { type: 'image_url', image_url: { url: 'data:image/png;base64,xyz' } },
+          ],
+        }],
+      }),
+    });
+
+    await worker.fetch(request);
+    // qwen3.6-plus is in VISION_CAPABLE_ZEN — no override
+    expect(capturedBody.model).toBe('qwen3.6-plus');
+  });
+
+  it('URL path override with vision-capable model is kept on /go', async () => {
+    // When URL path override is /go/claude-sonnet-4-6/v1/messages and image is present,
+    // the override model is vision-capable so should not be further overridden to qwen3.6-plus.
+    let capturedBody: any = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async (_url, init: any) => {
+        capturedBody = JSON.parse(init.body);
+        return new Response(JSON.stringify({ choices: [{ message: 'ok', finish_reason: 'stop' }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      },
+    );
+
+    const request = new Request('https://proxy.example/go/claude-sonnet-4-6/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key },
+      body: JSON.stringify({
+        model: 'deepseek-v4-pro',  // body model is non-vision
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: 'What is in this image?' },
+            { type: 'image_url', image_url: { url: 'data:image/png;base64,abc' } },
+          ],
+        }],
+      }),
+    });
+
+    await worker.fetch(request);
+    // URL override "claude-sonnet-4-6" wins, AND it's vision-capable so stays
+    expect(capturedBody.model).toBe('claude-sonnet-4-6');
+  });
+
+  it('URL path override with non-vision model falls back to default vision model on /go', async () => {
+    // When URL path override is /go/deepseek-v4-flash/v1/messages and image is present,
+    // deepseek-v4-flash is not vision-capable, so should be overridden to qwen3.6-plus.
+    let capturedBody: any = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async (_url, init: any) => {
+        capturedBody = JSON.parse(init.body);
+        return new Response(JSON.stringify({ choices: [{ message: 'ok', finish_reason: 'stop' }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      },
+    );
+
+    const request = new Request('https://proxy.example/go/deepseek-v4-flash/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',  // body is vision-capable, but URL override wins
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: 'What is in this image?' },
+            { type: 'image_url', image_url: { url: 'data:image/png;base64,abc' } },
+          ],
+        }],
+      }),
+    });
+
+    await worker.fetch(request);
+    // URL override "deepseek-v4-flash" wins, but it's NOT vision-capable → force to qwen3.6-plus
+    expect(capturedBody.model).toBe('qwen3.6-plus');
+  });
+
+  it('unknown model in body falls back to default vision model on /go', async () => {
+    // An unrecognized model name (not in VISION_CAPABLE_GO) should be treated as
+    // not-vision-capable and force-override to the default vision model.
+    let capturedBody: any = null;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async (_url, init: any) => {
+        capturedBody = JSON.parse(init.body);
+        return new Response(JSON.stringify({ choices: [{ message: 'ok', finish_reason: 'stop' }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      },
+    );
+
+    const request = new Request('https://proxy.example/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key },
+      body: JSON.stringify({
+        model: 'some-unknown-model-2027',
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Describe this image.' },
+            { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'abc' } },
+          ],
+        }],
+        max_tokens: 1024,
+      }),
+    });
+
+    await worker.fetch(request);
+    expect(capturedBody.model).toBe('qwen3.6-plus');
+  });
 });

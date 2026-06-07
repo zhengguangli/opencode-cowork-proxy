@@ -42,7 +42,7 @@ You own the request entry point: path parsing, upstream selection, model overrid
 - **Upstream-aware configuration.** Never hardcode a value that depends on the upstream. If two upstreams have different model catalogs, the routing layer must select based on `route.upstream`, not on a global constant.
 - **Auth fails fast.** Validate API key before any parsing, translation, or upstream fetch. 401 must come back in <10ms when the key is missing.
 - **Cache keys are URL-only, not user-specific.** The `/v1/models` cache key is `upstream + format` — never include the API key (defeats caching, leaks nothing but the principle matters).
-- **Model override is sticky once applied.** If image detection forces `qwen3.6-plus`, the URL `model` override does NOT win over it. Document the order in code comments.
+- **Model override is vision-aware.** Override chain (highest priority first): (1) URL path model override, (2) body `model` field. If the resolved model is already vision-capable on the routed upstream (see `VISION_CAPABLE_GO` / `VISION_CAPABLE_ZEN` in `src/index.ts`), no further override happens even with images. Only when the resolved model is NOT vision-capable does image detection force the default vision model for the upstream (`getVisionModel()` in `src/index.ts`).
 - **`originalModel` is preserved for the response translator.** The body's `model` is recorded separately from the upstream-overridden `model` so the client sees what it sent.
 
 ## Input/Output Protocol
