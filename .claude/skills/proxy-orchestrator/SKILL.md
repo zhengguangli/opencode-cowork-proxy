@@ -183,10 +183,13 @@ Use when adding a new model to the proxy. Examples: "Add `qwen3.7-max` to the Go
 5. Phase 4 (Deploy) — `deployment-manager` runs `bun test`, deploys to targets, verifies
 6. Phase 5 (Cleanup) — preserve `_workspace/`, update `model-registry` skill with the new model entry
 
-**Important:**
-- Update `model-registry` skill so other agents know the new model exists
-- Vision-capable models added to `/zen` may need to be added to the `getVisionModel()` map
-- Models added to BOTH upstreams (e.g., `qwen3.6-plus` is on both) don't need a `getVisionModel()` update
+**Critical — always verify against live `/v1/models` first:**
+- The documented catalog in `model-registry` may be stale. Always `curl` the upstream's `/v1/models` endpoint to verify the model actually exists before adding it.
+- **Go and Zen have DIFFERENT catalogs.** Premium models (Claude, GPT, Gemini, Grok) exist only on `/zen`, NOT on `/go`. A model on one upstream does not imply it's on the other.
+- After verifying the model exists, update `model-registry` skill so other agents know about it.
+- Vision-capable models added to `/zen` may need to be added to the `getVisionModel()` map.
+- Models added to BOTH upstreams (e.g., `qwen3.6-plus` is on both) don't need a `getVisionModel()` update.
+- **`VISION_CAPABLE_GO`/`ZEN` set discipline:** The Go set in `src/index.ts` currently lists ~27 premium models that are NOT on the Go upstream. Do not replicate this error — verify each entry against the live catalog before adding to VISION_CAPABLE_GO.
 
 ---
 
@@ -203,6 +206,34 @@ Use for: deploy requests, build failures, CI/CD issues, LaunchAgent setup.
    - Update README.md and `model-registry` skill
    - Verify with `bun test` or build
 5. Report deploy status, configuration impact, and any issues
+
+---
+
+## Workflow: Model Registry Refresh
+
+Use to re-verify the model-registry skill against live upstream data. The documented catalogs can drift from what the upstream actually serves.
+
+**Steps:**
+1. Phase 1 (Live Verification) — `routing-specialist`:
+   - Curls `https://opencode.ai/zen/v1/models` and `https://opencode.ai/zen/go/v1/models` with a valid API key
+   - Captures the sorted model ID lists for both upstreams
+   - Compares against the documented tables in `model-registry` skill
+2. Phase 2 (Diff Report) — `routing-specialist` writes `_workspace/01_catalog_diff.md`:
+   - Models present in live `/v1/models` but MISSING from documentation
+   - Models documented but ABSENT from live `/v1/models`
+   - Pricing tier changes (free ↔ paid)
+   - VISION_CAPABLE_GO/ZEN set implications (models that should be added to/removed from the code sets)
+3. Phase 3 (Remediation) — if user wants updates:
+   - Update `model-registry` skill catalog tables
+   - Update `src/index.ts` VISION_CAPABLE_GO/ZEN sets if models were added/removed
+   - `deployment-manager` runs `bun test` to verify routing decisions
+   - Update README.md model tables if applicable
+4. Phase 4 (Report) — present:
+   - The diff (added/removed/changed models)
+   - Any code-level impact (VISION_CAPABLE sets, vision fallback defaults)
+   - Update the "Last verified" date in the `model-registry` skill
+
+**Why this exists:** The documented Go catalog was found to contain ~27 premium models that only exist on `/zen` (verified 2026-06-08). Without periodic refresh, agents consult stale data when making routing decisions.
 
 ---
 
@@ -236,6 +267,10 @@ Performance Audit Flow:
 Add Model Flow:
   [New model] → Phase 0 → Phase 1 (routing spec) → Phase 2 (docs) → Phase 3 (code)
     → Phase 4 (deploy) → Phase 5 (update model-registry)
+
+Model Registry Refresh Flow:
+  [Refresh request] → Phase 1 (curl both upstreams) → Phase 2 (diff report)
+    → Phase 3 (optional: update docs + code) → Phase 4 (report)
 ```
 
 ## Error Handling

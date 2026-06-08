@@ -16,40 +16,40 @@ The proxy routes requests to two distinct upstreams with different model catalog
 
 Default upstream (no prefix) is **Go**.
 
-## Live Catalogs (Last verified: 2026-06-07)
+## Live Catalogs (Last verified: 2026-06-08)
 
 ### Go upstream (`/go`) — all paid
+
+⚠️ **Previously documented with ~30 premium models (Claude, GPT, Gemini, Grok) that are NOT on the Go upstream.** Those models belong to `/zen` only. Always verify with a live `/v1/models` call before acting on Go's catalog.
+
 ```
-claude-opus-4-8, claude-opus-4-7, claude-opus-4-6, claude-opus-4-5, claude-opus-4-1
-claude-sonnet-4-6, claude-sonnet-4-5, claude-sonnet-4, claude-haiku-4-5
-gemini-3.5-flash, gemini-3.1-pro, gemini-3-flash
-gpt-5.5, gpt-5.5-pro, gpt-5.4, gpt-5.4-pro, gpt-5.4-mini, gpt-5.4-nano
-gpt-5.3-codex-spark, gpt-5.3-codex, gpt-5.2, gpt-5.2-codex
-gpt-5.1, gpt-5.1-codex-max, gpt-5.1-codex, gpt-5.1-codex-mini
-gpt-5, gpt-5-codex, gpt-5-nano
-grok-build-0.1
 deepseek-v4-pro, deepseek-v4-flash
 glm-5.1, glm-5
-minimax-m3, minimax-m2.7, minimax-m2.5
-kimi-k2.6, kimi-k2.5
-qwen3.7-max, qwen3.7-plus, qwen3.6-plus, qwen3.5-plus
-mimo-v2-pro, mimo-v2-omni, mimo-v2.5-pro, mimo-v2.5
 hy3-preview
+kimi-k2.6, kimi-k2.5
+mimo-v2-omni, mimo-v2-pro, mimo-v2.5, mimo-v2.5-pro
+minimax-m3, minimax-m2.7, minimax-m2.5
+qwen3.7-max, qwen3.7-plus, qwen3.6-plus, qwen3.5-plus
 ```
 
-### Zen upstream (`/zen`) — free + paid mix
-**Free tier:**
+Go is a focused catalog of ~18 paid models. **NOT on Go:** all Claude, GPT, Gemini, Grok, deepseek-v4-flash-free, mimo-v2.5-free, minimax-m3-free, big-pickle, nemotron, and qwen3.6-plus-free models.
+
+### Zen upstream (`/zen`) — free + paid mix (~46 models total)
+
+Zen is the BROADER catalog. All premium models (Claude, GPT, Gemini, Grok) live only on `/zen`, NOT on `/go`. The free models on `/zen` are supplemented by paid equivalents.
+
+**Free tier (7 models, 1 with asterisk):**
 ```
 big-pickle
 deepseek-v4-flash-free
-mimo-v2.5-free
-qwen3.6-plus-free              ← FREE PROMOTION ENDED 2026-06-07 (no longer free)
+mimo-v2.5-free              ← default vision fallback for /zen
+qwen3.6-plus-free           ← FREE PROMOTION ENDED 2026-06-07 (model still in catalog but no longer free-tier)
 minimax-m3-free
 nemotron-3-ultra-free
 nemotron-3-super-free
 ```
 
-**Paid tier (also on /zen):**
+**Paid tier (also on /zen — shared with Go for a few models):**
 ```
 claude-opus-4-8, claude-opus-4-7, claude-opus-4-6, claude-opus-4-5, claude-opus-4-1
 claude-sonnet-4-6, claude-sonnet-4-5, claude-sonnet-4, claude-haiku-4-5
@@ -84,17 +84,27 @@ This means users who explicitly request `claude-sonnet-4-6` (vision-capable) kee
 ### Vision-Capable Model Sets (mirror `VISION_CAPABLE_GO` / `VISION_CAPABLE_ZEN` in `src/index.ts`)
 
 **`VISION_CAPABLE_GO`** (models that accept image inputs on `/go`):
-- Anthropic Claude: `claude-opus-4-{1,5,6,7,8}`, `claude-sonnet-4-{,5,6}`, `claude-haiku-4-5`
-- Google Gemini: `gemini-3{,1,5}-flash`, `gemini-3.1-pro`
-- OpenAI GPT-5.x (paid variants): `gpt-5`, `gpt-5-codex`, `gpt-5.1`, `gpt-5.1-codex`, `gpt-5.1-codex-{min,max}`, `gpt-5.2`, `gpt-5.2-codex`, `gpt-5.3-codex`, `gpt-5.3-codex-spark`, `gpt-5.4`, `gpt-5.4-{mini,pro}`, `gpt-5.5`, `gpt-5.5-pro`
+
+⚠️ **Known discrepancy:** The Go upstream's actual `/v1/models` catalog (18 models) does NOT include Claude, GPT, Gemini, or Grok. Those premium models belong exclusively to `/zen`. The `VISION_CAPABLE_GO` set in `src/index.ts` currently lists them anyway — this means `getVisionModel()` will return `claude-sonnet-4-6` (example) for image requests to `/go`, keeping the non-existent model rather than force-overriding to `qwen3.6-plus` (which IS on Go). This is a known code issue. When editing VISION_CAPABLE_GO, only add models that actually exist on the Go upstream.
+
+- Anthropic Claude: `claude-opus-4-{1,5,6,7,8}`, `claude-sonnet-4-{,5,6}`, `claude-haiku-4-5` (**NOT on Go — only on /zen**)
+- Google Gemini: `gemini-3{,1,5}-flash`, `gemini-3.1-pro` (**NOT on Go — only on /zen**)
+- OpenAI GPT-5.x: `gpt-5`, `gpt-5-codex`, ..., `gpt-5.5`, `gpt-5.5-pro` (**NOT on Go — only on /zen**)
   - **Excluded:** `gpt-5.4-nano`, all `gpt-5.x-nano` (text-only)
-- Qwen: `qwen3.5-plus`, `qwen3.6-plus`, `qwen3.7-{max,plus}`
+- Qwen: `qwen3.5-plus`, `qwen3.6-plus`, `qwen3.7-{max,plus}` (**qwen3.7-{max,plus} NOT on Go**)
 - Xiaomi mimo: `mimo-v2-pro`, `mimo-v2-omni`, `mimo-v2.5`, `mimo-v2.5-pro`
 - Other: `hy3-preview`
 
-**`VISION_CAPABLE_ZEN`** (paid models same as `/go` + free vision-capable):
-- All paid models from `VISION_CAPABLE_GO` **EXCEPT** `qwen3.7-{max,plus}` (not on /zen), `mimo-v2-pro`, `mimo-v2-omni`, `mimo-v2.5-pro`, `hy3-preview` (not on /zen)
-- **Plus free models:** `mimo-v2.5-free`
+**Actually on Go (verified via `/v1/models`):** `qwen3.5-plus`, `qwen3.6-plus`, `mimo-v2-pro`, `mimo-v2-omni`, `mimo-v2.5`, `mimo-v2.5-pro`, `hy3-preview`, `glm-{5,5.1}`, `minimax-m{3,2.7,2.5}`, `kimi-k2.{5,6}`, `deepseek-v4-{pro,flash}`, `qwen3.7-{max,plus}`
+
+**`VISION_CAPABLE_ZEN`** — the authoritative catalog for `/zen` (premium models + free vision):
+- All paid models from `VISION_CAPABLE_GO` that are ACTUALLY on `/zen`:
+  - `claude-opus-4-{1,5,6,7,8}`, `claude-sonnet-4-{,5,6}`, `claude-haiku-4-5` — all present on /zen
+  - `gemini-3{,1,5}-flash`, `gemini-3.1-pro` — all present on /zen
+  - GPT-5.x paid variants (excluding nano) — all present on /zen
+  - `qwen3.6-plus`, `qwen3.5-plus` — present on /zen
+  - **Excluded from /zen:** `qwen3.7-{max,plus}`, `mimo-v2-pro`, `mimo-v2-omni`, `mimo-v2.5-pro`, `hy3-preview` (Go-only)
+- **Plus free vision models on /zen:** `mimo-v2.5-free`
   - **NOT vision-capable free models:** `big-pickle`, `deepseek-v4-flash-free`, `minimax-m2.5-free`, `minimax-m3-free`, `nemotron-3-{super,ultra}-free`
 
 ### Selection Logic (`src/index.ts:getVisionModel`)
