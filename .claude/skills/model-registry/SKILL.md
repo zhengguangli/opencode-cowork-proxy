@@ -1,26 +1,24 @@
 ---
 name: model-registry
-description: "Source of truth for which AI models exist on which upstream (opencode.ai/zen/go vs opencode.ai/zen), what capabilities each has (vision, thinking, function calling, code execution), pricing tier (free vs paid), and known quirks. MUST consult before: adding a new model, changing vision model forcing logic, debugging 'model not found' errors, recommending a model to a user, deciding which upstream hosts a new feature, or any time a hardcoded model name appears in the proxy. Updated whenever routing-specialist or deployment-manager changes the model catalog. Knowledge here is the result of live upstream /v1/models calls — never trust stale memory."
+description: "Source of truth for which AI models exist on which upstream (opencode.ai/zen/go vs opencode.ai/zen), what capabilities each has (vision, thinking, function calling), pricing tier (free vs paid), and known quirks. MUST consult before: adding a new model, changing vision model forcing logic, debugging 'model not found' errors, recommending a model, deciding which upstream hosts a feature, or any time a hardcoded model name appears in the proxy. Knowledge here is the result of live upstream /v1/models calls — never trust stale memory."
 ---
 
 # Model Registry
 
-The proxy routes requests to two distinct upstreams with different model catalogs and pricing tiers. Hardcoding a model name is a bug — different upstreams have different models, and the right model depends on what the user is trying to do.
+The proxy routes requests to two upstreams with different model catalogs and pricing tiers. Hardcoding a model name is a bug.
 
 ## The Two Upstreams
 
-| Upstream | URL | Pricing | URL prefix |
-|----------|-----|---------|------------|
+| Upstream | URL | Pricing | Prefix |
+|----------|-----|---------|--------|
 | **Go** (paid) | `https://opencode.ai/zen/go` | All paid | `/go` |
-| **Zen** (free + paid mix) | `https://opencode.ai/zen` | Mix of free and paid | `/zen` |
+| **Zen** (free + paid) | `https://opencode.ai/zen` | Mix | `/zen` |
 
-Default upstream (no prefix) is **Go**.
+Default (no prefix) is **Go**.
 
 ## Live Catalogs (Last verified: 2026-06-08)
 
-### Go upstream (`/go`) — all paid
-
-⚠️ **Previously documented with ~30 premium models (Claude, GPT, Gemini, Grok) that are NOT on the Go upstream.** Those models belong to `/zen` only. Always verify with a live `/v1/models` call before acting on Go's catalog.
+### Go upstream (`/go`) — all paid (~18 models)
 
 ```
 deepseek-v4-pro, deepseek-v4-flash
@@ -32,27 +30,24 @@ minimax-m3, minimax-m2.7, minimax-m2.5
 qwen3.7-max, qwen3.7-plus, qwen3.6-plus, qwen3.5-plus
 ```
 
-Go is a focused catalog of ~18 paid models. **NOT on Go:** all Claude, GPT, Gemini, Grok, deepseek-v4-flash-free, mimo-v2.5-free, minimax-m3-free, big-pickle, nemotron, and qwen3.6-plus-free models.
+**NOT on Go:** all Claude, GPT, Gemini, Grok, deepseek-v4-flash-free, mimo-v2.5-free, minimax-m3-free, big-pickle, nemotron, qwen3.6-plus-free.
 
-### Zen upstream (`/zen`) — free + paid mix (~46 models total)
+### Zen upstream (`/zen`) — free + paid (~46 models)
 
-Zen is the BROADER catalog. All premium models (Claude, GPT, Gemini, Grok) live only on `/zen`, NOT on `/go`. The free models on `/zen` are supplemented by paid equivalents.
-
-**Free tier (7 models, 1 with asterisk):**
+**Free tier:**
 ```
 big-pickle
 deepseek-v4-flash-free
 mimo-v2.5-free              ← default vision fallback for /zen
-qwen3.6-plus-free           ← FREE PROMOTION ENDED 2026-06-07 (model still in catalog but no longer free-tier)
+qwen3.6-plus-free           ← FREE PROMOTION ENDED 2026-06-07
 minimax-m3-free
 nemotron-3-ultra-free
 nemotron-3-super-free
 ```
 
-**Paid tier (also on /zen — shared with Go for a few models):**
+**Paid tier (all on /zen):**
 ```
-claude-opus-4-8, claude-opus-4-7, claude-opus-4-6, claude-opus-4-5, claude-opus-4-1
-claude-sonnet-4-6, claude-sonnet-4-5, claude-sonnet-4, claude-haiku-4-5
+claude-opus-4-{1,5,6,7,8}, claude-sonnet-4-{,5,6}, claude-haiku-4-5
 gemini-3.5-flash, gemini-3.1-pro, gemini-3-flash
 gpt-5.5, gpt-5.5-pro, gpt-5.4, gpt-5.4-pro, gpt-5.4-mini, gpt-5.4-nano
 gpt-5.3-codex-spark, gpt-5.3-codex, gpt-5.2, gpt-5.2-codex
@@ -65,47 +60,16 @@ kimi-k2.6, kimi-k2.5
 qwen3.6-plus, qwen3.5-plus
 ```
 
-## Vision-Capable Models (for Image Forcing)
+## Vision-Capable Models
 
-When the proxy detects an image in the request, the model selection is **vision-aware**:
+When proxy detects an image: if requested model is already vision-capable on routed upstream → keep it. Otherwise → fall back to default vision model.
 
-1. If the requested model (from body or URL path override) is already vision-capable on the routed upstream → **keep it** (no override)
-2. Otherwise → fall back to the default vision model for the upstream
+### Default Vision Models
 
-This means users who explicitly request `claude-sonnet-4-6` (vision-capable) keep their model even with images, while users requesting `deepseek-v4-flash` (not vision-capable) get force-routed to a vision model.
-
-### Default Vision Models (Fallback)
-
-| Upstream | Default vision model | Why |
-|----------|---------------------|-----|
-| `/go` (opencode.ai/zen/go) | `qwen3.6-plus` | Multilingual + vision + good free-tier alternative was qwen3.6-plus-free but that promotion ended |
-| `/zen` (opencode.ai/zen) | `mimo-v2.5-free` | Multimodal (vision) + actually free on /zen. **NOT** qwen3.6-plus-free (promotion ended — upstream returns 402/ModelError) |
-
-### Vision-Capable Model Sets (mirror `VISION_CAPABLE_GO` / `VISION_CAPABLE_ZEN` in `src/index.ts`)
-
-**`VISION_CAPABLE_GO`** (models that accept image inputs on `/go`):
-
-⚠️ **Known discrepancy:** The Go upstream's actual `/v1/models` catalog (18 models) does NOT include Claude, GPT, Gemini, or Grok. Those premium models belong exclusively to `/zen`. The `VISION_CAPABLE_GO` set in `src/index.ts` currently lists them anyway — this means `getVisionModel()` will return `claude-sonnet-4-6` (example) for image requests to `/go`, keeping the non-existent model rather than force-overriding to `qwen3.6-plus` (which IS on Go). This is a known code issue. When editing VISION_CAPABLE_GO, only add models that actually exist on the Go upstream.
-
-- Anthropic Claude: `claude-opus-4-{1,5,6,7,8}`, `claude-sonnet-4-{,5,6}`, `claude-haiku-4-5` (**NOT on Go — only on /zen**)
-- Google Gemini: `gemini-3{,1,5}-flash`, `gemini-3.1-pro` (**NOT on Go — only on /zen**)
-- OpenAI GPT-5.x: `gpt-5`, `gpt-5-codex`, ..., `gpt-5.5`, `gpt-5.5-pro` (**NOT on Go — only on /zen**)
-  - **Excluded:** `gpt-5.4-nano`, all `gpt-5.x-nano` (text-only)
-- Qwen: `qwen3.5-plus`, `qwen3.6-plus`, `qwen3.7-{max,plus}` (**qwen3.7-{max,plus} NOT on Go**)
-- Xiaomi mimo: `mimo-v2-pro`, `mimo-v2-omni`, `mimo-v2.5`, `mimo-v2.5-pro`
-- Other: `hy3-preview`
-
-**Actually on Go (verified via `/v1/models`):** `qwen3.5-plus`, `qwen3.6-plus`, `mimo-v2-pro`, `mimo-v2-omni`, `mimo-v2.5`, `mimo-v2.5-pro`, `hy3-preview`, `glm-{5,5.1}`, `minimax-m{3,2.7,2.5}`, `kimi-k2.{5,6}`, `deepseek-v4-{pro,flash}`, `qwen3.7-{max,plus}`
-
-**`VISION_CAPABLE_ZEN`** — the authoritative catalog for `/zen` (premium models + free vision):
-- All paid models from `VISION_CAPABLE_GO` that are ACTUALLY on `/zen`:
-  - `claude-opus-4-{1,5,6,7,8}`, `claude-sonnet-4-{,5,6}`, `claude-haiku-4-5` — all present on /zen
-  - `gemini-3{,1,5}-flash`, `gemini-3.1-pro` — all present on /zen
-  - GPT-5.x paid variants (excluding nano) — all present on /zen
-  - `qwen3.6-plus`, `qwen3.5-plus` — present on /zen
-  - **Excluded from /zen:** `qwen3.7-{max,plus}`, `mimo-v2-pro`, `mimo-v2-omni`, `mimo-v2.5-pro`, `hy3-preview` (Go-only)
-- **Plus free vision models on /zen:** `mimo-v2.5-free`
-  - **NOT vision-capable free models:** `big-pickle`, `deepseek-v4-flash-free`, `minimax-m2.5-free`, `minimax-m3-free`, `nemotron-3-{super,ultra}-free`
+| Upstream | Default | Why |
+|----------|---------|-----|
+| `/go` | `qwen3.6-plus` | Multilingual + vision |
+| `/zen` | `mimo-v2.5-free` | Multimodal + actually free |
 
 ### Selection Logic (`src/index.ts:getVisionModel`)
 
@@ -113,58 +77,37 @@ This means users who explicitly request `claude-sonnet-4-6` (vision-capable) kee
 function getVisionModel(upstream: string, requestedModel?: string | null): string {
   if (requestedModel) {
     if (upstream.includes("/zen/go") && VISION_CAPABLE_GO.has(requestedModel)) return requestedModel;
-    if (upstream.includes("/zen") && VISION_CAPABLE_ZEN.has(requestedModel)) return requestedModel;
+    if (upstream.includes("/zen") && !upstream.includes("/zen/go") && VISION_CAPABLE_ZEN.has(requestedModel)) return requestedModel;
   }
-  if (upstream.includes("/zen/go")) return GO_VISION_MODEL;   // "qwen3.6-plus"
-  if (upstream.includes("/zen")) return ZEN_VISION_MODEL;      // "mimo-v2.5-free"
+  if (upstream.includes("/zen/go")) return GO_VISION_MODEL;
+  if (upstream.includes("/zen")) return ZEN_VISION_MODEL;
   return GO_VISION_MODEL;
 }
 ```
 
-**Safe default:** Unknown models are treated as NOT vision-capable → force-override. This means when adding a new model:
-1. If it's vision-capable → add to `VISION_CAPABLE_GO` (and `VISION_CAPABLE_ZEN` if it's on /zen)
-2. If it's NOT vision-capable → no change needed (it will be auto-redirected when images are present)
-3. Update this registry table in the same commit
+Safe default: unknown models → NOT vision-capable → force-override. When adding a vision-capable model, add to `VISION_CAPABLE_GO` and/or `VISION_CAPABLE_ZEN`.
 
-### ⚠️ Past Bug: Hardcoded Vision Model (fixed 2026-06-07)
+## Model Quirks
 
-A previous version of the proxy hardcoded `VISION_MODEL = "qwen3.6-plus"` regardless of route. This caused `/zen` image requests to fail with `ModelError: Free promotion has ended` (after 2026-06-07) and `404 model not found` (before 2026-06-07, when `qwen3.6-plus` was thought to be `/go`-only — but it's actually on `/zen` too).
+| Model | Quirk |
+|-------|-------|
+| **Minimax (m2.5, m2.7, m3, m3-free)** | Embeds reasoning in inline `<think>` tags in `content` instead of `reasoning_content`. Strip with state machine. |
+| **DeepSeek (v3, v4-*)** | Accepts `thinking: {type: "enabled"}`. `type:"reasoning"` items merge with next assistant message. |
+| **qwen3.6-plus-free** | Free promotion ended 2026-06-07. Use `mimo-v2.5-free` for /zen vision. |
 
-**Rule:** Never use a single hardcoded vision model. Always select based on `route.upstream` AND check if the requested model is already vision-capable.
-  return "qwen3.6-plus";
-}
-```
+## How to Update
 
-## Model Quirks (Update This When Discovered)
+1. `curl -s https://opencode.ai/zen/v1/models -H "Authorization: Bearer $KEY" | jq '.data[].id'`
+2. `curl -s https://opencode.ai/zen/go/v1/models -H "Authorization: Bearer $KEY" | jq '.data[].id'`
+3. Update catalog tables above
+4. Note date in "Last verified"
+5. If pricing changed, add quirk entry
 
-| Model | Quirk | Source of truth |
-|-------|-------|-----------------|
-| **Minimax (m2.5, m2.7, m3, m3-free)** | Embeds reasoning inside inline `<think>...</think>` tags in `content` rather than using `reasoning_content` field. Translators must strip these tags. | `src/translate/response/chat-completions-to-responses.ts`, `src/translate/stream/chat-completions-to-responses.ts` (state machine with `inThinkTag` + `thinkTagBuffer`) |
-| **DeepSeek (v3, v4-flash, v4-pro, v4-flash-free)** | Accepts `thinking: {type: "enabled"}` parameter; `type:"reasoning"` items in Responses API input must merge with next assistant message | `src/translate/request/responses-to-chat-completions.ts` |
-| **qwen3.6-plus-free** | Free promotion ended 2026-06-07. Do not route to it; use `mimo-v2.5-free` for /zen vision instead. | This registry |
-| **Qwen3 vision models** | Force image-bearing requests to `qwen3.6-plus` (Go) or `mimo-v2.5-free` (Zen) | `src/index.ts` `getVisionModel()` |
+## When Adding a Model
 
-## How to Update This Registry
-
-1. `curl -s https://opencode.ai/zen/v1/models -H "Authorization: Bearer dummy" | jq '.data[].id'`
-2. `curl -s https://opencode.ai/zen/go/v1/models -H "Authorization: Bearer dummy" | jq '.data[].id'`
-3. Update the catalog tables above
-4. Note the date in "Last verified"
-5. If pricing tier changed for any model, add a quirk entry
-
-## When Adding a New Model (Workflow)
-
-1. **routing-specialist** verifies the model exists in the upstream `/v1/models` list
-2. **routing-specialist** updates `src/index.ts` constants if the model needs special handling (e.g., vision forcing)
-3. **deployment-manager** updates README.md model tables
-4. **deployment-manager** deploys
+1. Verify exists in upstream `/v1/models` (live curl, not memory)
+2. Update `src/index.ts` if needs special handling (vision forcing)
+3. Update README.md model tables
+4. Deploy
 5. Update this skill's catalog tables
-6. **If the new model is vision-capable** → add to `VISION_CAPABLE_GO` (and `VISION_CAPABLE_ZEN` if it's on /zen) in the same commit
-7. If the new model is the new default vision model for an upstream → update `GO_VISION_MODEL` / `ZEN_VISION_MODEL`
-
-## When a Model Breaks (e.g., free promotion ends)
-
-1. Verify the breakage with a real upstream call (not from memory)
-2. If the model was the forced vision model: update `getVisionModel()` to a working alternative
-3. If the model was in the general catalog: leave it in the list (some users may still pay for it) but mark it as a known issue in the quirks table
-4. Add a regression test in `test/index.test.ts` for the routing decision
+6. If vision-capable → add to `VISION_CAPABLE_GO`/`VISION_CAPABLE_ZEN`

@@ -17,6 +17,7 @@ import { VERSION } from './version';
 const GO_UPSTREAM = "https://opencode.ai/zen/go";
 const ZEN_UPSTREAM = "https://opencode.ai/zen";
 const DEFAULT_UPSTREAM = GO_UPSTREAM;
+const START_TIME = Date.now();
 const GO_VISION_MODEL = "qwen3.6-plus";
 // /zen upstream's qwen3.6-plus-free promotion ended, so we fall back to mimo-v2.5-free
 // (a multimodal model — supports image inputs) which is genuinely free on /zen.
@@ -209,6 +210,30 @@ function hasOpenAIImages(body: any): boolean {
 }
 
 /**
+ * Fast string-based image detection for pass-through paths.
+ * Checks if a raw JSON body string contains image-related content types
+ * WITHOUT parsing the entire JSON. Returns true if images might be present
+ * (conservative — may have false positives but never false negatives).
+ *
+ * This avoids JSON.parse + full traversal when no model override is needed
+ * and the body clearly has no image blocks.
+ */
+function rawBodyMayHaveImages(rawBody: string): boolean {
+  // Fast string search for common image type markers in JSON.
+  // These are the only image-related type values in Anthropic/OpenAI formats.
+  return rawBody.includes('"image_url"') ||
+    rawBody.includes('"input_image"') ||
+    rawBody.includes('"type":"image"') ||
+    rawBody.includes('"type": "image"') ||
+    rawBody.includes('"type":\'image\'');
+}
+
+/** Fast string check for streaming flag in raw JSON body. */
+function rawBodyMayHaveStreaming(rawBody: string): boolean {
+  return rawBody.includes('"stream":true') || rawBody.includes('"stream": true');
+}
+
+/**
  * Single-pass image detection: checks both Anthropic (type: "image") and OpenAI (type: "image_url")
  * formats in one traversal. Used on pass-through paths where body format is assumed but not guaranteed,
  * to avoid double-traversing the message array.
@@ -315,6 +340,62 @@ function forwardUpstreamHeaders(target: Headers, source: Response): void {
   }
 }
 
+/** Format seconds into human-readable uptime string. */
+function formatUptime(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return `${h}h ${m}m`;
+}
+
+/** Check if client accepts gzip encoding. */
+function clientAcceptsGzip(request: Request): boolean {
+  const accept = request.headers.get("Accept-Encoding") || "";
+  return accept.includes("gzip");
+}
+
+/**
+ * Create a JSON response with optional gzip compression.
+ * Compresses responses larger than 1KB when client accepts gzip.
+ * Uses CompressionStream API (available in CF Workers, Bun, and modern runtimes).
+ */
+async function jsonResponse(request: Request, data: any, extraHeaders?: Record<string, string>): Promise<Response> {
+  const body = JSON.stringify(data);
+  const headers: Record<string, string> = { "Content-Type": "application/json", ...extraHeaders };
+
+  // Only compress if client accepts gzip and body is large enough to benefit
+  if (clientAcceptsGzip(request) && body.length > 1024) {
+    try {
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        start(controller) { controller.enqueue(encoder.encode(body)); controller.close(); },
+      }).pipeThrough(new CompressionStream("gzip"));
+
+      const reader = stream.getReader();
+      const chunks: Uint8Array[] = [];
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+      // Concatenate chunks
+      const totalLen = chunks.reduce((n, c) => n + c.length, 0);
+      const compressed = new Uint8Array(totalLen);
+      let offset = 0;
+      for (const chunk of chunks) { compressed.set(chunk, offset); offset += chunk.length; }
+
+      headers["Content-Encoding"] = "gzip";
+      headers["Vary"] = "Accept-Encoding";
+      return new Response(compressed, { headers });
+    } catch {
+      // Fallback to uncompressed if compression fails
+    }
+  }
+
+  return new Response(body, { headers });
+}
+
 // ---- Main Request Handler ----
 
 async function handleRequest(request: Request): Promise<Response> {
@@ -366,11 +447,12 @@ async function handleRequest(request: Request): Promise<Response> {
         });
       }
       const data: any = await res.json();
-      const respHeaders = new Headers({ "Content-Type": "application/json" });
-      forwardUpstreamHeaders(respHeaders, res);
-      return new Response(JSON.stringify(toAnthropicResponse(data, originalModel)), {
-        headers: respHeaders,
-      });
+      const upstreamHeaders: Record<string, string> = {};
+      for (const name of UPSTREAM_FORWARD_HEADERS) {
+        const value = res.headers.get(name);
+        if (value) upstreamHeaders[name] = value;
+      }
+      return jsonResponse(request, toAnthropicResponse(data, originalModel), upstreamHeaders);
     } else {
       // ---- Pass-through: send Anthropic body as-is to Anthropic upstream ----
       const anthRawBody = await request.text();
@@ -381,6 +463,23 @@ async function handleRequest(request: Request): Promise<Response> {
           { status: 400, headers: { "Content-Type": "application/json" } },
         );
       }
+
+      // Fast path: if no model override AND no image markers in raw string,
+      // skip the hasAnyImageInMessages traversal (expensive message array walk).
+      if (!route.modelOverride && !rawBodyMayHaveImages(anthRawBody)) {
+        const anthIsStreaming = !!(parsedBody?.stream);
+        const anthUpstreamSignal = anthIsStreaming ? createStreamSignal(request) : AbortSignal.timeout(60_000);
+        const anthPassRes = await safeUpstreamFetch(`${upstream}/v1/messages`, {
+          method: "POST",
+          headers: anthropicHeaders(request, key),
+          body: anthRawBody,
+          signal: anthUpstreamSignal,
+        });
+        if (!anthPassRes.ok) return upstreamErrorResponse(anthPassRes, await anthPassRes.text());
+        return anthPassRes;
+      }
+
+      // Slow path: need to check for images or apply model override
       const anthHasImages = hasAnyImageInMessages(parsedBody);
       const needsAnthMod = !!(route.modelOverride || anthHasImages);
       if (needsAnthMod) {
@@ -440,15 +539,15 @@ async function handleRequest(request: Request): Promise<Response> {
         });
       }
       const data: any = await res.json();
-      const respHeaders = new Headers({ "Content-Type": "application/json" });
-      forwardUpstreamHeaders(respHeaders, res);
-      return new Response(JSON.stringify(toOpenAIResponse(data, originalModel)), {
-        headers: respHeaders,
-      });
+      const upstreamHeaders: Record<string, string> = {};
+      for (const name of UPSTREAM_FORWARD_HEADERS) {
+        const value = res.headers.get(name);
+        if (value) upstreamHeaders[name] = value;
+      }
+      return jsonResponse(request, toOpenAIResponse(data, originalModel), upstreamHeaders);
     }
 
     // ---- Pass-through: send OpenAI body as-is to OpenAI upstream ----
-    // Single-pass image detection checks both formats simultaneously.
     const oaiRawBody = await request.text();
     let parsedOaiBody: any;
     try { parsedOaiBody = JSON.parse(oaiRawBody); } catch {
@@ -457,6 +556,23 @@ async function handleRequest(request: Request): Promise<Response> {
         { status: 400, headers: { "Content-Type": "application/json" } },
       );
     }
+
+    // Fast path: if no model override AND no image markers in raw string,
+    // skip the hasAnyImageInMessages traversal (expensive message array walk).
+    if (!route.modelOverride && !rawBodyMayHaveImages(oaiRawBody)) {
+      const oaiIsStreaming = !!(parsedOaiBody?.stream);
+      const oaiUpstreamSignal = oaiIsStreaming ? createStreamSignal(request) : AbortSignal.timeout(60_000);
+      const oaiPassRes = await safeUpstreamFetch(`${upstream}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+        body: oaiRawBody,
+        signal: oaiUpstreamSignal,
+      });
+      if (!oaiPassRes.ok) return upstreamErrorResponse(oaiPassRes, await oaiPassRes.text());
+      return oaiPassRes;
+    }
+
+    // Slow path: need to check for images or apply model override
     const oaiHasImages = hasAnyImageInMessages(parsedOaiBody);
     const needsOaiMod = !!(route.modelOverride || oaiHasImages);
     if (needsOaiMod) {
@@ -583,11 +699,12 @@ async function handleRequest(request: Request): Promise<Response> {
       }
     }
 
-    const respHeaders = new Headers({ "Content-Type": "application/json" });
-    forwardUpstreamHeaders(respHeaders, upstreamRes);
-    return new Response(JSON.stringify(respData), {
-      headers: respHeaders,
-    });
+    const upstreamHeaders: Record<string, string> = {};
+    for (const name of UPSTREAM_FORWARD_HEADERS) {
+      const value = upstreamRes.headers.get(name);
+      if (value) upstreamHeaders[name] = value;
+    }
+    return jsonResponse(request, respData, upstreamHeaders);
   }
 
   // ====================================================================
@@ -635,23 +752,22 @@ async function handleRequest(request: Request): Promise<Response> {
   // Root path: health-check info (no auth required)
   // ====================================================================
   if (route.path === '/' && request.method === 'GET') {
-    return new Response(JSON.stringify({
+    return jsonResponse(request, {
       name: "opencode-cowork-proxy",
       version: VERSION,
+      status: "ok",
+      uptime: formatUptime(Math.floor((Date.now() - START_TIME) / 1000)),
       upstream,
       routes: {
         "/go": GO_UPSTREAM,
         "/zen": ZEN_UPSTREAM,
       },
       endpoints: {
-        "/v1/messages": "Anthropic → upstream (translated if upstream=openai)",
-        "/v1/chat/completions": "OpenAI → upstream (translated if upstream=anthropic)",
-        "/v1/responses": "OpenAI Responses API → upstream Chat Completions",
-        "/v1/models": "Model discovery proxy",
+        "/v1/messages": "Anthropic Messages API — Claude Desktop / Claude Code",
+        "/v1/chat/completions": "OpenAI Chat Completions API — OpenAI SDK",
+        "/v1/responses": "OpenAI Responses API — translated to Chat Completions",
+        "/v1/models": "Model list — proxied from upstream with 5min cache",
       },
-    }, null, 2), {
-      headers: { "Content-Type": "application/json" },
-      status: 200,
     });
   }
 
