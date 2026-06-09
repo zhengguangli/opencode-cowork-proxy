@@ -1,6 +1,6 @@
 ---
 name: stream-debug
-description: "Debugging guide for SSE streaming issues in all 3 translation directions: Anthropic→OpenAI, OpenAI→Anthropic, Chat Completions→Responses API. MUST use for: streaming hangs, truncated responses, malformed events, out-of-order events, missing [DONE] terminator, missing message_stop, content_block_start without matching content_block_stop, double events on block type switches, inline <think> tags appearing in client output, mid-stream errors that don't propagate, abort/timeout signal issues. Covers event format differences, common test patterns using mock ReadableStream, and known pitfalls."
+description: "Debugging guide for SSE streaming issues in all 3 translation directions: Anthropic→OpenAI, OpenAI→Anthropic, Chat Completions→Responses API. MUST use for: streaming hangs, truncated responses, malformed events, out-of-order events, missing [DONE] terminator, missing message_stop, content_block_start without matching content_block_stop, double events on block type switches, inline <think> tags appearing in client output, mid-stream errors that don't propagate, abort/timeout signal issues, rate-limit headers lost on stream response. Covers SSE format differences, event vocabularies for all 3 formats, block lifecycle invariant, common bug diagnosis with root cause + fix, mock ReadableStream testing pattern, cross-chunk <think> tag test pattern, abort signal wiring."
 ---
 
 # Streaming Debug Guide
@@ -21,15 +21,17 @@ Streaming bugs are the most expensive class in the proxy — they fail silently,
 |-------|---------|----------------|
 | `message_start` | Stream begin | `message.id`, `message.role`, `message.model` |
 | `content_block_start` | Open content block | `index`, `content_block.{type,...}` |
-| `content_block_delta` | Append to block | `index`, `delta` |
+| `content_block_delta` | Append to block | `index`, `delta.{type,...}` |
 | `content_block_stop` | Close block | `index` |
-| `message_delta` | Update message fields | `delta.stop_reason`, `usage` |
+| `message_delta` | Update message | `delta.stop_reason`, `usage` |
 | `message_stop` | Stream end | (empty) |
 | `error` | Mid-stream error | `error.{type,message}` |
 
 ## OpenAI Chat Completions Event Vocabulary
 
-Each chunk is a choice with delta. Final chunk has `finish_reason: "stop"|"tool_calls"|"length"`. Terminates with `data: [DONE]\n\n`.
+Each chunk is `{choices: [{delta: {role?, content?, tool_calls?}, finish_reason?: "stop"|"tool_calls"|"length"}]}`. Terminates with `data: [DONE]\n\n`.
+
+`reasoning_content` appears as `{choices: [{delta: {reasoning_content: "..."}}]}` — it's a top-level delta field, not inside `content`.
 
 ## OpenAI Responses API Event Vocabulary
 
@@ -39,12 +41,12 @@ Each chunk is a choice with delta. Final chunk has `finish_reason: "stop"|"tool_
 
 ## The Block Lifecycle Invariant (CRITICAL)
 
-Every `content_block_start` MUST be followed by ≥1 delta and exactly one `content_block_stop`. Switching block types requires stop for old type before start for new type.
+Every `content_block_start` MUST be followed by ≥1 delta and exactly one `content_block_stop`. Block type switches require a stop for the old type before start for the new type:
 
 ```
 content_block_start (type:text)         ← open
 content_block_delta (text:"Hello ")     ← append
-content_block_stop (index:0)            ← close  ← MUST come before next start
+content_block_stop (index:0)            ← close (MUST come before next start)
 content_block_start (type:tool_use)     ← open new type
 content_block_delta (input_json_delta)  ← append
 content_block_stop (index:1)            ← close
@@ -52,27 +54,22 @@ content_block_stop (index:1)            ← close
 
 ---
 
-## Common Bugs and Fixes
+## Common Bugs: Diagnosis and Fix
 
-### Client hangs forever
-**Cause:** Missing terminator (`message_stop` or `data: [DONE]`).
-**Fix:** Ensure loop always emits terminator on last chunk.
+| Symptom | Root cause | Fix |
+|---------|-----------|-----|
+| Client hangs forever | Missing terminator (`message_stop` or `data: [DONE]`) | Ensure loop always emits terminator on last chunk |
+| Truncated response | `controller.enqueue` not called for last chunk; upstream not fully drained | Use `for await` loop, ensure every chunk forwarded |
+| Extra/double events | `content_block_start` emitted without checking current block state | Track `currentBlockType`/`currentBlockIndex`. Emit stop before next start. |
+| Malformed JSON in tool call arguments | Cross-chunk argument accumulation not joining strings | Buffer arguments by `tool_call_index`, concatenate strings, parse only at stop |
+| `<think>` tags in client output (Minimax) | Translator doesn't strip inline tags | Use `inThinkTag` + `thinkTagBuffer` state machine; handle cross-chunk; flush on stream end |
+| Token counts wrong | `message_delta` with usage not emitted, or emitted twice | Emit exactly once at stream end |
+| Connection resets at 60s | `createStreamSignal` not used — `AbortSignal.timeout(60_000)` kills streams | Use `createStreamSignal(request)` (120s timeout + client disconnect) |
+| Rate-limit headers lost | `forwardUpstreamHeaders()` not called on stream response | Call before returning streaming Response |
 
-### Truncated response
-**Cause:** `controller.enqueue` not called for last chunk, or upstream body not fully drained.
-**Fix:** Use `for await` loop, ensure each chunk forwarded.
+---
 
-### Extra/double events
-**Cause:** `content_block_start` emitted without checking current block state.
-**Fix:** Track `currentBlockType`/`currentBlockIndex`. Before new start, check if block is open and emit stop first.
-
-### Malformed JSON in tool call arguments
-**Cause:** Cross-chunk argument accumulation not joining strings.
-**Fix:** Buffer arguments by `tool_call_index`. Concatenate strings. Parse full JSON only at `content_block_stop`.
-
-### `<think>` tags in client output (Minimax)
-**Cause:** Translator doesn't strip inline tags.
-**Fix:** State machine with `inThinkTag` boolean + `thinkTagBuffer` string. Handle tags split across chunks. Flush buffer on stream end.
+## Cross-Chunk `<think>` Tag Stripping
 
 ```typescript
 let inThinkTag = false;
@@ -88,7 +85,7 @@ function processChunk(text: string): string {
     } else if (thinkTagBuffer.endsWith("</think>")) {
       inThinkTag = false;
       thinkTagBuffer = "";
-    } else if (!inThinkTag && !["<", "t", "h", "i", "n", "k"].some(p => thinkTagBuffer.endsWith(p))) {
+    } else if (!inThinkTag && !["<","t","h","i","n","k"].some(p => thinkTagBuffer.endsWith(p))) {
       out += thinkTagBuffer;
       thinkTagBuffer = "";
     }
@@ -98,18 +95,6 @@ function processChunk(text: string): string {
   return out;
 }
 ```
-
-### Token counts wrong
-**Cause:** `message_delta` with usage not emitted, or emitted twice.
-**Fix:** Emit exactly once at end.
-
-### Connection resets at 60s
-**Cause:** `createStreamSignal` not used. `AbortSignal.timeout(60_000)` kills streams.
-**Fix:** Use `createStreamSignal(request)` (120s timeout + client disconnect).
-
-### Rate-limit headers lost
-**Cause:** `forwardUpstreamHeaders()` not called on stream response.
-**Fix:** Add before returning streaming Response.
 
 ---
 
@@ -140,7 +125,7 @@ it("emits correct block lifecycle", async () => {
 });
 ```
 
-For `<think>` cross-chunk testing, split tag across chunks:
+Cross-chunk `<think>` tag test:
 ```typescript
 it("strips <think> tags split across chunks", async () => {
   const upstream = makeMockStream([
@@ -157,7 +142,7 @@ it("strips <think> tags split across chunks", async () => {
 
 ## Abort Signal Wiring
 
-`createStreamSignal()` in `src/index.ts`: 120s timeout + abort on client disconnect. Chunk loop must handle `AbortError` — break cleanly, no unhandled rejection.
+`createStreamSignal()` in `src/index.ts`: 120s timeout + abort on client disconnect. The chunk loop must handle `AbortError` — break cleanly, no unhandled rejection.
 
 ## Debugging Checklist
 

@@ -13,8 +13,8 @@ Bun.serve({
       const ms = Date.now() - start;
       console.log(`${method} ${url.pathname} ${res.status} ${ms}ms`);
       return res;
-    } catch (err: any) {
-      console.error(`${method} ${url.pathname} ERROR: ${err.message}`);
+    } catch (err: unknown) {
+      console.error(`${method} ${url.pathname} ERROR: ${err instanceof Error ? err.message : String(err)}`);
       return new Response("Internal Server Error", { status: 500 });
     }
   },

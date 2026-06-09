@@ -12,7 +12,7 @@ function parseToolArguments(value: string | undefined): Record<string, unknown> 
   }
 }
 
-function imageSourceFromUrl(url: string | undefined): any {
+function imageSourceFromUrl(url: string | undefined): Record<string, unknown> {
   const match = (url || "").match(/^data:([^;]+);base64,(.*)$/);
   if (match) {
     return { type: "base64", media_type: match[1], data: match[2] };
@@ -20,20 +20,20 @@ function imageSourceFromUrl(url: string | undefined): any {
   return { type: "url", url: url || "" };
 }
 
-export function formatOpenAIToAnthropic(body: any): any {
+export function formatOpenAIToAnthropic(body: Record<string, unknown>): Record<string, unknown> {
   const { model, messages, temperature, max_tokens, top_p, stop, tools, stream, tool_choice, response_format, user } = body;
 
   // Separate system messages from conversation
   const systemMessages: string[] = [];
-  const conversationMessages: any[] = [];
+  const conversationMessages: Array<Record<string, unknown>> = [];
 
   for (const msg of messages || []) {
     if (msg.role === "system") {
       if (typeof msg.content === "string") {
         systemMessages.push(msg.content);
       } else if (Array.isArray(msg.content)) {
-        msg.content.forEach((part: any) => {
-          if (part.type === "text") systemMessages.push(part.text);
+        msg.content.forEach((part: Record<string, unknown>) => {
+          if (part.type === "text") systemMessages.push(part.text as string);
         });
       }
     } else {
@@ -42,31 +42,32 @@ export function formatOpenAIToAnthropic(body: any): any {
   }
 
   // Convert OpenAI messages to Anthropic format
-  const anthropicMessages: any[] = [];
+  const anthropicMessages: Array<Record<string, unknown>> = [];
 
   for (let i = 0; i < conversationMessages.length; i++) {
     const msg = conversationMessages[i];
 
     if (msg.role === "user") {
-      const content: any[] = [];
+      const content: Array<Record<string, unknown>> = [];
 
       if (typeof msg.content === "string") {
         content.push({ type: "text", text: msg.content });
       } else if (Array.isArray(msg.content)) {
-        msg.content.forEach((part: any) => {
+        (msg.content as Array<Record<string, unknown>>).forEach((part: Record<string, unknown>) => {
           if (part.type === "text") {
-            content.push({ type: "text", text: part.text });
+            content.push({ type: "text", text: part.text as string });
           } else if (part.type === "image_url") {
+            const imageUrl = part.image_url as Record<string, unknown> | undefined;
             content.push({
               type: "image",
-              source: imageSourceFromUrl(part.image_url?.url),
+              source: imageSourceFromUrl(imageUrl?.url as string | undefined),
             });
           }
         });
       }
 
       // Collect tool results from immediately following tool messages
-      const nextMsg = conversationMessages[i + 1];
+      const nextMsg = conversationMessages[i + 1] as Record<string, unknown> | undefined;
       if (nextMsg && nextMsg.role === "tool") {
         i++; // consume the tool message
 

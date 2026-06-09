@@ -10,10 +10,10 @@ function parseToolArguments(value: string | undefined): Record<string, unknown> 
   }
 }
 
-export function formatOpenAIToAnthropic(completion: any, model: string): any {
+export function formatOpenAIToAnthropic(completion: Record<string, unknown>, model: string): Record<string, unknown> {
   const messageId = "msg_" + Date.now();
 
-  let content: any = [];
+  let content: Array<Record<string, unknown>> = [];
   const message = completion.choices?.[0]?.message;
 
   if (message?.reasoning_content) {
@@ -25,7 +25,7 @@ export function formatOpenAIToAnthropic(completion: any, model: string): any {
   }
 
   if (message?.tool_calls) {
-    content.push(...message.tool_calls.map((item: any) => ({
+    content.push(...message.tool_calls.map((item: Record<string, unknown>) => ({
       type: 'tool_use',
       id: item.id,
       name: item.function?.name,
@@ -41,7 +41,7 @@ export function formatOpenAIToAnthropic(completion: any, model: string): any {
   else if (finishReason === "stop") stopReason = "end_turn";
   else if (finishReason === "content_filter" || finishReason === "insufficient_system_resource") stopReason = "max_tokens";
 
-  const result: any = {
+  const result: { id: string; type: string; role: string; content: Array<Record<string, unknown>>; stop_reason: string; stop_sequence: null; model: string; usage?: Record<string, unknown> } = {
     id: messageId,
     type: "message",
     role: "assistant",

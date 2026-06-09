@@ -15,13 +15,13 @@ function stripThinkTags(text: string): string {
   return text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 }
 
-export function formatChatCompletionsToResponses(completion: any, model: string): any {
-  const choice = completion.choices?.[0] || {};
-  const message = choice.message || {};
+export function formatChatCompletionsToResponses(completion: Record<string, unknown>, model: string): Record<string, unknown> {
+  const choice = (completion.choices as Array<Record<string, unknown>>)?.[0] || {};
+  const message = (choice.message as Record<string, unknown>) || {};
 
   const respId = "resp_" + Date.now() + Math.random().toString(36).slice(2, 6);
-  const status = mapFinishReason(choice.finish_reason);
-  const output: any[] = [];
+  const status = mapFinishReason(choice.finish_reason as string | undefined);
+  const output: Array<Record<string, unknown>> = [];
 
   // 1. DeepSeek: reasoning_content → type:"reasoning" output item (before message)
   if (message.reasoning_content) {
@@ -35,7 +35,7 @@ export function formatChatCompletionsToResponses(completion: any, model: string)
   // 2. Content → type:"message" output item with output_text content block
   const contentText = message.content ? stripThinkTags(message.content) : message.content;
   if (contentText || message.tool_calls) {
-    const contentBlocks: any[] = [];
+    const contentBlocks: Array<Record<string, unknown>> = [];
 
     // Text content
     if (contentText) {
@@ -45,7 +45,7 @@ export function formatChatCompletionsToResponses(completion: any, model: string)
       });
     }
 
-    const msgItem: any = {
+    const msgItem: { id: string; type: string; role: string; content: Array<Record<string, unknown>>; status: string } = {
       id: "msg_" + Date.now() + Math.random().toString(36).slice(2, 6),
       type: "message",
       role: "assistant",
@@ -70,7 +70,7 @@ export function formatChatCompletionsToResponses(completion: any, model: string)
   }
 
   // 4. Build response object
-  const response: any = {
+  const response: { id: string; object: string; created_at: number; model: string; status: string; output: Array<Record<string, unknown>>; usage?: Record<string, unknown> } = {
     id: respId,
     object: "response",
     created_at: Math.floor(Date.now() / 1000),

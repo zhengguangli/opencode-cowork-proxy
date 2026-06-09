@@ -1,6 +1,6 @@
 import { hashSystemPrompt } from '../../cache';
 
-function translateImageBlock(part: any): any {
+function translateImageBlock(part: Record<string, unknown>): Record<string, unknown> | null {
   const src = part.source;
   if (!src) return null;
   if (src.type === "url") {
@@ -22,13 +22,13 @@ export function formatAnthropicToOpenAI(body: any): any {
         }
         if (!Array.isArray(msg.content)) return [];
 
-        const result: any[] = [];
+        const result: Array<Record<string, unknown>> = [];
 
         if (msg.role === "assistant") {
-          const assistantMsg: any = { role: "assistant", content: null };
+          const assistantMsg: { role: string; content: string | null; reasoning_content?: string; tool_calls?: Array<Record<string, unknown>> } = { role: "assistant", content: null };
           let text = "";
           let reasoningContent = "";
-          const toolCalls: any[] = [];
+          const toolCalls: Array<Record<string, unknown>> = [];
 
           msg.content.forEach((part: any) => {
             if (part.type === "text") {
@@ -54,8 +54,8 @@ export function formatAnthropicToOpenAI(body: any): any {
 
         if (msg.role === "user") {
           let userText = "";
-          const contentParts: any[] = [];
-          const toolResults: any[] = [];
+          const contentParts: Array<Record<string, unknown>> = [];
+          const toolResults: Array<Record<string, unknown>> = [];
 
           msg.content.forEach((part: any) => {
             if (part.type === "text") {

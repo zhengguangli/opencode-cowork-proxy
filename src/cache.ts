@@ -4,11 +4,11 @@
  */
 
 /** djb2 hash of system prompt text, used as prompt_cache_key for OpenAI node affinity */
-export function hashSystemPrompt(system: string | any[] | undefined): string | null {
+export function hashSystemPrompt(system: string | Array<Record<string, unknown>> | undefined): string | null {
   if (!system) return null;
   const text = typeof system === 'string'
     ? system
-    : system.map((s: any) => s.text || '').join('\n');
+    : system.map((s: Record<string, unknown>) => String(s.text || '')).join('\n');
   if (!text.trim()) return null;
   let hash = 5381;
   for (let i = 0; i < text.length; i++) {
@@ -18,7 +18,7 @@ export function hashSystemPrompt(system: string | any[] | undefined): string | n
   return 'cache-' + Math.abs(hash).toString(36);
 }
 
-function tokenCount(...values: any[]): number {
+function tokenCount(...values: unknown[]): number {
   for (const value of values) {
     if (typeof value === 'number' && Number.isFinite(value)) return value;
   }
@@ -26,7 +26,7 @@ function tokenCount(...values: any[]): number {
 }
 
 /** Extract cached token count from common OpenAI-compatible usage shapes. */
-export function extractCachedTokens(usage: any): number {
+export function extractCachedTokens(usage: Record<string, unknown>): number {
   return tokenCount(
     usage?.prompt_tokens_details?.cached_tokens,
     usage?.input_tokens_details?.cached_tokens,
@@ -36,7 +36,7 @@ export function extractCachedTokens(usage: any): number {
 }
 
 /** Extract input token count from OpenAI, Anthropic, and OpenAI-compatible providers. */
-export function extractInputTokens(usage: any): number {
+export function extractInputTokens(usage: Record<string, unknown>): number {
   return tokenCount(
     usage?.prompt_tokens,
     usage?.input_tokens,
@@ -55,12 +55,12 @@ export function extractInputTokens(usage: any): number {
  * are separate counts with no overlap — that would incorrectly subtract cached tokens that
  * were never part of the input token count to begin with.
  */
-export function extractUncachedInputTokens(usage: any): number {
+export function extractUncachedInputTokens(usage: Record<string, unknown>): number {
   return Math.max(0, extractInputTokens(usage) - extractCachedTokens(usage));
 }
 
 /** Extract output token count from OpenAI, Anthropic, and OpenAI-compatible providers. */
-export function extractOutputTokens(usage: any): number {
+export function extractOutputTokens(usage: Record<string, unknown>): number {
   return tokenCount(
     usage?.completion_tokens,
     usage?.output_tokens,
@@ -74,7 +74,7 @@ export function extractOutputTokens(usage: any): number {
  * Handles both standard OpenAI (prompt_tokens_details.cached_tokens)
  * and DeepSeek-specific (prompt_cache_hit_tokens) cache formats.
  */
-export function mapUsage(usage: any): any {
+export function mapUsage(usage: Record<string, unknown>): Record<string, unknown> {
   if (!usage) return undefined;
 
   const hasDeepSeekCache = usage.prompt_cache_hit_tokens !== undefined;

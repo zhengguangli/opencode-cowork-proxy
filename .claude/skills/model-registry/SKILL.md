@@ -1,6 +1,6 @@
 ---
 name: model-registry
-description: "Source of truth for which AI models exist on which upstream (opencode.ai/zen/go vs opencode.ai/zen), what capabilities each has (vision, thinking, function calling), pricing tier (free vs paid), and known quirks. MUST consult before: adding a new model, changing vision model forcing logic, debugging 'model not found' errors, recommending a model, deciding which upstream hosts a feature, or any time a hardcoded model name appears in the proxy. Knowledge here is the result of live upstream /v1/models calls — never trust stale memory."
+description: "Source of truth for which AI models exist on which upstream (opencode.ai/zen/go vs opencode.ai/zen), their capabilities (vision, thinking, function calling), pricing tier (free vs paid), and known quirks. MUST consult before: adding a new model, changing vision model forcing logic, debugging 'model not found' errors, recommending a model to a user, deciding which upstream hosts a feature, or any time a hardcoded model name appears in proxy code. Knowledge here is the result of live upstream /v1/models calls — never trust stale memory; verify with curl before relying on catalog data."
 ---
 
 # Model Registry
@@ -9,10 +9,10 @@ The proxy routes requests to two upstreams with different model catalogs and pri
 
 ## The Two Upstreams
 
-| Upstream | URL | Pricing | Prefix |
-|----------|-----|---------|--------|
+| Upstream | URL | Pricing | Path Prefix |
+|----------|-----|---------|------------|
 | **Go** (paid) | `https://opencode.ai/zen/go` | All paid | `/go` |
-| **Zen** (free + paid) | `https://opencode.ai/zen` | Mix | `/zen` |
+| **Zen** (free + paid) | `https://opencode.ai/zen` | Mix of free + paid | `/zen` |
 
 Default (no prefix) is **Go**.
 
@@ -45,7 +45,7 @@ nemotron-3-ultra-free
 nemotron-3-super-free
 ```
 
-**Paid tier (all on /zen):**
+**Paid tier (on /zen):**
 ```
 claude-opus-4-{1,5,6,7,8}, claude-sonnet-4-{,5,6}, claude-haiku-4-5
 gemini-3.5-flash, gemini-3.1-pro, gemini-3-flash
@@ -62,13 +62,13 @@ qwen3.6-plus, qwen3.5-plus
 
 ## Vision-Capable Models
 
-When proxy detects an image: if requested model is already vision-capable on routed upstream → keep it. Otherwise → fall back to default vision model.
+When the proxy detects an image in the request: if the requested model is already vision-capable on the routed upstream → keep it. Otherwise → fall back to the upstream's default vision model.
 
 ### Default Vision Models
 
-| Upstream | Default | Why |
-|----------|---------|-----|
-| `/go` | `qwen3.6-plus` | Multilingual + vision |
+| Upstream | Default | Rationale |
+|----------|---------|-----------|
+| `/go` | `qwen3.6-plus` | Multilingual + vision on paid tier |
 | `/zen` | `mimo-v2.5-free` | Multimodal + actually free |
 
 ### Selection Logic (`src/index.ts:getVisionModel`)
@@ -85,29 +85,33 @@ function getVisionModel(upstream: string, requestedModel?: string | null): strin
 }
 ```
 
-Safe default: unknown models → NOT vision-capable → force-override. When adding a vision-capable model, add to `VISION_CAPABLE_GO` and/or `VISION_CAPABLE_ZEN`.
+Safe default: unknown models → NOT vision-capable → force-override. When adding a vision-capable model, add it to `VISION_CAPABLE_GO` and/or `VISION_CAPABLE_ZEN` in `src/index.ts`.
 
 ## Model Quirks
 
 | Model | Quirk |
 |-------|-------|
-| **Minimax (m2.5, m2.7, m3, m3-free)** | Embeds reasoning in inline `<think>` tags in `content` instead of `reasoning_content`. Strip with state machine. |
-| **DeepSeek (v3, v4-*)** | Accepts `thinking: {type: "enabled"}`. `type:"reasoning"` items merge with next assistant message. |
-| **qwen3.6-plus-free** | Free promotion ended 2026-06-07. Use `mimo-v2.5-free` for /zen vision. |
+| **Minimax (m2.5, m2.7, m3, m3-free)** | Embeds reasoning in inline `<think>` tags in `content` field instead of `reasoning_content`. Must strip with state machine. |
+| **DeepSeek (v3, v4-*)** | Accepts `thinking: {type: "enabled"}` param. `type:"reasoning"` items in Responses API input merge with next assistant message. |
+| **qwen3.6-plus-free** | Free promotion ended 2026-06-07. Use `mimo-v2.5-free` for `/zen` vision fallback. |
 
-## How to Update
+## How to Update Catalog
 
-1. `curl -s https://opencode.ai/zen/v1/models -H "Authorization: Bearer $KEY" | jq '.data[].id'`
-2. `curl -s https://opencode.ai/zen/go/v1/models -H "Authorization: Bearer $KEY" | jq '.data[].id'`
-3. Update catalog tables above
-4. Note date in "Last verified"
-5. If pricing changed, add quirk entry
+```bash
+curl -s https://opencode.ai/zen/v1/models -H "Authorization: Bearer $KEY" | jq '.data[].id'
+curl -s https://opencode.ai/zen/go/v1/models -H "Authorization: Bearer $KEY" | jq '.data[].id'
+```
 
-## When Adding a Model
+1. Run both curls
+2. Update catalog tables above
+3. Note date in "Last verified"
+4. If pricing changed, add quirk entry
+5. If vision-capable model added/removed, update `VISION_CAPABLE_GO`/`VISION_CAPABLE_ZEN` in `src/index.ts`
 
-1. Verify exists in upstream `/v1/models` (live curl, not memory)
-2. Update `src/index.ts` if needs special handling (vision forcing)
+## When Adding a New Model
+
+1. Verify model exists in upstream `/v1/models` via live curl (not memory)
+2. If vision-capable → add to `VISION_CAPABLE_GO`/`VISION_CAPABLE_ZEN` in `src/index.ts`
 3. Update README.md model tables
-4. Deploy
-5. Update this skill's catalog tables
-6. If vision-capable → add to `VISION_CAPABLE_GO`/`VISION_CAPABLE_ZEN`
+4. Update this skill's catalog tables
+5. Deploy

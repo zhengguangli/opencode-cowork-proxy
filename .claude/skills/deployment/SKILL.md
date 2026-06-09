@@ -1,6 +1,6 @@
 ---
 name: deployment
-description: "Step-by-step deployment instructions for the OpenCode Cowork Proxy. Three targets: Cloudflare Workers (wrangler), Vercel (bunx vercel deploy), standalone Bun binary on macOS (LaunchAgent). MUST use for: any deploy request, build failure, CI/CD issue, model update, config change in wrangler.toml/package.json/tsconfig.json, LaunchAgent setup/reload, port change, env var change, new GitHub Actions secret. Includes troubleshooting for common failures (Vercel build hang from hono/vercel adapter, CF Workers 429, binary arch mismatch, LaunchAgent won't start)."
+description: "Step-by-step deployment instructions for the OpenCode Cowork Proxy. Three targets: Cloudflare Workers (wrangler), Vercel (bunx vercel deploy), standalone Bun binary on macOS (LaunchAgent). MUST use for: any deploy request (CF/Vercel/binary/all), build failure debugging, CI/CD pipeline issues, model update deploy, config change in wrangler.toml/package.json/tsconfig.json, LaunchAgent setup/reload, port change, env var change, new GitHub Actions secret, version bump. Includes troubleshooting: Vercel build hang from hono/vercel adapter, CF Workers 429 rate limiting, binary arch mismatch, LaunchAgent won't start, lockfile out of sync."
 ---
 
 # Deployment
@@ -12,10 +12,10 @@ The proxy has three deployment targets, three entry points, and three sets of co
 | Entry | Target | Runtime | Notes |
 |-------|--------|---------|-------|
 | `src/index.ts` | CF Workers, Vercel | Hono (Worker runtime) | Exports `app` as default |
-| `server.ts` | Bun standalone, dev | Bun built-in HTTP | Reads `PORT` env var |
+| `server.ts` | Bun standalone, dev | Bun built-in HTTP | Reads `PORT` env var (default 18787) |
 | `api/[[...route]].ts` | Vercel only | Hono (serverless) | Re-exports `app.fetch` directly — NO `hono/vercel` adapter |
 
-`src/version.ts` imports `package.json` for version. Never add runtime version detection.
+`src/version.ts` imports `package.json` for version. Never add runtime version detection (git rev-parse, env var fallbacks).
 
 ---
 
@@ -39,9 +39,9 @@ bun test && bunx vercel deploy --prod
 curl -s https://opencode-cowork-proxy.vercel.app/
 ```
 
-Entry: `api/[[...route]].ts` — must export `app.fetch` directly.
+Entry: `api/[[...route]].ts` must export `app.fetch` directly.
 
-**DO NOT add `hono/vercel` adapter** — causes builds to hang. **`build` script auto-detection** — binary build is named `build:binary` to prevent Vercel from compiling macOS binary.
+**DO NOT add `hono/vercel` adapter** — causes builds to hang indefinitely. **`build` script auto-detection:** Binary build is named `build:binary` (not `build`) to prevent Vercel from trying to compile a macOS binary during deployment.
 
 ---
 
@@ -56,7 +56,7 @@ chmod +x /usr/local/bin/opencode-cowork-proxy
 LaunchAgent plist: `~/Library/LaunchAgents/ai.opencode.proxy.plist`
 
 ```bash
-# Reload
+# Reload (bootout → bootstrap, never try to "restart" directly)
 launchctl bootout gui/$(id -u)/ai.opencode.proxy 2>/dev/null
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.opencode.proxy.plist
 
@@ -97,4 +97,4 @@ Required secrets: `CF_API_TOKEN`, `VERCEL_TOKEN`.
 - [ ] No uncommitted changes in `src/`, `test/`, `wrangler.toml`, `package.json`
 - [ ] README.md updated if adding/removing/changing a model
 - [ ] LaunchAgent plist updated if port or env var changed
-- [ ] If adding a model, updated `model-registry` skill
+- [ ] If adding a model, updated `model-registry` skill catalog

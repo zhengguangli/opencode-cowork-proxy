@@ -11,7 +11,7 @@
  * - Usage in final chunk → response.completed
  */
 import { mapUsage } from '../../cache';
-const IS_DEBUG = typeof process !== 'undefined' && process.env?.DEBUG;
+import { IS_DEBUG } from '../../config';
 
 type ActiveItemType = "text" | "reasoning" | "function_call" | null;
 
@@ -24,10 +24,11 @@ export function streamChatCompletionsToResponses(
   const createdTime = Math.floor(Date.now() / 1000);
 
   const sseEncoder = new TextEncoder();
+  const decoder = new TextDecoder();
   const enqueueSSE = (
     controller: ReadableStreamDefaultController,
     eventType: string,
-    data: any
+    data: Record<string, unknown>
   ) => {
     controller.enqueue(
       sseEncoder.encode(
@@ -45,18 +46,17 @@ export function streamChatCompletionsToResponses(
       let reasoningAccum = "";
       let thinkTagBuffer = "";
       let inThinkTag = false;
-      let lastUsage: any = null;
+      let lastUsage: Record<string, unknown> | null = null;
       let finishReason: string | null = null;
       let toolCallAccum = new Map<
         number,
         { id: string; name: string; args: string }
       >();
 
-      const outputItems: any[] = [];
+      const outputItems: Array<Record<string, unknown>> = [];
       let activeToolCallIndex: number | null = null;
 
       const reader = openaiStream.getReader();
-      const decoder = new TextDecoder();
       let buffer = "";
 
       function emitCreated() {
@@ -151,7 +151,7 @@ export function streamChatCompletionsToResponses(
           if (item?.type === "message") {
             // Update content blocks with accumulated text
             const textPart = item.content.find(
-              (c: any) => c.type === "output_text"
+              (c: Record<string, unknown>) => c.type === "output_text"
             );
             if (textPart) textPart.text = textAccum;
             enqueueSSE(controller, "response.content_part.done", {
@@ -258,7 +258,7 @@ export function streamChatCompletionsToResponses(
         return result || null; // null if nothing left after stripping
       }
 
-      function processStreamChunk(parsed: any) {
+      function processStreamChunk(parsed: Record<string, unknown>) {
         // Capture usage from final chunk
         if (parsed.usage) {
           lastUsage = parsed.usage;
@@ -434,7 +434,7 @@ export function streamChatCompletionsToResponses(
           flushActiveItem(true);
         }
         // Emit response.incomplete with partial usage
-        const finalResponse: any = {
+        const finalResponse: { id: string; object: string; created_at: number; model: string; status: string; output: Array<Record<string, unknown>>; usage?: Record<string, unknown> } = {
           id: respId,
           object: "response",
           created_at: createdTime,
@@ -443,7 +443,7 @@ export function streamChatCompletionsToResponses(
           output: outputItems,
         };
         if (lastUsage) {
-          finalResponse.usage = mapUsage(lastUsage);
+          finalResponse.usage = mapUsage(lastUsage as Record<string, unknown>);
         }
         enqueueSSE(controller, "response.incomplete", {
           type: "response.incomplete",
@@ -478,7 +478,7 @@ export function streamChatCompletionsToResponses(
         status = "incomplete";
       }
 
-      const finalResponse: any = {
+      const finalResponse: { id: string; object: string; created_at: number; model: string; status: string; output: Array<Record<string, unknown>>; usage?: Record<string, unknown> } = {
         id: respId,
         object: "response",
         created_at: createdTime,
@@ -489,7 +489,7 @@ export function streamChatCompletionsToResponses(
 
       // Map usage
       if (lastUsage) {
-        finalResponse.usage = mapUsage(lastUsage);
+        finalResponse.usage = mapUsage(lastUsage as Record<string, unknown>);
       }
 
       const terminalEvent = status === "completed" ? "response.completed"

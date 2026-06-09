@@ -1,6 +1,6 @@
 ---
 name: field-mapping
-description: "Comprehensive reference for Anthropic↔OpenAI AND OpenAI Responses API↔Chat Completions field mappings. Load this skill before: adding a new field to the translation layer, fixing a mapping bug, verifying that a field maps correctly in both directions, debugging a response shape mismatch, or writing a test for a new translator field. Covers: text/image/tool_use/tool_result/thinking content blocks, usage tokens (with cache_read/cache_creation distinction), cache control, stop reasons, Responses API input items, inline <think> tag handling (Minimax quirk)."
+description: "Comprehensive reference for Anthropic↔OpenAI AND OpenAI Responses API↔Chat Completions field mappings. MUST load this skill before: adding a new field to the translation layer, fixing a mapping bug, verifying that a field maps correctly in both directions, debugging a response shape mismatch, writing a test for a new translator field, checking usage token mapping or cache control. Covers: text/image/tool_use/tool_result/thinking content blocks, usage tokens (cache_read/cache_creation distinction), cache control, stop reasons, Responses API input items, inline <think> tag handling (Minimax quirk), originalModel invariant, Common Bug Patterns (Responses API)."
 ---
 
 # Field Mapping Reference
@@ -21,7 +21,7 @@ Authoritative reference for the proxy's translation layer. **Load before any non
 | Anthropic | OpenAI Chat Completions | OpenAI Responses |
 |-----------|------------------------|------------------|
 | `{type:"text", text:"..."}` | `content: "..."` (string) or `{type:"text", text:"..."}` (part) | `{type:"input_text", text:"..."}` |
-| `{type:"text", text:"...", cache_control:{type:"ephemeral"}}` | + `prompt_cache_key` from system prompt hash | Not directly mapped |
+| `{type:"text", text:"...", cache_control:{type:"ephemeral"}}` | `prompt_cache_key` from system prompt hash | Not directly mapped |
 
 ### Image
 
@@ -31,7 +31,7 @@ Authoritative reference for the proxy's translation layer. **Load before any non
 | `{type:"image", source:{type:"base64", media_type:"image/png", data:"..."}}` | `{type:"image_url", image_url:{url:"data:image/png;base64,..."}}` | `{type:"input_image", image_url:{url:"data:image/png;base64,..."}}` |
 | (no equivalent) | (no equivalent) | `{type:"input_image", source:{type:"base64", media_type:"...", data:"..."}}` — must convert to `image_url` data URI |
 
-**Rule:** `input_image` can carry image in EITHER `image_url` OR `source.{url,data,media_type}`. Both must produce a Chat Completions `image_url` data URI.
+**Rule:** `input_image` can carry image in EITHER `image_url` OR `source.{type,data,media_type}`. Both must produce a Chat Completions `image_url` data URI.
 
 ### Tool Use / Tool Calls
 
@@ -46,14 +46,14 @@ Authoritative reference for the proxy's translation layer. **Load before any non
 
 | Anthropic | OpenAI Chat Completions | OpenAI Responses |
 |-----------|------------------------|------------------|
-| `{type:"thinking", thinking:"..."}` | `reasoning_content: "..."` (top-level field) | Output `{type:"reasoning", reasoning_text:"..."}` |
-| Inline `<think>...</think>` (Minimax quirk) | Strip in translator | Strip in translator |
+| `{type:"thinking", thinking:"..."}` | `reasoning_content: "..."` (top-level field on message) | Output `{type:"reasoning", reasoning_text:"..."}` |
+| Inline `<think>...</think>` (Minimax quirk) | Strip in translator before emitting | Strip in translator before emitting |
 
-**Rule:** `reasoning_content` is top-level on the message, NOT a content part. DeepSeek `type:"reasoning"` items in Responses API input must buffer and merge with next assistant message.
+**Rule:** `reasoning_content` is top-level on the message, NOT a content part. DeepSeek `type:"reasoning"` items in Responses API input must buffer and merge with the next assistant message as `reasoning_content`.
 
 ### Cache Control
 
-Anthropic → OpenAI doesn't have 1:1 mapping. The proxy hashes system prompt → sets `prompt_cache_key` for node-affinity caching. `extractUncachedInputTokens()` in `src/cache.ts` subtracts cached tokens to avoid double-counting.
+Anthropic → OpenAI doesn't have 1:1 cache control mapping. The proxy hashes system prompt → sets `prompt_cache_key` for node-affinity caching. `extractUncachedInputTokens()` in `src/cache.ts` subtracts cached tokens to avoid double-counting.
 
 ---
 
@@ -61,12 +61,12 @@ Anthropic → OpenAI doesn't have 1:1 mapping. The proxy hashes system prompt �
 
 | Anthropic | OpenAI Chat Completions | Notes |
 |-----------|------------------------|-------|
-| `usage.input_tokens` | `usage.prompt_tokens` | Cached tokens reported separately |
+| `usage.input_tokens` | `usage.prompt_tokens` | Cached tokens are INCLUDED in this total |
 | `usage.output_tokens` | `usage.completion_tokens` | |
 | `usage.cache_read_input_tokens` | `usage.prompt_tokens_details.cached_tokens` | |
 | `usage.cache_creation_input_tokens` | (no equivalent) | Set to 0 or omitted |
 
-**Double-counting trap:** `prompt_tokens` INCLUDES cached tokens. If you also report `cache_read_input_tokens`, you count twice. Use `extractUncachedInputTokens()`.
+**Double-counting trap:** `prompt_tokens` INCLUDES cached tokens. If you also report `cache_read_input_tokens`, you count twice. Use `extractUncachedInputTokens()`:
 
 ```typescript
 export function extractUncachedInputTokens(usage: any): number {
@@ -86,7 +86,7 @@ export function extractUncachedInputTokens(usage: any): number {
 | `stop_reason: "end_turn"` | `finish_reason: "stop"` | Normal completion |
 | `stop_reason: "tool_use"` | `finish_reason: "tool_calls"` | Model wants to call a tool |
 | `stop_reason: "max_tokens"` | `finish_reason: "length"` | Truncated |
-| (no equivalent) | `finish_reason: "insufficient_system_resource"` | DeepSeek overcapacity → `status:"incomplete"` |
+| (no equivalent) | `finish_reason: "insufficient_system_resource"` | DeepSeek overcapacity → map to `status:"incomplete"` |
 
 ---
 
@@ -99,36 +99,22 @@ Content parts: `{type:"text"}`, `{type:"input_text"}`, `{type:"input_image"}` (w
 Role mapping: `"developer"` → `"system"` (Chat Completions has no developer role).
 
 ### `{type: "reasoning", reasoning_text: "..."}` (DeepSeek)
-Buffer `reasoning_text`. Merge with next `type:"message"` `role:"assistant"` by setting `reasoning_content`.
+Buffer `reasoning_text`. Merge with the next `type:"message"` `role:"assistant"` by setting `reasoning_content` on the assistant message.
 
 ### `{type: "function_call_output", call_id: "...", output: "..."}`
 → `{role: "tool", tool_call_id: call_id, content: output}`
 
 ### `{type: "function_call", call_id: "...", name: "...", arguments: "..."}`
-Merge with preceding assistant message's `tool_calls`, or create new assistant message.
+Merge with preceding assistant message's `tool_calls` array, or create a new assistant message if none precedes.
 
 ### `instructions` (top-level)
-Becomes system message at start of input array (unless `system`/`developer` already exists).
-
----
-
-## Streaming Event Lifecycle (Quick Reference)
-
-For full details, see `stream-debug` skill.
-
-### Anthropic → OpenAI
-For each `content_block_start`: open choice with delta → append on `content_block_delta` → close on `content_block_stop` → emit usage on `message_delta` → `data: [DONE]` on `message_stop`.
-
-### OpenAI → Anthropic
-For each delta: first content → `message_start` + `content_block_start` → `content_block_delta` → on finish → `content_block_stop` for any open block → `message_delta` → `message_stop`.
-
-**Critical:** Every `content_block_start` MUST have matching `content_block_stop`. Block type switches require explicit stop before next start.
+Becomes system message at the start of the input array (unless a `system`/`developer` message already exists).
 
 ---
 
 ## The `originalModel` Invariant
 
-The body's original `model` is preserved for the response translator even when routing overrides it. The client always sees what it sent.
+The body's original `model` is preserved for the response translator even when routing overrides it. The client always sees what it sent:
 
 ```typescript
 const originalModel = req.model;
@@ -141,8 +127,10 @@ if (hasImages(req)) req.model = getVisionModel(upstream, req.model);
 
 ## Common Bug Patterns (Responses API)
 
-1. **Tool calls dropped from assistant content** (CRITICAL) — `translateAssistantContent()` must call `extractToolCalls()`.
-2. **`input_text` content blocks dropped** (HIGH) — Filter must include `input_text`, not just `text`.
-3. **`input_image` with `source.type:"base64"` dropped** (MEDIUM) — Must handle BOTH `image_url` and `source` shapes.
-4. **Inline `<think>` tags in content** (HIGH) — Strip with state machine (`inThinkTag` + `thinkTagBuffer`).
-5. **`finish_reason:"insufficient_system_resource"` not mapped** (MEDIUM) → `status:"incomplete"`.
+| # | Bug | Severity | Fix |
+|---|-----|----------|-----|
+| 1 | Tool calls dropped from assistant content | **CRITICAL** | `translateAssistantContent()` must call `extractToolCalls()` |
+| 2 | `input_text` content blocks dropped | **HIGH** | Filter must include `input_text`, not just `text` |
+| 3 | `input_image` with `source.type:"base64"` dropped | **MEDIUM** | Handle BOTH `image_url` and `source` shapes |
+| 4 | Inline `<think>` tags in content (Minimax) | **HIGH** | Strip with `inThinkTag` + `thinkTagBuffer` state machine |
+| 5 | `finish_reason:"insufficient_system_resource"` not mapped | **MEDIUM** | Map to `status:"incomplete"` |

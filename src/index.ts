@@ -1,5 +1,4 @@
 import { Hono } from 'hono';
-import { extractApiKey, validateApiKey, authErrorResponse } from './auth';
 import { formatAnthropicToOpenAI } from './translate/request/anthropic-to-openai';
 import { formatOpenAIToAnthropic } from './translate/request/openai-to-anthropic';
 import { formatOpenAIToAnthropic as toAnthropicResponse } from './translate/response/openai-to-anthropic';
@@ -10,391 +9,10 @@ import { formatResponsesToChatCompletions } from './translate/request/responses-
 import { formatChatCompletionsToResponses } from './translate/response/chat-completions-to-responses';
 import { streamChatCompletionsToResponses } from './translate/stream/chat-completions-to-responses';
 import { VERSION } from './version';
-
-// NOTE: These upstream URLs intentionally do NOT include /v1. Each route handler appends
-// the appropriate path segment (e.g., /v1/messages, /chat/completions). This prevents
-// double /v1/ when the handler adds its own prefix.
-const GO_UPSTREAM = "https://opencode.ai/zen/go";
-const ZEN_UPSTREAM = "https://opencode.ai/zen";
-const DEFAULT_UPSTREAM = GO_UPSTREAM;
-const START_TIME = Date.now();
-const GO_VISION_MODEL = "qwen3.6-plus";
-// /zen upstream's qwen3.6-plus-free promotion ended, so we fall back to mimo-v2.5-free
-// (a multimodal model — supports image inputs) which is genuinely free on /zen.
-const ZEN_VISION_MODEL = "mimo-v2.5-free";
-
-// Vision-capable models per upstream. Source of truth: .claude/skills/model-registry/SKILL.md
-// (section "Vision-Capable Models"). Update both this code and the skill when adding models.
-// Conservative: unknown models are treated as NOT vision-capable (safe default — forced override).
-// Model names must match exactly what the upstream accepts in the request body model field.
-const VISION_CAPABLE_GO = new Set<string>([
-  // Anthropic Claude — all current tiers support vision
-  "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-opus-4-5", "claude-opus-4-1",
-  "claude-sonnet-4-6", "claude-sonnet-4-5", "claude-sonnet-4",
-  "claude-haiku-4-5",
-  // Google Gemini
-  "gemini-3.5-flash", "gemini-3.1-pro", "gemini-3-flash",
-  // OpenAI GPT-5.x (paid variants; nano variants NOT vision-capable and excluded)
-  "gpt-5.5", "gpt-5.5-pro",
-  "gpt-5.4", "gpt-5.4-pro", "gpt-5.4-mini",
-  "gpt-5.3-codex-spark", "gpt-5.3-codex",
-  "gpt-5.2", "gpt-5.2-codex",
-  "gpt-5.1", "gpt-5.1-codex-max", "gpt-5.1-codex", "gpt-5.1-codex-mini",
-  "gpt-5", "gpt-5-codex",
-  // Qwen
-  "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus", "qwen3.5-plus",
-  // Xiaomi mimo
-  "mimo-v2-pro", "mimo-v2-omni", "mimo-v2.5-pro", "mimo-v2.5",
-  // Other
-  "hy3-preview",
-]);
-
-// /zen has paid + free models. Free vision-capable models are listed at the bottom.
-const VISION_CAPABLE_ZEN = new Set<string>([
-  // Same paid models as /go
-  "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-opus-4-5", "claude-opus-4-1",
-  "claude-sonnet-4-6", "claude-sonnet-4-5", "claude-sonnet-4",
-  "claude-haiku-4-5",
-  "gemini-3.5-flash", "gemini-3.1-pro", "gemini-3-flash",
-  "gpt-5.5", "gpt-5.5-pro",
-  "gpt-5.4", "gpt-5.4-pro", "gpt-5.4-mini",
-  "gpt-5.3-codex-spark", "gpt-5.3-codex",
-  "gpt-5.2", "gpt-5.2-codex",
-  "gpt-5.1", "gpt-5.1-codex-max", "gpt-5.1-codex", "gpt-5.1-codex-mini",
-  "gpt-5", "gpt-5-codex",
-  "qwen3.6-plus", "qwen3.5-plus",
-  // Free vision-capable models on /zen
-  "mimo-v2.5-free",
-]);
-
-/**
- * Selects the vision model for an image-bearing request.
- *
- * If the requested model (from body, or after URL path override) is already
- * vision-capable on the routed upstream, returns it unchanged — no override.
- * Otherwise falls back to the default vision model for the upstream.
- *
- * This avoids pointless overrides when the user explicitly requests a
- * vision-capable model (e.g., claude-sonnet-4-6, qwen3.6-plus), while
- * still routing non-vision requests to a model that can handle images.
- *
- * /zen's upstream rejects unknown model IDs, so we still need the fallback
- * for cases where the user requests a non-vision model on /zen with an image.
- */
-function getVisionModel(upstream: string, requestedModel?: string | null): string {
-  if (requestedModel) {
-    if (upstream.includes("/zen/go") && VISION_CAPABLE_GO.has(requestedModel)) return requestedModel;
-    if (upstream.includes("/zen") && VISION_CAPABLE_ZEN.has(requestedModel)) return requestedModel;
-  }
-  if (upstream.includes("/zen/go")) return GO_VISION_MODEL;
-  if (upstream.includes("/zen")) return ZEN_VISION_MODEL;
-  return GO_VISION_MODEL;
-}
-
-// Regex to match API version prefixes (v1, v2, v3, etc.) — more future-proof than a fixed Set
-const API_VERSION_PATTERN = /^v\d+$/;
-
-// Headers forwarded from upstream responses to clients (success and error paths)
-const UPSTREAM_FORWARD_HEADERS = [
-  "X-Request-Id",
-  "RateLimit-Limit",
-  "RateLimit-Remaining",
-  "RateLimit-Reset",
-];
-const IS_DEBUG = typeof process !== 'undefined' && process.env?.DEBUG;
-
-type RouteConfig = {
-  path: string;
-  upstream: string;
-  modelOverride: string | null;
-};
-
-function stripPrefix(path: string, prefix: string): string | null {
-  if (path === prefix) return "/";
-  if (path.startsWith(`${prefix}/`)) return path.slice(prefix.length);
-  return null;
-}
-
-function extractModelSegment(path: string): { path: string; model: string | null } {
-  const segments = path.replace(/^\/+/, '').split('/');
-  if (segments.length > 0 && segments[0] && !API_VERSION_PATTERN.test(segments[0])) {
-    return { path: '/' + segments.slice(1).join('/'), model: segments[0] };
-  }
-  return { path, model: null };
-}
-
-function routeConfig(request: Request): RouteConfig {
-  const path = new URL(request.url).pathname;
-  const goPath = stripPrefix(path, "/go");
-  if (goPath) {
-    const { path: remaining, model } = extractModelSegment(goPath);
-    return { path: remaining, upstream: GO_UPSTREAM, modelOverride: model };
-  }
-
-  const zenPath = stripPrefix(path, "/zen");
-  if (zenPath) {
-    const { path: remaining, model } = extractModelSegment(zenPath);
-    return { path: remaining, upstream: ZEN_UPSTREAM, modelOverride: model };
-  }
-
-  const { path: remaining, model } = extractModelSegment(path);
-  return { path: remaining, upstream: DEFAULT_UPSTREAM, modelOverride: model };
-}
-
-function getUpstream(request: Request, routeUpstream: string): string {
-  // Trim whitespace and validate URL to avoid passing malformed URLs to fetch()
-  const header = request.headers.get("X-Upstream-Url")?.trim();
-  if (header) {
-    try { new URL(header); return header; }
-    catch { /* invalid URL — fall through to configured upstream */ }
-  }
-  return routeUpstream;
-}
-
-function upstreamFormat(request: Request): "openai" | "anthropic" {
-  const fmt = (request.headers.get("X-Upstream-Format") || "openai").toLowerCase();
-  return fmt === "anthropic" ? "anthropic" : "openai";
-}
-
-function anthropicHeaders(request: Request, key: string): Record<string, string> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    "X-Api-Key": key,
-    "Anthropic-Version": request.headers.get("Anthropic-Version") || "2023-06-01",
-  };
-  const beta = request.headers.get("Anthropic-Beta");
-  if (beta) headers["Anthropic-Beta"] = beta;
-  return headers;
-}
-
-function hasImages(body: any): boolean {
-  // Checks Anthropic-format content blocks (type: "image") — used on /v1/messages path
-  const messages = body?.messages;
-  if (Array.isArray(messages) && messages.some((msg: any) =>
-    Array.isArray(msg.content) && msg.content.some((part: any) => part.type === "image")
-  )) return true;
-  // Check system prompt (Anthropic format can have image blocks in system as content blocks)
-  const system = body?.system;
-  if (Array.isArray(system)) {
-    return system.some((part: any) => part.type === "image");
-  }
-  return false;
-}
-
-function hasResponsesImages(body: any): boolean {
-  // Checks Responses API format (type: "input_image" or "image_url") — used on /v1/responses path
-  const input = body?.input;
-  if (!Array.isArray(input)) return false;
-  return input.some((item: any) =>
-    item.type === "message" && Array.isArray(item.content) &&
-    item.content.some((part: any) => part.type === "input_image" || part.type === "image_url")
-  );
-}
-
-function hasOpenAIImages(body: any): boolean {
-  // Checks OpenAI-format content parts (type: "image_url") — used on /v1/chat/completions path
-  const messages = body?.messages;
-  if (Array.isArray(messages) && messages.some((msg: any) => {
-    if (typeof msg.content === "string") return false;
-    if (Array.isArray(msg.content)) {
-      return msg.content.some((part: any) => part.type === "image_url");
-    }
-    return false;
-  })) return true;
-  // Check top-level system field (some OpenAI-compatible providers support it with image_url parts)
-  const system = body?.system;
-  if (Array.isArray(system)) {
-    return system.some((part: any) => part.type === "image_url");
-  }
-  return false;
-}
-
-/**
- * Fast string-based image detection for pass-through paths.
- * Checks if a raw JSON body string contains image-related content types
- * WITHOUT parsing the entire JSON. Returns true if images might be present
- * (conservative — may have false positives but never false negatives).
- *
- * This avoids JSON.parse + full traversal when no model override is needed
- * and the body clearly has no image blocks.
- */
-function rawBodyMayHaveImages(rawBody: string): boolean {
-  // Fast string search for common image type markers in JSON.
-  // These are the only image-related type values in Anthropic/OpenAI formats.
-  return rawBody.includes('"image_url"') ||
-    rawBody.includes('"input_image"') ||
-    rawBody.includes('"type":"image"') ||
-    rawBody.includes('"type": "image"') ||
-    rawBody.includes('"type":\'image\'');
-}
-
-/** Fast string check for streaming flag in raw JSON body. */
-function rawBodyMayHaveStreaming(rawBody: string): boolean {
-  return rawBody.includes('"stream":true') || rawBody.includes('"stream": true');
-}
-
-/**
- * Single-pass image detection: checks both Anthropic (type: "image") and OpenAI (type: "image_url")
- * formats in one traversal. Used on pass-through paths where body format is assumed but not guaranteed,
- * to avoid double-traversing the message array.
- */
-function hasAnyImageInMessages(body: any): boolean {
-  // Check messages array
-  const messages = body?.messages;
-  if (Array.isArray(messages)) {
-    const hasInMessages = messages.some((msg: any) => {
-      if (typeof msg.content === "string") return false;
-      if (!Array.isArray(msg.content)) return false;
-      return msg.content.some(
-        (part: any) => part.type === "image" || part.type === "image_url"
-      );
-    });
-    if (hasInMessages) return true;
-  }
-  // Check system prompt (Anthropic format can have image blocks in system)
-  const system = body?.system;
-  if (Array.isArray(system)) {
-    return system.some(
-      (part: any) => part.type === "image" || part.type === "image_url"
-    );
-  }
-  return false;
-}
-
-function upstreamErrorResponse(res: Response, body: string): Response {
-  const headers = new Headers();
-  for (const name of ["Content-Type", "Retry-After", "RateLimit-Limit", "RateLimit-Remaining", "RateLimit-Reset", "X-Request-Id", "X-RateLimit-Limit-Requests", "X-RateLimit-Limit-Tokens"]) {
-    const value = res.headers.get(name);
-    if (value) headers.set(name, value);
-  }
-  return new Response(body, { status: res.status, headers });
-}
-
-/**
- * Creates a combined abort signal for upstream streaming requests.
- * Races the client's disconnect signal against a generous 120s timeout.
- * If the client disconnects first, the upstream request is aborted immediately.
- * If the upstream stalls for 120s, the connection is terminated as a safety net.
- */
-function createStreamSignal(request: Request): AbortSignal {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 120_000);
-  request.signal.addEventListener('abort', () => {
-    clearTimeout(timeoutId);
-    controller.abort();
-  }, { once: true });
-  return controller.signal;
-}
-
-// ---- Shared Helpers ----
-
-/** Safe JSON body parser — returns a 400 error on malformed body. */
-async function safeJsonBody<T>(request: Request): Promise<{ ok: true; data: T } | { ok: false; response: Response }> {
-  try {
-    const data = await request.json();
-    return { ok: true, data };
-  } catch {
-    return {
-      ok: false,
-      response: new Response(
-        JSON.stringify({ error: { type: "invalid_request_error", message: "Invalid JSON body" } }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
-      ),
-    };
-  }
-}
-
-/** Authenticate request and return confirmed non-null API key, or an auth error response. */
-function authenticateRequest(request: Request, path: string): { key: string } | { response: Response } {
-  const key = extractApiKey(request.headers);
-  const err = validateApiKey(key);
-  if (err) return { response: authErrorResponse(err, path) };
-  // validateApiKey already rejects null/undefined keys; this branch is a defensive fallback
-  if (!key) return { response: authErrorResponse({ status: 401, body: { error: { type: "authentication_error", message: "Invalid API key" } } }, path) };
-  return { key };
-}
-
-/** Fetch with timeout/abort/network-error catch — returns error response on failure. */
-async function safeUpstreamFetch(url: string, init: RequestInit): Promise<Response> {
-  try {
-    return await fetch(url, init);
-  } catch (err: any) {
-    if (err?.name === "AbortError") {
-      return new Response(
-        JSON.stringify({ error: { type: "upstream_error", message: "Request aborted" } }),
-        { status: 499, headers: { "Content-Type": "application/json" } },
-      );
-    }
-    return new Response(
-      JSON.stringify({ error: { type: "upstream_error", message: "Upstream unreachable" } }),
-      { status: 502, headers: { "Content-Type": "application/json" } },
-    );
-  }
-}
-
-/** Forward select upstream headers (X-Request-Id, rate-limit info) onto the response. */
-function forwardUpstreamHeaders(target: Headers, source: Response): void {
-  for (const name of UPSTREAM_FORWARD_HEADERS) {
-    const value = source.headers.get(name);
-    if (value) target.set(name, value);
-  }
-}
-
-/** Format seconds into human-readable uptime string. */
-function formatUptime(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  return `${h}h ${m}m`;
-}
-
-/** Check if client accepts gzip encoding. */
-function clientAcceptsGzip(request: Request): boolean {
-  const accept = request.headers.get("Accept-Encoding") || "";
-  return accept.includes("gzip");
-}
-
-/**
- * Create a JSON response with optional gzip compression.
- * Compresses responses larger than 1KB when client accepts gzip.
- * Uses CompressionStream API (available in CF Workers, Bun, and modern runtimes).
- */
-async function jsonResponse(request: Request, data: any, extraHeaders?: Record<string, string>): Promise<Response> {
-  const body = JSON.stringify(data);
-  const headers: Record<string, string> = { "Content-Type": "application/json", ...extraHeaders };
-
-  // Only compress if client accepts gzip and body is large enough to benefit
-  if (clientAcceptsGzip(request) && body.length > 1024) {
-    try {
-      const encoder = new TextEncoder();
-      const stream = new ReadableStream({
-        start(controller) { controller.enqueue(encoder.encode(body)); controller.close(); },
-      }).pipeThrough(new CompressionStream("gzip"));
-
-      const reader = stream.getReader();
-      const chunks: Uint8Array[] = [];
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-      }
-      // Concatenate chunks
-      const totalLen = chunks.reduce((n, c) => n + c.length, 0);
-      const compressed = new Uint8Array(totalLen);
-      let offset = 0;
-      for (const chunk of chunks) { compressed.set(chunk, offset); offset += chunk.length; }
-
-      headers["Content-Encoding"] = "gzip";
-      headers["Vary"] = "Accept-Encoding";
-      return new Response(compressed, { headers });
-    } catch {
-      // Fallback to uncompressed if compression fails
-    }
-  }
-
-  return new Response(body, { headers });
-}
+import { IS_DEBUG, START_TIME, GO_UPSTREAM, ZEN_UPSTREAM, UPSTREAM_FORWARD_HEADERS } from './config';
+import { routeConfig, getUpstream, upstreamFormat } from './routing';
+import { getVisionModel, hasImages, hasOpenAIImages, hasResponsesImages, hasAnyImageInMessages, rawBodyMayHaveImages } from './vision';
+import { authenticateRequest, safeUpstreamFetch, safeJsonBody, createStreamSignal, anthropicHeaders, upstreamErrorResponse, forwardUpstreamHeaders, jsonResponse, formatUptime } from './request';
 
 // ---- Main Request Handler ----
 
@@ -413,17 +31,17 @@ async function handleRequest(request: Request): Promise<Response> {
 
     if (fmt === "openai") {
       // ---- Translate: Anthropic body → OpenAI body ----
-      const parsed = await safeJsonBody<any>(request);
+      const parsed = await safeJsonBody<Record<string, unknown>>(request);
       if (!parsed.ok) return parsed.response;
-      const req = parsed.data;
+      const req = parsed.data as Record<string, unknown>;
 
-      const originalModel = req.model;
+      const originalModel = req.model as string | undefined;
       if (route.modelOverride) req.model = route.modelOverride;
       if (hasImages(req)) {
-        req.model = getVisionModel(upstream, req.model);
+        req.model = getVisionModel(upstream, req.model as string | null | undefined);
       }
       const openaiReq = formatAnthropicToOpenAI(req);
-      const upstreamSignal = openaiReq.stream ? createStreamSignal(request) : AbortSignal.timeout(60_000);
+      const upstreamSignal = (openaiReq as Record<string, unknown>).stream ? createStreamSignal(request) : AbortSignal.timeout(60_000);
       const res = await safeUpstreamFetch(`${upstream}/v1/chat/completions`, {
         method: "POST",
         headers: {
@@ -435,18 +53,18 @@ async function handleRequest(request: Request): Promise<Response> {
       });
       if (!res.ok) return upstreamErrorResponse(res, await res.text());
 
-      if (openaiReq.stream) {
+      if ((openaiReq as Record<string, unknown>).stream) {
         const streamHeaders = new Headers({
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-cache",
           "Connection": "keep-alive",
         });
         forwardUpstreamHeaders(streamHeaders, res);
-        return new Response(streamOpenAIToAnthropic(res.body as ReadableStream, originalModel), {
+        return new Response(streamOpenAIToAnthropic(res.body as ReadableStream, originalModel as string), {
           headers: streamHeaders,
         });
       }
-      const data: any = await res.json();
+      const data: unknown = await res.json();
       const upstreamHeaders: Record<string, string> = {};
       for (const name of UPSTREAM_FORWARD_HEADERS) {
         const value = res.headers.get(name);
@@ -456,7 +74,7 @@ async function handleRequest(request: Request): Promise<Response> {
     } else {
       // ---- Pass-through: send Anthropic body as-is to Anthropic upstream ----
       const anthRawBody = await request.text();
-      let parsedBody: any;
+      let parsedBody: unknown;
       try { parsedBody = JSON.parse(anthRawBody); } catch {
         return new Response(
           JSON.stringify({ error: { type: "invalid_request_error", message: "Request body contains invalid JSON" } }),

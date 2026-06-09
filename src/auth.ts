@@ -13,7 +13,7 @@ export function extractApiKey(headers: Headers | Record<string, string | null>):
   return get("X-Api-Key") || get("Authorization")?.replace(/^(Bearer|Token)\s+/i, "")?.trim() || null;
 }
 
-export interface AuthError {
+interface AuthError {
   status: number;
   body: Record<string, unknown>;
 }

@@ -3,8 +3,9 @@ import { extractCachedTokens, extractOutputTokens, extractUncachedInputTokens } 
 export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: string): ReadableStream {
   const messageId = "msg_" + Date.now();
   const sseEncoder = new TextEncoder();
+  const decoder = new TextDecoder();
 
-  const enqueueSSE = (controller: ReadableStreamDefaultController, eventType: string, data: any) => {
+  const enqueueSSE = (controller: ReadableStreamDefaultController, eventType: string, data: Record<string, unknown>) => {
     controller.enqueue(sseEncoder.encode(`event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`));
   };
 
@@ -18,15 +19,14 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
       let toolCallIdByOaiIndex = new Map<number, string>(); // OpenAI tool_call index → tool call ID
       let oaiIndexToCbIndex = new Map<number, number>();    // OpenAI tool_call index → content block index
       let toolCallJsonMap = new Map<string, string>();
-      let lastUsage: any = null;
+      let lastUsage: { input_tokens: number; output_tokens: number; cache_read_input_tokens: number; cache_creation_input_tokens: number } | null = null;
       let finishReason: string | null = null;
       let messageStarted = false;
 
       const reader = openaiStream.getReader();
-      const decoder = new TextDecoder();
       let buffer = '';
 
-      function processStreamDelta(delta: any, parsed: any) {
+      function processStreamDelta(delta: Record<string, unknown>, parsed: Record<string, unknown>) {
         // Capture usage from any chunk that has it
         if (parsed.usage) {
           lastUsage = {

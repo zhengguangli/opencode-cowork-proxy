@@ -7,18 +7,13 @@
  * - tool_choice for function_call tools
  */
 
-export function formatResponsesToChatCompletions(body: any): any {
+export function formatResponsesToChatCompletions(body: Record<string, unknown>): Record<string, unknown> {
   const { model, input, instructions, temperature, max_output_tokens, top_p, top_k, stream, stream_options, tools, tool_choice, parallel_tool_calls, user, text, prompt_cache_key, top_logprobs, thinking, store } = body;
 
-  const messages: any[] = [];
+  const messages: Array<Record<string, unknown>> = [];
   let hasSystemMessage = false;
 
-  // 1. Instructions → potential system message
-  if (instructions) {
-    // Will be pushed later if no input system message found
-  }
-
-  // 2. Parse input → messages
+  // 1. Parse input → messages
   if (typeof input === "string") {
     // Instructions goes first
     if (instructions) {
@@ -81,8 +76,8 @@ export function formatResponsesToChatCompletions(body: any): any {
       if (item.type === "function_call_output") {
         messages.push({
           role: "tool",
-          tool_call_id: item.call_id || "",
-          content: typeof item.output === "string" ? item.output : JSON.stringify(item.output),
+          tool_call_id: ((item as Record<string, unknown>).call_id as string) || "",
+          content: ((item as Record<string, unknown>).output as string) || "",
         });
         continue;
       }

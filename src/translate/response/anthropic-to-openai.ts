@@ -3,12 +3,12 @@
  */
 import { extractInputTokens, extractOutputTokens } from '../../cache';
 
-export function formatAnthropicToOpenAI(response: any, model: string): any {
+export function formatAnthropicToOpenAI(response: Record<string, unknown>, model: string): Record<string, unknown> {
   const content = response.content || [];
 
   let textContent = "";
   let reasoningContent = "";
-  const toolCalls: any[] = [];
+  const toolCalls: Array<{ id: string; type: string; function: { name: string; arguments: string } }> = [];
 
   for (const block of content) {
     if (block.type === "text") {
@@ -27,7 +27,7 @@ export function formatAnthropicToOpenAI(response: any, model: string): any {
     }
   }
 
-  const message: any = { role: "assistant" };
+  const message: { role: string; content?: string | null; reasoning_content?: string; tool_calls?: typeof toolCalls } = { role: "assistant" };
 
   if (textContent) {
     message.content = textContent;
@@ -62,7 +62,7 @@ export function formatAnthropicToOpenAI(response: any, model: string): any {
           const input = extractInputTokens(response.usage);
           const output = extractOutputTokens(response.usage);
           const cached = response.usage.cache_read_input_tokens || response.usage.cache_creation_input_tokens || 0;
-          const result: any = { prompt_tokens: input + cached, completion_tokens: output, total_tokens: input + output + cached };
+          const result: { prompt_tokens: number; completion_tokens: number; total_tokens: number; prompt_tokens_details?: { cached_tokens: number } } = { prompt_tokens: input + cached, completion_tokens: output, total_tokens: input + output + cached };
           if (cached > 0) {
             result.prompt_tokens_details = { cached_tokens: cached };
           }

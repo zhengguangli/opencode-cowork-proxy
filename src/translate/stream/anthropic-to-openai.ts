@@ -5,15 +5,15 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
   const startTime = Math.floor(Date.now() / 1000);
   const chatId = "chatcmpl-" + startTime;
   const sseEncoder = new TextEncoder();
+  const decoder = new TextDecoder();
 
-  const enqueueSSE = (controller: ReadableStreamDefaultController, data: any) => {
+  const enqueueSSE = (controller: ReadableStreamDefaultController, data: Record<string, unknown>) => {
     controller.enqueue(sseEncoder.encode(`data: ${JSON.stringify(data)}\n\n`));
   };
 
   return new ReadableStream({
     async start(controller) {
       const reader = anthropicStream.getReader();
-      const decoder = new TextDecoder();
       let buffer = "";
 
       // Tool call tracking: contentBlockIndex → { id, name, args, toolCallIndex }
@@ -30,8 +30,8 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
       let lastFinishReason: string | undefined;
       let usageForwarded = false;
 
-      function emitChunk(delta: any, finishReason?: string, usage?: any) {
-        const chunk: any = {
+      function emitChunk(delta: Record<string, unknown>, finishReason?: string, usage?: Record<string, unknown>) {
+        const chunk: { id: string; object: string; created: number; model: string; choices: Array<{ index: number; delta: Record<string, unknown>; finish_reason?: string; usage?: Record<string, unknown> }>; usage?: Record<string, unknown> } = {
           id: chatId,
           object: "chat.completion.chunk",
           created: startTime,
@@ -49,7 +49,7 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
           const raw = line.slice(6).trim();
           if (!raw) continue;
 
-          let evt: any;
+          let evt: Record<string, unknown>;
           try { evt = JSON.parse(raw); } catch { continue; }
 
           switch (evt.type) {

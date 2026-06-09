@@ -8,21 +8,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Trigger:** For proxy-related work (translation bugs, streaming issues, routing changes, model updates, code review, deployment, testing, performance audit, investigation-only diagnosis), invoke the `proxy-orchestrator` skill. Specialized skills: `field-mapping` (Anthropic↔OpenAI/Responses field reference), `stream-debug` (SSE streaming diagnosis), `deployment` (CF/Vercel/binary + LaunchAgent + CI/CD), `model-registry` (which models exist on which upstream + vision model selection). Simple questions can be answered directly.
 
-**Agent Team (6 members):** `translation-specialist`, `streaming-specialist`, `routing-specialist`, `qa-inspector`, `code-reviewer`, `deployment-manager` — definitions in `.claude/agents/`. Orchestration rules + workflows in `.claude/skills/proxy-orchestrator/SKILL.md`. All Agent calls use `model: "opus"`.
+**Agents (6):** `translation-specialist`, `streaming-specialist`, `routing-specialist`, `qa-inspector`, `code-reviewer`, `deployment-manager` — definitions in `.claude/agents/`. Orchestration rules + 4 domain skills in `.claude/skills/`. Sub-agent execution mode (fan-out/fan-in for diagnosis, single sub-agents for review/QA). All Agent calls use `model: "opus"`.
 
 **Harness Change History:**
 
 | Date | Change | Target | Reason |
 |------|--------|--------|--------|
 | 2026-06-05 | Initial configuration (6 agents, 3 skills) | All | First harness built |
-| 2026-06-07 | Full rebuild from scratch | All | Tightened agent descriptions, added `model-registry` skill (addresses vision-model hardcoding bug class), unified SKILL.md format, added follow-up keywords, added performance-audit workflow |
-| 2026-06-07 | Added `model-registry` skill | New skill | Source of truth for upstream model catalogs + vision model selection rules; prevents regression of the `VISION_MODEL` hardcoding bug fixed in commit 3b5743b |
-| 2026-06-07 | Vision-aware model override | `src/index.ts` + 5 new tests | Image-bearing requests no longer force-override when the resolved model (URL path or body) is already vision-capable on the routed upstream. See `VISION_CAPABLE_GO` / `VISION_CAPABLE_ZEN` Sets and updated `getVisionModel(upstream, requestedModel)` signature. `model-registry` skill and `routing-specialist` agent updated. |
-| 2026-06-08 | Full harness rebuild | All | Fixed stale model override chain docs (still described unconditional forcing), updated notable recent changes, added pitfall #11 (image-detection-before-thinking ordering) and #12 (VISION_CAPABLE set drift), re-verified model catalog, tightened agent/skill consistency |
-| 2026-06-09 | Harness drift fix | model-registry, agents, CLAUDE.md | Removed orphaned code block in model-registry, tightened agent descriptions, aligned team communication sections with sub-agent execution mode, updated change history |
-| 2026-06-09 | Full harness rebuild from scratch | All | Deleted all old agents/skills, rebuilt 6 agents + 5 skills from scratch. Hybrid execution mode (fan-out/fan-in for diagnosis, single sub-agents for review/QA). Removed all SendMessage dependencies. Added pitfall #11 (image-detection-before-thinking ordering) and #12 (VISION_CAPABLE set drift). Updated model catalog to reflect 2026-06-08 upstream reality. |
-
-**Notable recent changes:** See the Harness Change History table above for all June 7 updates. Earlier changes (June 5): Version bumped to 2.0.0. Added Minimax `<think>` tag stripping in response/stream translators (with cross-chunk stream buffer handling), `input_text` content block support in Responses API request translation, and expanded Responses API debug logging. Vercel deployment target added (solves CF Workers 429 rate limiting), CI/CD switched from npm to bun (requires `CF_API_TOKEN` + `VERCEL_TOKEN` GitHub secrets), belt-and-suspenders image detection on pass-through paths, 15 routing + 8 translation bug fixes, 24 regression tests added, dev branch workflow (PR triggers test only, merge triggers full deploy), harness skills updated to reflect bun+Vercel. See `_workspace_archive/` for full change history.
+| 2026-06-07 | Full rebuild from scratch | All | Tightened agent descriptions, added `model-registry` skill |
+| 2026-06-07 | Added `model-registry` skill | New skill | Source of truth for upstream model catalogs |
+| 2026-06-08 | Full harness rebuild | All | Fixed stale docs, added pitfalls, re-verified catalog |
+| 2026-06-09 | Full harness rebuild from scratch | All | Hybrid execution mode, sub-agent coordination |
+| 2026-06-09 | Full harness rebuild from scratch | All | Tighter descriptions, sub-agent protocol cleanup, orchestrator Phase 0 context check, all SendMessage references removed, streamlined workflows |
 
 ## Commands
 
