@@ -14,7 +14,7 @@ import {
   handleResponsesAPI,
   handleModelList,
   handleHealthCheck,
-} from './request-handlers';
+} from './handlers/index';
 
 // ---- Main Request Handler ----
 

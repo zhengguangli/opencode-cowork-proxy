@@ -6,6 +6,7 @@
  * finish_reason / tool_calls map to Anthropic stop_reason / tool_use.
  */
 import { extractCachedTokens, extractOutputTokens, extractUncachedInputTokens } from '../../cache';
+import { asRecord, asRecordArray, asRecordOptional } from '../type-guards';
 
 /**
  * Safely parses a tool call arguments JSON string (response-side).
@@ -25,8 +26,8 @@ export function formatOpenAIToAnthropic(completion: Record<string, unknown>, mod
   const messageId = "msg_" + Date.now();
 
   let content: Array<Record<string, unknown>> = [];
-  const choices = completion.choices as Array<Record<string, unknown>> | undefined;
-  const message = choices?.[0]?.message as Record<string, unknown> | undefined;
+  const choices = asRecordArray(completion.choices);
+  const message = asRecordOptional(choices[0]?.message);
 
   if (message?.reasoning_content) {
     content.push({ type: "thinking", thinking: message.reasoning_content, signature: "" });
@@ -37,9 +38,9 @@ export function formatOpenAIToAnthropic(completion: Record<string, unknown>, mod
   }
 
   if (message?.tool_calls) {
-    const tcs = message.tool_calls as Array<Record<string, unknown>>;
+    const tcs = asRecordArray(message.tool_calls);
     content.push(...tcs.map((item) => {
-      const fn = item.function as Record<string, unknown> | undefined;
+      const fn = asRecordOptional(item.function);
       return {
         type: 'tool_use',
         id: item.id,
@@ -50,7 +51,7 @@ export function formatOpenAIToAnthropic(completion: Record<string, unknown>, mod
   }
 
   // Map OpenAI finish_reason to Anthropic stop_reason
-  const finishReason = choices?.[0]?.finish_reason as string | undefined;
+  const finishReason = choices[0]?.finish_reason as string | undefined;
   let stopReason = "end_turn";
   if (finishReason === "tool_calls") stopReason = "tool_use";
   else if (finishReason === "length") stopReason = "max_tokens";
@@ -68,7 +69,7 @@ export function formatOpenAIToAnthropic(completion: Record<string, unknown>, mod
   };
 
   if (completion.usage) {
-    const usage = completion.usage as Record<string, unknown>;
+    const usage = asRecord(completion.usage);
     const cached = extractCachedTokens(usage);
     result.usage = {
       input_tokens: extractUncachedInputTokens(usage),

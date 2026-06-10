@@ -8,15 +8,14 @@
 import { extractCachedTokens, extractOutputTokens, extractUncachedInputTokens } from '../../cache';
 import { IS_DEBUG } from '../../config';
 import { applyBackpressure } from '../../backpressure';
+import { createSseEncoder } from './sse-encoder';
+import { parseSseFrame, parseSseBuffer } from './sse-parser';
+import { mapFinishReason } from './finish-reason';
 
 export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: string): ReadableStream {
   const messageId = "msg_" + Date.now();
-  const sseEncoder = new TextEncoder();
   const decoder = new TextDecoder();
-
-  const enqueueSSE = (controller: ReadableStreamDefaultController, eventType: string, data: Record<string, unknown>) => {
-    controller.enqueue(sseEncoder.encode(`event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`));
-  };
+  const enqueueSSE = createSseEncoder();
 
   return new ReadableStream({
     async start(controller) {
@@ -245,23 +244,12 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
         while (true) {
           const { done, value } = await reader.read();
           if (done) {
-            if (buffer.trim()) {
-              const frames = buffer.split('\n\n');
-              for (const frame of frames) {
-                if (!frame.trim()) continue;
-                const lines = frame.split('\n');
-                for (const line of lines) {
-                  if (line.trim() && line.startsWith('data: ')) {
-                    const data = line.slice(6).trim();
-                    if (data === '[DONE]') continue;
-                    try {
-                      const parsed = JSON.parse(data);
-                      const delta = parsed.choices?.[0]?.delta;
-                      if (delta) processStreamDelta(delta, parsed);
-                    } catch { /* parse error */ }
-                  }
-                }
-              }
+            for (const data of parseSseBuffer(buffer)) {
+              try {
+                const parsed = JSON.parse(data);
+                const delta = parsed.choices?.[0]?.delta;
+                if (delta) processStreamDelta(delta, parsed);
+              } catch { /* parse error */ }
             }
             break;
           }
@@ -274,18 +262,12 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
           buffer = frames.pop() || '';
 
           for (const frame of frames) {
-            if (!frame.trim()) continue;
-            const lines = frame.split('\n');
-            for (const line of lines) {
-              if (line.trim() && line.startsWith('data: ')) {
-                const data = line.slice(6).trim();
-                if (data === '[DONE]') continue;
-                try {
-                  const parsed = JSON.parse(data);
-                  const delta = parsed.choices?.[0]?.delta;
-                  if (delta) processStreamDelta(delta, parsed);
-                } catch { continue; }
-              }
+            for (const data of parseSseFrame(frame)) {
+              try {
+                const parsed = JSON.parse(data);
+                const delta = parsed.choices?.[0]?.delta;
+                if (delta) processStreamDelta(delta, parsed);
+              } catch { continue; }
             }
           }
 
@@ -340,16 +322,7 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
       }
 
       // Map finish reason and usage
-      let stopReason = "end_turn";
-      switch (finishReason) {
-        case "tool_calls": stopReason = "tool_use"; break;
-        case "length": stopReason = "max_tokens"; break;
-        case "stop": stopReason = "end_turn"; break;
-        case "content_filter":
-        case "insufficient_system_resource":
-          stopReason = "max_tokens"; break;
-        default: stopReason = "end_turn"; break;
-      }
+      const stopReason = mapFinishReason(finishReason);
 
       enqueueSSE(controller, "message_delta", {
         type: "message_delta",

@@ -4,7 +4,7 @@
 - 详见 [CLAUDE.md](CLAUDE.md) — 项目主文档和 harness 指针
 - Agent 定义：`.claude/agents/` — 7 个专业 agent
 - Skill 定义：`.claude/skills/` — 11 个标准技能
-- 安装脚本：`scripts/install.sh` — 统一安装器
+- 安装脚本：`scripts/install.mjs` — 统一安装器
 
 ## 关键约束
 - **人类掌舵，智能体执行** — 工程师设计环境，AI 执行代码
@@ -41,14 +41,12 @@
 | hooks-framework | 确定性执行钩子 |
 
 ## 导航指引
-- **架构设计？** 读 `docs/ARCHITECTURE.md` — 6 层边界、依赖规则、品味不变量
-- **文档索引？** 读 `docs/DESIGN.md` | `docs/SECURITY.md` | `docs/RELIABILITY.md` — 设计/安全/可靠性
-- **产品视角？** 读 `docs/PRODUCT_SENSE.md` — 产品定位和功能路线图
-- **已知修复？** 读 `docs/FIXES.md` — 已应用但易被遗忘的关键修复
-- **质量审查？** 读 `.claude/skills/quality-gate/SKILL.md`
-- **演进反馈？** 读 `.claude/skills/harness-evolve/SKILL.md`
-- **Hooks 配置？** 读 `.claude/skills/hooks-framework/SKILL.md`
-- **安装部署？** 读 `README.md` 或运行 `scripts/install.sh --help`
-- **页面搜索？** 查模型目录用 `model-registry` skill；查最新文档用 Web Search
+- 新项目初始化？使用 `harness-init` 或 `harness-orchestrator` skill
+- 架构设计？读 `.claude/agents/architect.md`
+- 质量审查？读 `.claude/skills/quality-gate/SKILL.md`
+- 知识库管理？读 `.claude/skills/context-setup/SKILL.md`
+- 演进反馈？读 `.claude/skills/harness-evolve/SKILL.md`
+- Hooks 配置？读 `.claude/skills/hooks-framework/SKILL.md`
+- 安装部署？读 `README.md` 或运行 `node scripts/install.mjs --help`
 
 <!-- HARNESS-PILOT:END -->

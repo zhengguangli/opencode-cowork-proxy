@@ -7,6 +7,8 @@
  * Bridges Anthropic's explicit cache_control markers with OpenAI's automatic prefix caching.
  */
 
+import { asRecordOptional } from './translate/type-guards';
+
 /** djb2 hash of system prompt text, used as prompt_cache_key for OpenAI node affinity */
 export function hashSystemPrompt(system: string | Array<Record<string, unknown>> | undefined): string | null {
   if (!system) return null;
@@ -33,8 +35,8 @@ function tokenCount(...values: unknown[]): number {
 export function extractCachedTokens(usage: Record<string, unknown>): number {
   if (!usage) return 0;
   return tokenCount(
-    (usage.prompt_tokens_details as Record<string, unknown> | undefined)?.cached_tokens,
-    (usage.input_tokens_details as Record<string, unknown> | undefined)?.cached_tokens,
+    asRecordOptional(usage.prompt_tokens_details)?.cached_tokens,
+    asRecordOptional(usage.input_tokens_details)?.cached_tokens,
     usage.cache_read_input_tokens,
     usage.prompt_cache_hit_tokens, // DeepSeek-specific
   );
@@ -92,13 +94,13 @@ export function mapUsage(usage: Record<string, unknown>): Record<string, unknown
     cachedTokens = typeof usage.prompt_cache_hit_tokens === "number" ? usage.prompt_cache_hit_tokens : 0;
   } else {
     inputTokens = typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : 0;
-    const details = usage.prompt_tokens_details as Record<string, unknown> | undefined;
+    const details = asRecordOptional(usage.prompt_tokens_details);
     cachedTokens = typeof details?.cached_tokens === "number" ? details.cached_tokens : 0;
   }
 
   const outputTokens = typeof usage.completion_tokens === "number" ? usage.completion_tokens : 0;
   const totalTokens = typeof usage.total_tokens === "number" ? usage.total_tokens : inputTokens + outputTokens;
-  const compDetails = usage.completion_tokens_details as Record<string, unknown> | undefined;
+  const compDetails = asRecordOptional(usage.completion_tokens_details);
   const reasoningTokens = typeof compDetails?.reasoning_tokens === "number" ? compDetails.reasoning_tokens : undefined;
 
   const result: Record<string, unknown> = {

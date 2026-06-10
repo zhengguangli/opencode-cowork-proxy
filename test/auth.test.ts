@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { extractApiKey, validateApiKey } from '../src/auth';
+import worker from '../src/index';
+
+const key = 'a'.repeat(32);
 
 describe('extractApiKey', () => {
   it('extracts from X-Api-Key header', () => {
@@ -48,5 +51,74 @@ describe('validateApiKey', () => {
     const err = validateApiKey('short-key');
     expect(err).not.toBeNull();
     expect(err!.status).toBe(401);
+  });
+});
+
+// ── Integration tests (end-to-end via worker.fetch) ──
+
+describe('authentication (integration)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns 401 for missing API key', async () => {
+    const request = new Request('https://proxy.example/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'test', messages: [{ role: 'user', content: 'hi' }] }),
+    });
+
+    const response = await worker.fetch(request);
+    expect(response.status).toBe(401);
+    const body = await response.json() as { error: { type: string } };
+    expect(body.error.type).toBe('authentication_error');
+  });
+
+  it('returns 401 for short API key', async () => {
+    const request = new Request('https://proxy.example/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': 'short' },
+      body: JSON.stringify({ model: 'test', messages: [{ role: 'user', content: 'hi' }] }),
+    });
+
+    const response = await worker.fetch(request);
+    expect(response.status).toBe(401);
+  });
+
+  it('returns Anthropic error format on /v1/messages auth failure', async () => {
+    const request = new Request('https://proxy.example/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'test', messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    const response = await worker.fetch(request);
+    expect(response.status).toBe(401);
+    const body = await response.json() as { type: string; error: { type: string } };
+    expect(body.type).toBe('error');
+    expect(body.error.type).toBe('authentication_error');
+  });
+
+  it('returns Anthropic error format on /v1/models auth failure', async () => {
+    const request = new Request('https://proxy.example/go/v1/models', {
+      headers: { 'x-upstream-format': 'anthropic' },
+    });
+    const response = await worker.fetch(request);
+    expect(response.status).toBe(401);
+    const body = await response.json() as { type?: string; error: { type: string } };
+    expect(body.type).toBe('error');
+    expect(body.error.type).toBe('authentication_error');
+  });
+
+  it('returns OpenAI error format on /v1/chat/completions auth failure', async () => {
+    const request = new Request('https://proxy.example/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'test', messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    const response = await worker.fetch(request);
+    expect(response.status).toBe(401);
+    const body = await response.json() as { type?: string; error: { type: string } };
+    expect(body.type).toBeUndefined();
+    expect(body.error.type).toBe('authentication_error');
   });
 });

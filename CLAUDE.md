@@ -151,44 +151,12 @@ vi.restoreAllMocks();
 
 **Trigger:** 工作请求涉及 harness 配置、agent 团队搭建、知识库架构时，使用 `harness-orchestrator` skill。简单问题直接回答。
 
-### Agents（7个）
+### 架构地图
 
-| Agent | 文件 | 职责 |
-|-------|------|------|
-| orchestrator | `.claude/agents/orchestrator.md` | 团队协调者 |
-| architect | `.claude/agents/architect.md` | 架构设计师 |
-| builder | `.claude/agents/builder.md` | 代码生成器 |
-| reviewer | `.claude/agents/reviewer.md` | 质量审查员 |
-| qa | `.claude/agents/qa.md` | 验证工程师 |
-| sre | `.claude/agents/sre.md` | 站点可靠性工程师 |
-| context-engineer | `.claude/agents/context-engineer.md` | 上下文工程师 |
-
-### Skills（11个）
-
-| Skill | 文件 | 用途 |
-|-------|------|------|
-| harness-orchestrator | `.claude/skills/harness-orchestrator/SKILL.md` | 团队编排器 |
-| harness-init | `.claude/skills/harness-init/SKILL.md` | 一键初始化 harness |
-| context-setup | `.claude/skills/context-setup/SKILL.md` | 知识库架构生成 |
-| architecture-guard | `.claude/skills/architecture-guard/SKILL.md` | 架构边界强制执行 |
-| entropy-gc | `.claude/skills/entropy-gc/SKILL.md` | 熵管理与垃圾收集 |
-| observability-setup | `.claude/skills/observability-setup/SKILL.md` | 可观测性堆栈配置 |
-| sandbox-exec | `.claude/skills/sandbox-exec/SKILL.md` | 安全代码执行环境 |
-| quality-gate | `.claude/skills/quality-gate/SKILL.md` | 质量审查门禁 |
-| agent-readability | `.claude/skills/agent-readability/SKILL.md` | 智能体可读性优化 |
-| harness-evolve | `.claude/skills/harness-evolve/SKILL.md` | 反馈驱动演进 |
-| hooks-framework | `.claude/skills/hooks-framework/SKILL.md` | 确定性执行钩子 |
-
-### Harness 组件模型
-
-```
-Agent = Model + Harness
-
-Harness = System Prompts + Tools/Skills/MCPs
-        + Bundled Infrastructure (filesystem, sandbox, browser)
-        + Orchestration Logic (subagent spawning, handoffs, routing)
-        + Hooks/Middleware (compaction, continuation, lint checks)
-```
+- [AGENTS.md](AGENTS.md) — 项目主文档和 harness 指针
+- Agent 定义：`.claude/agents/`（7 个）
+- Skill 定义：`.claude/skills/`（11 个）
+- 安装脚本：`scripts/install.mjs`
 
 ### 核心原则
 

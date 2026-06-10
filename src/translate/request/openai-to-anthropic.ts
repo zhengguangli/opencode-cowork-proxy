@@ -6,6 +6,8 @@
  * parts, or changing the image/tool-call mapping.
  */
 
+import { asRecordArray, asRecordOptional, asRecord } from '../type-guards';
+
 /**
  * Safely parses a tool call arguments JSON string.
  * Returns empty object on parse failure or non-object input.
@@ -39,7 +41,7 @@ export function formatOpenAIToAnthropic(body: Record<string, unknown>): Record<s
   // Separate system messages from conversation
   const systemMessages: string[] = [];
   const conversationMessages: Array<Record<string, unknown>> = [];
-  const msgList = (messages || []) as Array<Record<string, unknown>>;
+  const msgList = asRecordArray(messages);
 
   for (const msg of msgList) {
     if (msg.role === "system") {
@@ -67,11 +69,11 @@ export function formatOpenAIToAnthropic(body: Record<string, unknown>): Record<s
       if (typeof msg.content === "string") {
         content.push({ type: "text", text: msg.content });
       } else if (Array.isArray(msg.content)) {
-        (msg.content as Array<Record<string, unknown>>).forEach((part: Record<string, unknown>) => {
+        asRecordArray(msg.content).forEach((part: Record<string, unknown>) => {
           if (part.type === "text") {
             content.push({ type: "text", text: part.text as string });
           } else if (part.type === "image_url") {
-            const imageUrl = part.image_url as Record<string, unknown> | undefined;
+            const imageUrl = asRecordOptional(part.image_url);
             content.push({
               type: "image",
               source: imageSourceFromUrl(imageUrl?.url as string | undefined),
@@ -81,7 +83,7 @@ export function formatOpenAIToAnthropic(body: Record<string, unknown>): Record<s
       }
 
       // Collect tool results from immediately following tool messages
-      const nextMsg = conversationMessages[i + 1] as Record<string, unknown> | undefined;
+      const nextMsg = conversationMessages[i + 1];
       if (nextMsg && nextMsg.role === "tool") {
         i++; // consume the tool message
 
@@ -127,7 +129,7 @@ export function formatOpenAIToAnthropic(body: Record<string, unknown>): Record<s
       }
 
       if (msg.tool_calls) {
-        for (const tc of msg.tool_calls as Array<Record<string, unknown>>) {
+        for (const tc of asRecordArray(msg.tool_calls)) {
           content.push({
             type: "tool_use",
             id: tc.id,
@@ -170,19 +172,19 @@ export function formatOpenAIToAnthropic(body: Record<string, unknown>): Record<s
   }
 
   if (tools) {
-    anthropicRequest.tools = (tools as Array<Record<string, unknown>>).map((t) => ({
-      name: (t.function as Record<string, unknown>)?.name || t.name,
-      description: (t.function as Record<string, unknown>)?.description || t.description,
-      input_schema: (t.function as Record<string, unknown>)?.parameters || t.input_schema || { type: "object", properties: {} },
+    anthropicRequest.tools = asRecordArray(tools).map((t) => ({
+      name: asRecord(t.function)?.name || t.name,
+      description: asRecord(t.function)?.description || t.description,
+      input_schema: asRecord(t.function)?.parameters || t.input_schema || { type: "object", properties: {} },
     }));
   }
 
   // Passthrough additional fields for upstream providers that support them
   if (tool_choice !== undefined) {
-    const tc = tool_choice as Record<string, unknown> | null;
+    const tc = tool_choice ? asRecord(tool_choice) : null;
     if (tc && tc.type === "function") {
       // OpenAI: {type:"function", function:{name:"xxx"}} → Anthropic: {type:"tool", name:"xxx"}
-      const fn = tc.function as Record<string, unknown> | undefined;
+      const fn = asRecordOptional(tc.function);
       anthropicRequest.tool_choice = fn?.name
         ? { type: "tool", name: fn.name }
         : { type: "tool" };

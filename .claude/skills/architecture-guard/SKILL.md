@@ -77,24 +77,26 @@ jobs:
 | 类型安全 | 检测 any 类型、类型断言、YOLO 式探测 |
 | 共享工具 | 检测重复的辅助函数实现 |
 
-### Step 6: 打包 Linter 脚本
+### Step 6: 打包检查脚本
 
-将 linter 规则打包为可独立运行的脚本，放入 `scripts/` 目录：
+将检查规则打包为可独立运行的 .mjs 脚本（Node.js ESM，跨平台）：
 
 ```
 architecture-guard/
 ├── SKILL.md
 └── scripts/
-    ├── check-layers.sh      ← 依赖方向检查
-    ├── check-naming.sh      ← 命名约定检查
-    ├── check-file-size.sh   ← 文件大小检查
-    └── check-type-safety.sh ← 类型安全检查
+    ├── check-layers.mjs       ← 依赖方向检查
+    ├── check-naming.mjs       ← 命名约定检查
+    ├── check-file-size.mjs    ← 文件大小检查
+    └── check-type-safety.mjs  ← 类型安全检查（TS/Python/Go/Rust）
 ```
 
 每个脚本：
-- 输入：项目根目录路径
-- 输出：JSON 格式的检查结果（文件路径、行号、违规描述、修复指令）
-- 退出码：0=通过，1=有违规
+- 跨平台：Node.js ESM，macOS/Linux/Windows 通用
+- 双模式：CLI（`node scripts/check-layers.mjs`）+ import（`import { checkLayers }`）
+- 输入：项目根目录路径（`CLAUDE_PROJECT_DIR` 环境变量或 cwd）
+- 输出：违规报告（stderr），始终 exit 0
+- 语言感知：自动检测 TS/Python/Go/Rust 并应用对应规则
 
 ## 输入/输出协议
 
@@ -114,6 +116,7 @@ architecture-guard/
 ## 质量标准
 
 - 每条 linter 规则包含明确的修复指令
-- 每个 linter 脚本可独立运行（`scripts/check-*.sh`）
+- 每个检查脚本可独立运行（`node scripts/check-*.mjs`）
+- 脚本跨平台（Node.js ESM，无外部依赖）
 - 结构测试可独立运行
 - CI 检查在 PR 时自动触发

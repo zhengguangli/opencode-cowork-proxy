@@ -18,6 +18,9 @@ import { mapUsage } from '../../cache';
 import { IS_DEBUG } from '../../config';
 import { ThinkTagStripper } from '../../think-tag-stripper';
 import { applyBackpressure } from '../../backpressure';
+import { createSseEncoder } from './sse-encoder';
+import { parseSseFrame, parseSseBuffer } from './sse-parser';
+import { asRecord, asRecordArray, asRecordOptional } from '../type-guards';
 
 type ActiveItemType = "text" | "reasoning" | "function_call" | null;
 
@@ -29,19 +32,8 @@ export function streamChatCompletionsToResponses(
   const msgId = "msg_" + Date.now();
   const createdTime = Math.floor(Date.now() / 1000);
 
-  const sseEncoder = new TextEncoder();
   const decoder = new TextDecoder();
-  const enqueueSSE = (
-    controller: ReadableStreamDefaultController,
-    eventType: string,
-    data: Record<string, unknown>
-  ) => {
-    controller.enqueue(
-      sseEncoder.encode(
-        `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`
-      )
-    );
-  };
+  const enqueueSSE = createSseEncoder();
 
   return new ReadableStream({
     async start(controller) {
@@ -334,22 +326,11 @@ export function streamChatCompletionsToResponses(
           const { done, value } = await reader.read();
           if (done) {
             // Process remaining buffer
-            if (buffer.trim()) {
-              const frames = buffer.split("\n\n");
-              for (const frame of frames) {
-                if (!frame.trim()) continue;
-                const lines = frame.split("\n");
-                for (const line of lines) {
-                  if (line.trim() && line.startsWith("data: ")) {
-                    const data = line.slice(6).trim();
-                    if (data === "[DONE]") continue;
-                    try {
-                      processStreamChunk(JSON.parse(data));
-                    } catch {
-                      /* parse error */
-                    }
-                  }
-                }
+            for (const data of parseSseBuffer(buffer)) {
+              try {
+                processStreamChunk(JSON.parse(data));
+              } catch {
+                /* parse error */
               }
             }
             break;
@@ -364,17 +345,11 @@ export function streamChatCompletionsToResponses(
           buffer = frames.pop() || "";
 
           for (const frame of frames) {
-            if (!frame.trim()) continue;
-            const lines = frame.split("\n");
-            for (const line of lines) {
-              if (line.trim() && line.startsWith("data: ")) {
-                const data = line.slice(6).trim();
-                if (data === "[DONE]") continue;
-                try {
-                  processStreamChunk(JSON.parse(data));
-                } catch {
-                  continue;
-                }
+            for (const data of parseSseFrame(frame)) {
+              try {
+                processStreamChunk(JSON.parse(data));
+              } catch {
+                continue;
               }
             }
           }
@@ -396,7 +371,7 @@ export function streamChatCompletionsToResponses(
           output: outputItems,
         };
         if (lastUsage) {
-          finalResponse.usage = mapUsage(lastUsage as Record<string, unknown>);
+          finalResponse.usage = mapUsage(asRecord(lastUsage));
         }
         enqueueSSE(controller, "response.incomplete", {
           type: "response.incomplete",
@@ -442,7 +417,7 @@ export function streamChatCompletionsToResponses(
 
       // Map usage
       if (lastUsage) {
-        finalResponse.usage = mapUsage(lastUsage as Record<string, unknown>);
+        finalResponse.usage = mapUsage(asRecord(lastUsage));
       }
 
       const terminalEvent = status === "completed" ? "response.completed"

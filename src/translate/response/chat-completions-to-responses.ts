@@ -10,10 +10,11 @@
  */
 import { mapUsage } from '../../cache';
 import { stripThinkTags } from '../../think-tag-stripper';
+import { asRecordArray, asRecordOptional, asRecord } from '../type-guards';
 
 export function formatChatCompletionsToResponses(completion: Record<string, unknown>, model: string): Record<string, unknown> {
-  const choice = (completion.choices as Array<Record<string, unknown>>)?.[0] || {};
-  const message = (choice.message as Record<string, unknown>) || {};
+  const choice = asRecordArray(completion.choices)[0] || {};
+  const message = asRecord(choice.message);
 
   const respId = "resp_" + Date.now() + Math.random().toString(36).slice(2, 6);
   const status = mapFinishReason(choice.finish_reason as string | undefined);
@@ -52,10 +53,10 @@ export function formatChatCompletionsToResponses(completion: Record<string, unkn
   }
 
   // 3. Tool calls → separate function_call output items
-  const tcs = (message.tool_calls as Array<Record<string, unknown>> | undefined);
+  const tcs = asRecordArray(message.tool_calls);
   if (tcs) {
     for (const tc of tcs) {
-      const fn = tc.function as Record<string, unknown> | undefined;
+      const fn = asRecordOptional(tc.function);
       output.push({
         id: "fc_" + Date.now() + Math.random().toString(36).slice(2, 4),
         type: "function_call",
@@ -79,7 +80,7 @@ export function formatChatCompletionsToResponses(completion: Record<string, unkn
 
   // 5. Usage mapping
   if (completion.usage) {
-    response.usage = mapUsage(completion.usage as Record<string, unknown>);
+    response.usage = mapUsage(asRecord(completion.usage));
   }
 
   return response;

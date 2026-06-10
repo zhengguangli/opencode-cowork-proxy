@@ -117,6 +117,8 @@ curl -G http://localhost:8428/api/v1/query \
 
 ### Step 6: 生成 docker-compose
 
+**完整方案（适合大型项目）：**
+
 ```yaml
 version: '3.8'
 services:
@@ -133,6 +135,70 @@ services:
     image: timberio/vector:latest
     volumes: ["./vector.toml:/etc/vector/vector.toml"]
 ```
+
+### Step 7: 轻量级方案（适合小型项目/个人项目）
+
+不需要 VictoriaMetrics 全家桶。使用 stdout + 文件日志 + 简单查询：
+
+**方案：结构化日志 + jq 查询**
+
+```bash
+# 1. 应用输出结构化日志到 stdout
+# 2. 日志收集到文件（由进程管理器或 docker 处理）
+# 3. 用 jq/grep 查询
+
+# 查询错误日志
+cat app.log | jq 'select(.level == "error")'
+
+# 按时间段查询
+cat app.log | jq 'select(.timestamp > "2026-01-01T00:00:00Z")'
+
+# 按用户查询
+cat app.log | jq 'select(.user_id == "123")'
+```
+
+**Node.js 示例（pino）：**
+
+```javascript
+const pino = require('pino');
+const logger = pino({ level: 'info' });
+
+logger.info({ user_id: '123', action: 'login' }, 'User logged in');
+logger.error({ err: error, user_id: '123' }, 'Payment failed');
+```
+
+**Python 示例（structlog）：**
+
+```python
+import structlog
+logger = structlog.get_logger()
+
+logger.info("user_logged_in", user_id="123", ip="1.2.3.4")
+logger.error("payment_failed", user_id="123", error_code="CARD_DECLINED")
+```
+
+**轻量级 docker-compose（仅日志）：**
+
+```yaml
+version: '3.8'
+services:
+  app:
+    build: .
+    volumes:
+      - ./logs:/app/logs
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+```
+
+**何时选择哪个方案：**
+
+| 方案 | 适用场景 | 复杂度 |
+|------|----------|--------|
+| 完整方案 | 多服务、需要指标/追踪、团队协作 | 高 |
+| 轻量级方案 | 单服务、个人项目、日志足够 | 低 |
 
 ## 输入/输出协议
 

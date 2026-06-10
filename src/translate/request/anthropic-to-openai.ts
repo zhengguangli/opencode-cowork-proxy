@@ -6,6 +6,7 @@
  * system prompts / images / tools are mapped.
  */
 import { hashSystemPrompt } from '../../cache';
+import { asRecordArray, asRecordOptional } from '../type-guards';
 
 /**
  * Converts an Anthropic image content block to OpenAI image_url format.
@@ -13,7 +14,7 @@ import { hashSystemPrompt } from '../../cache';
  * Returns null if no source is found.
  */
 function translateImageBlock(part: Record<string, unknown>): Record<string, unknown> | null {
-  const src = part.source as Record<string, unknown> | undefined;
+  const src = asRecordOptional(part.source);
   if (!src) return null;
   if (src.type === "url") {
     return { type: "image_url", image_url: { url: src.url } };
@@ -42,7 +43,7 @@ export function formatAnthropicToOpenAI(body: Record<string, unknown>): Record<s
           let reasoningContent = "";
           const toolCalls: Array<Record<string, unknown>> = [];
 
-          (msg.content as Record<string, unknown>[]).forEach((part) => {
+          asRecordArray(msg.content).forEach((part) => {
             if (part.type === "text") {
               text += (typeof part.text === "string" ? part.text : JSON.stringify(part.text)) + "\n";
             } else if (part.type === "thinking") {
@@ -69,7 +70,7 @@ export function formatAnthropicToOpenAI(body: Record<string, unknown>): Record<s
           const contentParts: Array<Record<string, unknown>> = [];
           const toolResults: Array<Record<string, unknown>> = [];
 
-          (msg.content as Record<string, unknown>[]).forEach((part) => {
+          asRecordArray(msg.content).forEach((part) => {
             if (part.type === "text") {
               userText += (typeof part.text === "string" ? part.text : JSON.stringify(part.text)) + "\n";
             } else if (part.type === "image") {
@@ -101,7 +102,7 @@ export function formatAnthropicToOpenAI(body: Record<string, unknown>): Record<s
     : [];
 
   const systemMessages = Array.isArray(system)
-    ? (system as Record<string, unknown>[]).map((item) => ({ role: "system", content: item.text }))
+    ? asRecordArray(system).map((item) => ({ role: "system", content: item.text }))
     : system ? [{ role: "system", content: system }] : [];
 
   const data: Record<string, unknown> = {
@@ -124,7 +125,7 @@ export function formatAnthropicToOpenAI(body: Record<string, unknown>): Record<s
   if (thinking !== undefined) data.thinking = thinking;
 
   if (tools) {
-    data.tools = (tools as Record<string, unknown>[]).map((item) => ({
+    data.tools = asRecordArray(tools).map((item) => ({
       type: "function",
       function: {
         name: item.name,

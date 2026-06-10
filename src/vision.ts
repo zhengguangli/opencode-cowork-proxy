@@ -15,6 +15,12 @@
 
 import { VISION_CAPABLE_GO, VISION_CAPABLE_ZEN, GO_VISION_MODEL, ZEN_VISION_MODEL } from './config';
 
+/** Safe cast: returns [] if x is not an array. */
+function asRecordArray(x: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(x)) return [];
+  return x as Record<string, unknown>[];
+}
+
 export function getVisionModel(upstream: string, requestedModel?: string | null): string {
   if (requestedModel) {
     if (upstream.includes("/zen/go") && VISION_CAPABLE_GO.has(requestedModel)) return requestedModel;
@@ -28,7 +34,7 @@ export function getVisionModel(upstream: string, requestedModel?: string | null)
 export function hasImages(body: Record<string, unknown>): boolean {
   const messages = body?.messages;
   if (Array.isArray(messages) && messages.some((msg: Record<string, unknown>) =>
-    Array.isArray(msg.content) && (msg.content as Record<string, unknown>[]).some((part: Record<string, unknown>) => part.type === "image")
+    Array.isArray(msg.content) && asRecordArray(msg.content).some((part: Record<string, unknown>) => part.type === "image")
   )) return true;
   const system = body?.system;
   if (Array.isArray(system)) {
@@ -42,7 +48,7 @@ export function hasResponsesImages(body: Record<string, unknown>): boolean {
   if (!Array.isArray(input)) return false;
   return input.some((item: Record<string, unknown>) =>
     item.type === "message" && Array.isArray(item.content) &&
-    (item.content as Record<string, unknown>[]).some((part: Record<string, unknown>) => part.type === "input_image" || part.type === "image_url")
+    asRecordArray(item.content).some((part: Record<string, unknown>) => part.type === "input_image" || part.type === "image_url")
   );
 }
 
@@ -51,7 +57,7 @@ export function hasOpenAIImages(body: Record<string, unknown>): boolean {
   if (Array.isArray(messages) && messages.some((msg: Record<string, unknown>) => {
     if (typeof msg.content === "string") return false;
     if (Array.isArray(msg.content)) {
-      return (msg.content as Record<string, unknown>[]).some((part: Record<string, unknown>) => part.type === "image_url");
+      return asRecordArray(msg.content).some((part: Record<string, unknown>) => part.type === "image_url");
     }
     return false;
   })) return true;
@@ -75,7 +81,7 @@ export function hasAnyImageInMessages(body: Record<string, unknown>): boolean {
     const hasInMessages = messages.some((msg: Record<string, unknown>) => {
       if (typeof msg.content === "string") return false;
       if (!Array.isArray(msg.content)) return false;
-      return (msg.content as Record<string, unknown>[]).some(
+      return asRecordArray(msg.content).some(
         (part: Record<string, unknown>) => part.type === "image" || part.type === "image_url"
       );
     });

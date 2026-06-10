@@ -47,7 +47,8 @@ export function qualityMetric(projectDir) {
 
   let commitCount = 0
   try {
-    commitCount = parseInt(execSync('git log --oneline -30 2>/dev/null | wc -l', { cwd: projectDir, encoding: 'utf-8', timeout: 5000 }).trim())
+    const gitOutput = execSync('git log --oneline -30', { cwd: projectDir, encoding: 'utf-8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] })
+    commitCount = gitOutput.trim().split('\n').filter(line => line.length > 0).length
   } catch {}
 
   const avgLines = files.length > 0 ? Math.round(totalLines / files.length) : 0

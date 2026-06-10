@@ -1,28 +1,90 @@
-import { existsSync, readdirSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
+import { execSync } from 'child_process'
+import { platform } from 'os'
+
+function checkCommand(cmd) {
+  try {
+    const isWindows = platform() === 'win32'
+    const checkCmd = isWindows ? `where ${cmd}` : `which ${cmd}`
+    execSync(checkCmd, { stdio: 'pipe' })
+    return true
+  } catch {
+    return false
+  }
+}
+
+function getPackageManager(projectDir) {
+  if (existsSync(join(projectDir, 'package-lock.json'))) return 'npm'
+  if (existsSync(join(projectDir, 'yarn.lock'))) return 'yarn'
+  if (existsSync(join(projectDir, 'pnpm-lock.yaml'))) return 'pnpm'
+  if (existsSync(join(projectDir, 'bun.lockb'))) return 'bun'
+  return null
+}
 
 export function envVerify(projectDir) {
-  const warnings = []
+  const issues = []
+  const info = []
 
-  for (const file of ['AGENTS.md', 'CLAUDE.md']) {
-    if (!existsSync(join(projectDir, file))) {
-      warnings.push(`缺少 ${file}`)
+  // 检查 Node.js
+  if (checkCommand('node')) {
+    try {
+      const version = execSync('node --version', { encoding: 'utf-8' }).trim()
+      info.push(`Node.js: ${version}`)
+    } catch {
+      issues.push('Node.js 已安装但无法获取版本')
+    }
+  } else {
+    issues.push('缺少 Node.js — 多数脚本需要运行时')
+  }
+
+  // 检查 Git
+  if (checkCommand('git')) {
+    try {
+      const version = execSync('git --version', { encoding: 'utf-8' }).trim()
+      info.push(`Git: ${version}`)
+    } catch {
+      issues.push('Git 已安装但无法获取版本')
+    }
+  } else {
+    issues.push('缺少 Git — 版本控制必需')
+  }
+
+  // 检查包管理器
+  const pm = getPackageManager(projectDir)
+  if (pm) {
+    info.push(`包管理器: ${pm}`)
+    if (!checkCommand(pm)) {
+      issues.push(`检测到 ${pm} 锁文件但未安装 ${pm}`)
     }
   }
 
-  const claudeDir = join(projectDir, '.claude')
-  if (existsSync(claudeDir)) {
-    const agentsDir = join(claudeDir, 'agents')
-    const skillsDir = join(claudeDir, 'skills')
-    const agentCount = existsSync(agentsDir) ? readdirSync(agentsDir).filter(f => f.endsWith('.md')).length : 0
-    const skillCount = existsSync(skillsDir) ? readdirSync(skillsDir, { recursive: true }).filter(f => f === 'SKILL.md').length : 0
-    console.error(`[env-verify] Agents: ${agentCount}, Skills: ${skillCount}`)
-  } else {
-    warnings.push('.claude/ 目录不存在 — harness 未安装')
+  // 检查项目关键文件
+  const criticalFiles = ['AGENTS.md', 'CLAUDE.md']
+  for (const file of criticalFiles) {
+    if (!existsSync(join(projectDir, file))) {
+      issues.push(`缺少 ${file} — 智能体无法推理项目结构`)
+    }
   }
 
-  if (warnings.length > 0) console.error(`[env-verify] ${warnings.length} 个警告`)
-  return { exitCode: 0, message: '' }
+  // 检查 docs/ 目录
+  if (!existsSync(join(projectDir, 'docs'))) {
+    issues.push('缺少 docs/ 目录 — 知识库未初始化')
+  }
+
+  // 检查 .claude/ 目录
+  if (!existsSync(join(projectDir, '.claude'))) {
+    issues.push('缺少 .claude/ 目录 — harness 未安装')
+  }
+
+  const exitCode = issues.length > 0 ? 1 : 0
+  const message = [
+    issues.length > 0 ? `[env-verify] 发现 ${issues.length} 个问题:` : '[env-verify] 环境就绪',
+    ...issues.map(i => `  - ${i}`),
+    info.length > 0 ? `\n环境信息:\n${info.map(i => `  ${i}`).join('\n')}` : ''
+  ].filter(Boolean).join('\n')
+
+  return { exitCode, message }
 }
 
 if (process.argv[1]?.endsWith('env-verify.mjs')) {
