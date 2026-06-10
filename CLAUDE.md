@@ -38,7 +38,7 @@ bunx vercel deploy --prod  # Deploy to Vercel (alternative to Cloudflare)
 
 **Deployment pipeline:** `.github/workflows/release.yml` uses `oven-sh/setup-bun@v1` — runs `bun install --frozen-lockfile`, `bun test`, then deploys to Cloudflare Workers (optional, needs `CF_API_TOKEN`) and Vercel (needs `VERCEL_TOKEN`).
 
-**Local deployment (macOS):** Build a standalone binary with `bun run build:binary`, copy to `/usr/local/bin/` (用户目录无需 sudo，直接 `cp opencode-cowork-proxy /usr/local/bin/`), and manage via `launchctl` with the `ai.opencode.proxy` LaunchAgent (port 18787). Restart with new binary: `launchctl kickstart -k gui/$(id -u)/ai.opencode.proxy`. Check status: `launchctl print gui/$(id -u)/ai.opencode.proxy`.
+**Local deployment (macOS):** Build a standalone binary with `bun run build:binary`, copy to `/usr/local/bin/` (用户目录无需 sudo，直接 `cp opencode-cowork-proxy /usr/local/bin/`), and manage via `brew services` (port 18787). Start/stop/restart: `brew services start|stop|restart opencode-cowork-proxy`. Check status: `brew services list | grep opencode-cowork`. Update binary: `cp <new-binary> /usr/local/Cellar/opencode-cowork-proxy/2.1.1/bin/opencode-cowork-proxy && brew services restart opencode-cowork-proxy`. Formula: `lizhengguang/tap/opencode-cowork-proxy`.
 
 **Vercel deployment (alternative to Cloudflare):** `api/[[...route]].ts` entry exports `app.fetch` directly (no `hono/vercel` adapter needed — it can cause builds to hang). Deploy with `bunx vercel deploy --prod`. Production URL: `https://opencode-cowork-proxy.vercel.app`. Useful when Cloudflare Workers' shared egress IPs trigger upstream rate limiting (429).
 
