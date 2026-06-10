@@ -988,4 +988,86 @@ describe('worker routing', () => {
     await worker.fetch(request);
     expect(capturedBody.model).toBe('qwen3.6-plus');
   });
+
+  // Body size limit: 413 on oversized Content-Length
+  it('rejects requests with body exceeding MAX_BODY_SIZE', async () => {
+    const oversized = 11 * 1024 * 1024; // > 10 MB
+    const request = new Request('https://proxy.example/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': String(oversized),
+        'x-api-key': key,
+      },
+      body: '{}',
+    });
+    const response = await worker.fetch(request);
+    expect(response.status).toBe(413);
+    const body = await response.json();
+    expect(body.error.message).toContain('maximum size');
+  });
+
+  it('allows requests within body size limit', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    const request = new Request('https://proxy.example/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': '100',
+        'x-api-key': key,
+      },
+      body: JSON.stringify({ model: 'test', messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    const response = await worker.fetch(request);
+    expect(response.status).toBe(200);
+  });
+
+  // Retry behavior: 5xx triggers retry, 4xx does not
+  it('retries on upstream 5xx error', async () => {
+    let callCount = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      callCount++;
+      if (callCount === 1) {
+        return new Response('{"error":"server error"}', { status: 500, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    const request = new Request('https://proxy.example/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': key },
+      body: JSON.stringify({ model: 'test', messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    const response = await worker.fetch(request);
+    expect(response.status).toBe(200);
+    expect(callCount).toBe(2); // 1 retry after first 500
+    vi.restoreAllMocks();
+  }, 10_000);
+
+  it('does not retry on upstream 4xx error', async () => {
+    let callCount = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      callCount++;
+      return new Response('{"error":"bad request"}', { status: 400, headers: { 'Content-Type': 'application/json' } });
+    });
+
+    const request = new Request('https://proxy.example/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': key },
+      body: JSON.stringify({ model: 'test', messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    const response = await worker.fetch(request);
+    expect(response.status).toBe(400);
+    expect(callCount).toBe(1); // No retry
+    vi.restoreAllMocks();
+  });
 });

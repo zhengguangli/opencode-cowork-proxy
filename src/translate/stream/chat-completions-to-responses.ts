@@ -1,5 +1,9 @@
 /**
- * Converts OpenAI Chat Completions streaming SSE to OpenAI Responses API streaming SSE.
+ * Chat Completions SSE → Responses API SSE stream translator.
+ *
+ * WHEN TO READ THIS FILE: Debugging /v1/responses streaming issues, adding new
+ * stream event types (e.g. response.output_item.done), or modifying DeepSeek
+ * specific stream handling and <think> tag stripping.
  *
  * Chat Completions SSE: data: {"choices":[{"index":0,"delta":{...}}]}\n\n
  * Responses API SSE:   event: response.text.delta\ndata: {"type":"...","delta":"..."}\n\n
@@ -12,6 +16,8 @@
  */
 import { mapUsage } from '../../cache';
 import { IS_DEBUG } from '../../config';
+import { ThinkTagStripper } from '../../think-tag-stripper';
+import { applyBackpressure } from '../../backpressure';
 
 type ActiveItemType = "text" | "reasoning" | "function_call" | null;
 
@@ -44,8 +50,7 @@ export function streamChatCompletionsToResponses(
       let activeItemIndex = -1;
       let textAccum = "";
       let reasoningAccum = "";
-      let thinkTagBuffer = "";
-      let inThinkTag = false;
+      const tagStripper = new ThinkTagStripper();
       let lastUsage: Record<string, unknown> | null = null;
       let finishReason: string | null = null;
       let toolCallAccum = new Map<
@@ -207,56 +212,7 @@ export function streamChatCompletionsToResponses(
         activeItemType = null;
       }
 
-      function stripThinkTags(raw: string): string | null {
-        // null = content was entirely consumed by a think block (nothing to emit)
-        if (!raw) return raw;
-
-        let result = "";
-        let remaining = raw;
-
-        while (remaining.length > 0) {
-          if (inThinkTag) {
-            // We're inside a think block — look for closing tag
-            const closeIdx = remaining.indexOf('</think>');
-            if (closeIdx !== -1) {
-              // Found closing tag — buffer everything up to it and stop thinking
-              thinkTagBuffer += remaining.slice(0, closeIdx);
-              inThinkTag = false;
-              remaining = remaining.slice(closeIdx + 8); // 8 = len('</think>')
-              thinkTagBuffer = "";
-            } else {
-              // Still inside the think block — buffer and discard
-              thinkTagBuffer += remaining;
-              remaining = "";
-            }
-          } else {
-            // Not in a think block — look for opening tag
-            const openIdx = remaining.indexOf('<think>');
-            if (openIdx !== -1) {
-              // Found opening tag — emit text before it, buffer the rest
-              result += remaining.slice(0, openIdx);
-              thinkTagBuffer = remaining.slice(openIdx + 7); // 7 = len('<think>')
-              inThinkTag = true;
-              // Check if this chunk also contains the closing tag
-              const closeIdx = thinkTagBuffer.indexOf('</think>');
-              if (closeIdx !== -1) {
-                // <think> and </think> in same chunk
-                remaining = thinkTagBuffer.slice(closeIdx + 8);
-                inThinkTag = false;
-                thinkTagBuffer = "";
-                continue; // re-process remaining after </think>
-              }
-              remaining = "";
-            } else {
-              // No think tags in remaining text — emit as-is
-              result += remaining;
-              remaining = "";
-            }
-          }
-        }
-
-        return result || null; // null if nothing left after stripping
-      }
+      // (stateful think tag stripping moved to ThinkTagStripper class in think-tag-stripper.ts)
 
       function processStreamChunk(parsed: Record<string, unknown>) {
         // Capture usage from final chunk
@@ -343,7 +299,7 @@ export function streamChatCompletionsToResponses(
         // Strip inline <think>...</think> tags from models that embed reasoning in text (e.g., minimax)
         const rawContent = delta.content;
         const cleanedContent = rawContent !== undefined && rawContent !== null
-          ? stripThinkTags(String(rawContent))
+          ? tagStripper.strip(String(rawContent))
           : rawContent;
         const hasTextContent = cleanedContent !== undefined && cleanedContent !== null;
         if (hasTextContent) {
@@ -423,13 +379,10 @@ export function streamChatCompletionsToResponses(
             }
           }
 
-          // Backpressure: if consumer is behind, yield to let them drain
-          if (controller.desiredSize !== null && controller.desiredSize <= 0) {
-            await new Promise(resolve => setTimeout(resolve, 0));
-          }
+          await applyBackpressure(controller);
         }
       } catch (err) {
-        console.error('streamChatCompletionsToResponses error:', err);
+        if (IS_DEBUG) console.error('streamChatCompletionsToResponses error:', err);
         if (activeItemType) {
           flushActiveItem(true);
         }

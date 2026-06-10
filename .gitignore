@@ -9,6 +9,9 @@ opencode-cowork-proxy
 .gstack/
 package-lock.json
 _workspace/
+.workspace/
+MEMORY.txt
+MEMORY.md
 
 # Track .claude/ (agents + skills) but exclude per-user and runtime files
 !.claude/

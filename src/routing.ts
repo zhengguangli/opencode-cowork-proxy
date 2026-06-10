@@ -1,3 +1,9 @@
+/**
+ * URL-based routing: path prefix parsing, upstream resolution, model segment extraction.
+ *
+ * WHEN TO READ THIS FILE: Adding a new path prefix, changing upstream resolution
+ * logic, or debugging model-override-from-URL behavior.
+ */
 import { GO_UPSTREAM, ZEN_UPSTREAM, DEFAULT_UPSTREAM, API_VERSION_PATTERN } from './config';
 
 export type RouteConfig = {

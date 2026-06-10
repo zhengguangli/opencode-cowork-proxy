@@ -1,6 +1,12 @@
 /**
- * Converts Anthropic Messages streaming SSE to OpenAI Chat Completions streaming SSE.
+ * Anthropic Messages SSE → OpenAI Chat Completions SSE stream translator.
+ *
+ * WHEN TO READ THIS FILE: Debugging streaming response issues for /v1/messages,
+ * adding support for new Anthropic stream event types, or changing the SSE format.
  */
+import { IS_DEBUG } from '../../config';
+import { applyBackpressure } from '../../backpressure';
+
 export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: string): ReadableStream {
   const startTime = Math.floor(Date.now() / 1000);
   const chatId = "chatcmpl-" + startTime;
@@ -171,10 +177,7 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
             }
           }
 
-          // Backpressure: if consumer is behind, yield to let them drain
-          if (controller.desiredSize !== null && controller.desiredSize <= 0) {
-            await new Promise(resolve => setTimeout(resolve, 0));
-          }
+          await applyBackpressure(controller);
         }
 
         // Process remaining buffer
@@ -182,7 +185,7 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
           processEvents(buffer.split("\n"));
         }
       } catch (err) {
-        console.error('streamAnthropicToOpenAI error:', err);
+        if (IS_DEBUG) console.error('streamAnthropicToOpenAI error:', err);
         // On error, close without [DONE] to signal abnormal termination
         controller.close();
         reader.releaseLock();

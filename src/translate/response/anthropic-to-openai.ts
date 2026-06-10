@@ -1,5 +1,8 @@
 /**
- * Converts Anthropic Messages response to OpenAI Chat Completions response.
+ * Anthropic Messages → OpenAI Chat Completions response (non-streaming) translator.
+ *
+ * WHEN TO READ THIS FILE: Debugging response shape / finish_reason mapping,
+ * adding new content block types, or changing how tool_use → tool_calls conversion works.
  */
 import { extractInputTokens, extractOutputTokens } from '../../cache';
 

@@ -1,3 +1,18 @@
+/**
+ * Image detection and vision model selection across 3 API formats.
+ *
+ * WHEN TO READ THIS FILE: Adding a new API format's image support,
+ * debugging vision model routing, or updating getVisionModel logic.
+ *
+ * FUNCTION QUICK REFERENCE:
+ *   hasImages(body)              — Anthropic Messages format (type:"image")
+ *   hasOpenAIImages(body)        — OpenAI Chat Completions format (type:"image_url")
+ *   hasResponsesImages(body)     — OpenAI Responses API format (type:"input_image"/"image_url")
+ *   hasAnyImageInMessages(body)  — Generic: both "image" and "image_url" (used in pass-through paths)
+ *   rawBodyMayHaveImages(raw)    — Fast pre-check: string scan before full JSON parse
+ *   getVisionModel(upstream, model) — Returns vision-capable model or upstream default
+ */
+
 import { VISION_CAPABLE_GO, VISION_CAPABLE_ZEN, GO_VISION_MODEL, ZEN_VISION_MODEL } from './config';
 
 export function getVisionModel(upstream: string, requestedModel?: string | null): string {
@@ -10,39 +25,39 @@ export function getVisionModel(upstream: string, requestedModel?: string | null)
   return GO_VISION_MODEL;
 }
 
-export function hasImages(body: any): boolean {
+export function hasImages(body: Record<string, unknown>): boolean {
   const messages = body?.messages;
-  if (Array.isArray(messages) && messages.some((msg: any) =>
-    Array.isArray(msg.content) && msg.content.some((part: any) => part.type === "image")
+  if (Array.isArray(messages) && messages.some((msg: Record<string, unknown>) =>
+    Array.isArray(msg.content) && (msg.content as Record<string, unknown>[]).some((part: Record<string, unknown>) => part.type === "image")
   )) return true;
   const system = body?.system;
   if (Array.isArray(system)) {
-    return system.some((part: any) => part.type === "image");
+    return system.some((part: Record<string, unknown>) => part.type === "image");
   }
   return false;
 }
 
-export function hasResponsesImages(body: any): boolean {
+export function hasResponsesImages(body: Record<string, unknown>): boolean {
   const input = body?.input;
   if (!Array.isArray(input)) return false;
-  return input.some((item: any) =>
+  return input.some((item: Record<string, unknown>) =>
     item.type === "message" && Array.isArray(item.content) &&
-    item.content.some((part: any) => part.type === "input_image" || part.type === "image_url")
+    (item.content as Record<string, unknown>[]).some((part: Record<string, unknown>) => part.type === "input_image" || part.type === "image_url")
   );
 }
 
-export function hasOpenAIImages(body: any): boolean {
+export function hasOpenAIImages(body: Record<string, unknown>): boolean {
   const messages = body?.messages;
-  if (Array.isArray(messages) && messages.some((msg: any) => {
+  if (Array.isArray(messages) && messages.some((msg: Record<string, unknown>) => {
     if (typeof msg.content === "string") return false;
     if (Array.isArray(msg.content)) {
-      return msg.content.some((part: any) => part.type === "image_url");
+      return (msg.content as Record<string, unknown>[]).some((part: Record<string, unknown>) => part.type === "image_url");
     }
     return false;
   })) return true;
   const system = body?.system;
   if (Array.isArray(system)) {
-    return system.some((part: any) => part.type === "image_url");
+    return system.some((part: Record<string, unknown>) => part.type === "image_url");
   }
   return false;
 }
@@ -54,14 +69,14 @@ export function rawBodyMayHaveImages(rawBody: string): boolean {
     rawBody.includes('"type": "image"');
 }
 
-export function hasAnyImageInMessages(body: any): boolean {
+export function hasAnyImageInMessages(body: Record<string, unknown>): boolean {
   const messages = body?.messages;
   if (Array.isArray(messages)) {
-    const hasInMessages = messages.some((msg: any) => {
+    const hasInMessages = messages.some((msg: Record<string, unknown>) => {
       if (typeof msg.content === "string") return false;
       if (!Array.isArray(msg.content)) return false;
-      return msg.content.some(
-        (part: any) => part.type === "image" || part.type === "image_url"
+      return (msg.content as Record<string, unknown>[]).some(
+        (part: Record<string, unknown>) => part.type === "image" || part.type === "image_url"
       );
     });
     if (hasInMessages) return true;
@@ -69,7 +84,7 @@ export function hasAnyImageInMessages(body: any): boolean {
   const system = body?.system;
   if (Array.isArray(system)) {
     return system.some(
-      (part: any) => part.type === "image" || part.type === "image_url"
+      (part: Record<string, unknown>) => part.type === "image" || part.type === "image_url"
     );
   }
   return false;

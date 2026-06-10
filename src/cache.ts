@@ -1,5 +1,9 @@
 /**
  * Prompt cache key generation and cache token extraction utilities.
+ *
+ * WHEN TO READ THIS FILE: Investigating token count discrepancies, adding support
+ * for a new provider's usage reporting format, or modifying prompt caching behavior.
+ *
  * Bridges Anthropic's explicit cache_control markers with OpenAI's automatic prefix caching.
  */
 
@@ -27,11 +31,12 @@ function tokenCount(...values: unknown[]): number {
 
 /** Extract cached token count from common OpenAI-compatible usage shapes. */
 export function extractCachedTokens(usage: Record<string, unknown>): number {
+  if (!usage) return 0;
   return tokenCount(
-    usage?.prompt_tokens_details?.cached_tokens,
-    usage?.input_tokens_details?.cached_tokens,
-    usage?.cache_read_input_tokens,
-    usage?.prompt_cache_hit_tokens, // DeepSeek-specific
+    (usage.prompt_tokens_details as Record<string, unknown> | undefined)?.cached_tokens,
+    (usage.input_tokens_details as Record<string, unknown> | undefined)?.cached_tokens,
+    usage.cache_read_input_tokens,
+    usage.prompt_cache_hit_tokens, // DeepSeek-specific
   );
 }
 
@@ -74,7 +79,7 @@ export function extractOutputTokens(usage: Record<string, unknown>): number {
  * Handles both standard OpenAI (prompt_tokens_details.cached_tokens)
  * and DeepSeek-specific (prompt_cache_hit_tokens) cache formats.
  */
-export function mapUsage(usage: Record<string, unknown>): Record<string, unknown> {
+export function mapUsage(usage: Record<string, unknown>): Record<string, unknown> | undefined {
   if (!usage) return undefined;
 
   const hasDeepSeekCache = usage.prompt_cache_hit_tokens !== undefined;
@@ -87,14 +92,16 @@ export function mapUsage(usage: Record<string, unknown>): Record<string, unknown
     cachedTokens = typeof usage.prompt_cache_hit_tokens === "number" ? usage.prompt_cache_hit_tokens : 0;
   } else {
     inputTokens = typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : 0;
-    cachedTokens = usage.prompt_tokens_details?.cached_tokens || 0;
+    const details = usage.prompt_tokens_details as Record<string, unknown> | undefined;
+    cachedTokens = typeof details?.cached_tokens === "number" ? details.cached_tokens : 0;
   }
 
   const outputTokens = typeof usage.completion_tokens === "number" ? usage.completion_tokens : 0;
   const totalTokens = typeof usage.total_tokens === "number" ? usage.total_tokens : inputTokens + outputTokens;
-  const reasoningTokens = usage.completion_tokens_details?.reasoning_tokens;
+  const compDetails = usage.completion_tokens_details as Record<string, unknown> | undefined;
+  const reasoningTokens = typeof compDetails?.reasoning_tokens === "number" ? compDetails.reasoning_tokens : undefined;
 
-  const result: any = {
+  const result: Record<string, unknown> = {
     input_tokens: inputTokens,
     output_tokens: outputTokens,
     total_tokens: totalTokens,

@@ -1,4 +1,13 @@
+/**
+ * OpenAI Chat Completions SSE → Anthropic Messages SSE stream translator.
+ *
+ * WHEN TO READ THIS FILE: Debugging streaming response issues for /v1/chat/completions
+ * when proxying to an Anthropic client, adding support for new OpenAI stream delta
+ * types (tool_calls, function_call), or changing content block lifecycle management.
+ */
 import { extractCachedTokens, extractOutputTokens, extractUncachedInputTokens } from '../../cache';
+import { IS_DEBUG } from '../../config';
+import { applyBackpressure } from '../../backpressure';
 
 export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: string): ReadableStream {
   const messageId = "msg_" + Date.now();
@@ -280,13 +289,10 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
             }
           }
 
-          // Backpressure: if consumer is behind, yield to let them drain
-          if (controller.desiredSize !== null && controller.desiredSize <= 0) {
-            await new Promise(resolve => setTimeout(resolve, 0));
-          }
+          await applyBackpressure(controller);
         }
       } catch (err) {
-        console.error('streamOpenAIToAnthropic error:', err);
+        if (IS_DEBUG) console.error('streamOpenAIToAnthropic error:', err);
         // Close active content block
         if (isToolUse || hasStartedTextBlock || hasStartedThinkingBlock) {
           enqueueSSE(controller, "content_block_stop", {

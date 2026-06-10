@@ -1,0 +1,42 @@
+name: Harness Hooks
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  hooks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pre-execution hooks
+        run: |
+          if [[ -f .claude/skills/hooks-framework/scripts/run-hooks.sh ]]; then
+            .claude/skills/hooks-framework/scripts/run-hooks.sh pre --verbose
+          fi
+
+      - name: Post-execution hooks
+        run: |
+          if [[ -f .claude/skills/hooks-framework/scripts/run-hooks.sh ]]; then
+            .claude/skills/hooks-framework/scripts/run-hooks.sh post --verbose
+          fi
+
+      - name: Observation hooks
+        if: always()
+        run: |
+          if [[ -f .claude/skills/hooks-framework/scripts/run-hooks.sh ]]; then
+            .claude/skills/hooks-framework/scripts/run-hooks.sh observe --verbose
+          fi
+
+      - name: Upload trace logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-trace
+          path: .workspace/
+          retention-days: 7

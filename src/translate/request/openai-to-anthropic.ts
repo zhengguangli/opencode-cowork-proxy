@@ -1,7 +1,16 @@
 /**
- * Converts OpenAI Chat Completions request to Anthropic Messages request.
+ * OpenAI Chat Completions → Anthropic Messages request translator.
+ *
+ * WHEN TO READ THIS FILE: Debugging request translation for /v1/chat/completions
+ * when X-Upstream-Format: anthropic is set, adding support for new OpenAI content
+ * parts, or changing the image/tool-call mapping.
  */
 
+/**
+ * Safely parses a tool call arguments JSON string.
+ * Returns empty object on parse failure or non-object input.
+ * Guards against malformed arguments from upstream providers.
+ */
 function parseToolArguments(value: string | undefined): Record<string, unknown> {
   if (!value) return {};
   try {
@@ -12,6 +21,10 @@ function parseToolArguments(value: string | undefined): Record<string, unknown> 
   }
 }
 
+/**
+ * Converts an OpenAI image URL (data URI or plain URL) to Anthropic image source format.
+ * Detects base64-encoded data URIs and returns the appropriate source type.
+ */
 function imageSourceFromUrl(url: string | undefined): Record<string, unknown> {
   const match = (url || "").match(/^data:([^;]+);base64,(.*)$/);
   if (match) {
@@ -26,8 +39,9 @@ export function formatOpenAIToAnthropic(body: Record<string, unknown>): Record<s
   // Separate system messages from conversation
   const systemMessages: string[] = [];
   const conversationMessages: Array<Record<string, unknown>> = [];
+  const msgList = (messages || []) as Array<Record<string, unknown>>;
 
-  for (const msg of messages || []) {
+  for (const msg of msgList) {
     if (msg.role === "system") {
       if (typeof msg.content === "string") {
         systemMessages.push(msg.content);
@@ -97,7 +111,7 @@ export function formatOpenAIToAnthropic(body: Record<string, unknown>): Record<s
       while (i + 1 < conversationMessages.length && conversationMessages[i + 1].role === "tool") {
         toolMessages.push(conversationMessages[++i]);
       }
-      const content: any[] = toolMessages.map((toolMsg: any) => ({
+      const content: Record<string, unknown>[] = toolMessages.map((toolMsg: Record<string, unknown>) => ({
         type: "tool_result",
         tool_use_id: toolMsg.tool_call_id,
         content: typeof toolMsg.content === "string"
@@ -106,14 +120,14 @@ export function formatOpenAIToAnthropic(body: Record<string, unknown>): Record<s
       }));
       anthropicMessages.push({ role: "user", content });
     } else if (msg.role === "assistant") {
-      const content: any[] = [];
+      const content: Record<string, unknown>[] = [];
 
       if (msg.content) {
         content.push({ type: "text", text: msg.content });
       }
 
       if (msg.tool_calls) {
-        for (const tc of msg.tool_calls) {
+        for (const tc of msg.tool_calls as Array<Record<string, unknown>>) {
           content.push({
             type: "tool_use",
             id: tc.id,
@@ -130,7 +144,7 @@ export function formatOpenAIToAnthropic(body: Record<string, unknown>): Record<s
   }
 
   // Build Anthropic request
-  const anthropicRequest: any = {
+  const anthropicRequest: Record<string, unknown> = {
     model,
     messages: anthropicMessages,
     max_tokens: max_tokens || 4096,
@@ -156,19 +170,21 @@ export function formatOpenAIToAnthropic(body: Record<string, unknown>): Record<s
   }
 
   if (tools) {
-    anthropicRequest.tools = tools.map((t: any) => ({
-      name: t.function?.name || t.name,
-      description: t.function?.description || t.description,
-      input_schema: t.function?.parameters || t.input_schema || { type: "object", properties: {} },
+    anthropicRequest.tools = (tools as Array<Record<string, unknown>>).map((t) => ({
+      name: (t.function as Record<string, unknown>)?.name || t.name,
+      description: (t.function as Record<string, unknown>)?.description || t.description,
+      input_schema: (t.function as Record<string, unknown>)?.parameters || t.input_schema || { type: "object", properties: {} },
     }));
   }
 
   // Passthrough additional fields for upstream providers that support them
   if (tool_choice !== undefined) {
-    if (typeof tool_choice === "object" && tool_choice.type === "function") {
+    const tc = tool_choice as Record<string, unknown> | null;
+    if (tc && tc.type === "function") {
       // OpenAI: {type:"function", function:{name:"xxx"}} → Anthropic: {type:"tool", name:"xxx"}
-      anthropicRequest.tool_choice = tool_choice.function?.name
-        ? { type: "tool", name: tool_choice.function.name }
+      const fn = tc.function as Record<string, unknown> | undefined;
+      anthropicRequest.tool_choice = fn?.name
+        ? { type: "tool", name: fn.name }
         : { type: "tool" };
     } else if (typeof tool_choice === "string") {
       // OpenAI "required" → Anthropic "any"; "auto" and "none" are shared

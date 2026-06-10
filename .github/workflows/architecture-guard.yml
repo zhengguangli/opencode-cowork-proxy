@@ -1,0 +1,27 @@
+name: Architecture Guard
+on: [push, pull_request]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+
+      - name: Layer dependency check
+        run: bash scripts/check-layers.sh
+
+      - name: File size check
+        run: bash scripts/check-file-size.sh
+
+      - name: Naming convention check
+        run: bash scripts/check-naming.sh
+
+      - name: Type safety check
+        run: bash scripts/check-type-safety.sh
+
+      - name: Structured logging check
+        run: bash scripts/check-debug-log.sh
+
+      - name: Architecture structure tests
+        run: bun test test/architecture.spec.ts

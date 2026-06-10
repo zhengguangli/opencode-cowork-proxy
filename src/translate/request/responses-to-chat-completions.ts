@@ -1,5 +1,9 @@
 /**
- * Converts OpenAI Responses API request to OpenAI Chat Completions request.
+ * OpenAI Responses API → Chat Completions request translator.
+ *
+ * WHEN TO READ THIS FILE: Debugging /v1/responses translation, adding DeepSeek
+ * specific quirks, adding support for new response input item types (e.g.
+ * file, web_search), or changing the thinking/max_tokens mapping.
  *
  * Maps /v1/responses format to /chat/completions format, handling:
  * - input as string or array of items
@@ -39,7 +43,7 @@ export function formatResponsesToChatCompletions(body: Record<string, unknown>):
         if (role === "assistant" && pendingReasoning !== null) {
           const textParts = extractTextParts(content);
           const toolCalls = extractToolCalls(item);
-          const assistantMsg: any = { role: "assistant" };
+          const assistantMsg: Record<string, unknown> = { role: "assistant" };
 
           if (textParts) {
             assistantMsg.content = textParts;
@@ -98,11 +102,11 @@ export function formatResponsesToChatCompletions(body: Record<string, unknown>):
         };
         const lastMsg = messages[messages.length - 1];
         if (lastMsg && lastMsg.role === "assistant") {
-          if (!lastMsg.tool_calls) lastMsg.tool_calls = [];
-          // Avoid duplicate tool_call with the same id
-          if (!lastMsg.tool_calls.some((tc: any) => tc.id === toolCall.id)) {
-            lastMsg.tool_calls.push(toolCall);
+          const tcs: Record<string, unknown>[] = (lastMsg.tool_calls as Record<string, unknown>[]) || [];
+          if (!tcs.some((tc) => tc.id === toolCall.id)) {
+            tcs.push(toolCall);
           }
+          lastMsg.tool_calls = tcs;
         } else {
           messages.push({
             role: "assistant",
@@ -123,7 +127,7 @@ export function formatResponsesToChatCompletions(body: Record<string, unknown>):
   }
 
   // Build Chat Completions request
-  const chatReq: any = {
+  const chatReq: Record<string, unknown> = {
     model: model,
     messages,
   };
@@ -145,9 +149,10 @@ export function formatResponsesToChatCompletions(body: Record<string, unknown>):
 
   // Tools: only map function_call type tools (skip built-in tools)
   if (Array.isArray(tools)) {
-    const functionTools = tools.filter((t: any) => t.type === "function");
+    const toolList = tools as Record<string, unknown>[];
+    const functionTools = toolList.filter((t) => t.type === "function");
     if (functionTools.length > 0) {
-      chatReq.tools = functionTools.map((t: any) => ({
+      chatReq.tools = functionTools.map((t) => ({
         type: "function",
         function: {
           name: t.name,
@@ -164,15 +169,18 @@ export function formatResponsesToChatCompletions(body: Record<string, unknown>):
     if (typeof tool_choice === "string") {
       // "auto" | "none" | "required" are shared between APIs
       chatReq.tool_choice = tool_choice;
-    } else if (tool_choice.type === "function") {
-      chatReq.tool_choice = {
-        type: "function",
-        function: { name: tool_choice.name },
-      };
     } else {
-      // Unmapped types (file_search, web_search, custom, mcp, etc.)
-      // — default to "auto" when tools are present, "none" otherwise
-      chatReq.tool_choice = Array.isArray(chatReq.tools) && chatReq.tools.length > 0 ? "auto" : "none";
+      const tcObj = tool_choice as Record<string, unknown>;
+      if (tcObj.type === "function") {
+        chatReq.tool_choice = {
+          type: "function",
+          function: { name: tcObj.name },
+        };
+      } else {
+        // Unmapped types (file_search, web_search, custom, mcp, etc.)
+        // — default to "auto" when tools are present, "none" otherwise
+        chatReq.tool_choice = Array.isArray(chatReq.tools) && chatReq.tools.length > 0 ? "auto" : "none";
+      }
     }
   }
 
@@ -194,28 +202,44 @@ export function formatResponsesToChatCompletions(body: Record<string, unknown>):
   return chatReq;
 }
 
-function extractTextContent(content: any): string {
+/**
+ * Extracts text from Responses API content blocks.
+ * Handles both legacy text blocks (type: "text") and Codex CLI blocks (type: "input_text").
+ * When content is a plain string (not array), returns it as-is.
+ * See docs/FIXES.md Fix 2 for the input_text background.
+ */
+function extractTextContent(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
-    return content
-      .filter((p: any) => p.type === "text" || p.type === "input_text")
-      .map((p: any) => p.text || "")
+    return (content as Record<string, unknown>[])
+      .filter((p) => p.type === "text" || p.type === "input_text")
+      .map((p) => String(p.text || ""))
       .join("\n");
   }
   return "";
 }
 
-function extractTextParts(content: any): string | null {
+/**
+ * Extracts text parts from Responses API content, including output_text (model responses),
+ * input_text (Codex CLI messages), and legacy text blocks.
+ * Returns concatenated text, or null if no text content exists.
+ */
+function extractTextParts(content: unknown): string | null {
   if (Array.isArray(content)) {
-    const texts = content
-      .filter((p: any) => p.type === "output_text" || p.type === "input_text" || p.type === "text")
-      .map((p: any) => p.text || "");
+    const texts = (content as Record<string, unknown>[])
+      .filter((p) => p.type === "output_text" || p.type === "input_text" || p.type === "text")
+      .map((p) => String(p.text || ""));
     return texts.length > 0 ? texts.join("\n") : null;
   }
   return null;
 }
 
-function translateUserContent(content: any): any {
+/**
+ * Translates a Responses API user input item to a Chat Completions user message.
+ * Handles: plain strings, multi-part arrays with text + images (input_image/image_url),
+ * and input_text blocks. Single-pass image detection avoids double iteration.
+ */
+function translateUserContent(content: unknown): Record<string, unknown> {
   if (typeof content === "string") {
     return { role: "user", content };
   }
@@ -226,27 +250,26 @@ function translateUserContent(content: any): any {
 
   // Single pass: detect images and collect content parts simultaneously
   let hasImages = false;
-  const parts: any[] = [];
+  const parts: Record<string, unknown>[] = [];
   const textParts: string[] = [];
 
-  for (const part of content) {
+  for (const part of (content as Record<string, unknown>[])) {
     if (part.type === "text" || part.type === "input_text") {
-      textParts.push(part.text || "");
+      textParts.push(String(part.text || ""));
     } else if (part.type === "input_image") {
       hasImages = true;
-      const src = part.image_url || part.source;
-      if (src?.url) {
-        parts.push({ type: "image_url", image_url: { url: src.url } });
-      } else if (src?.type === "base64") {
-        // Source-based image (Responses API native format)
+      const src = (part as Record<string, unknown>).image_url || part.source;
+      if ((src as Record<string, unknown>)?.url) {
+        parts.push({ type: "image_url", image_url: { url: (src as Record<string, unknown>).url } });
+      } else if ((src as Record<string, unknown>)?.type === "base64") {
         parts.push({
           type: "image_url",
-          image_url: { url: `data:${src.media_type};base64,${src.data}` },
+          image_url: { url: `data:${(src as Record<string, unknown>).media_type};base64,${(src as Record<string, unknown>).data}` },
         });
       }
     } else if (part.type === "image_url") {
       hasImages = true;
-      parts.push({ type: "image_url", image_url: { url: part.image_url?.url || "" } });
+      parts.push({ type: "image_url", image_url: { url: (part.image_url as Record<string, unknown>)?.url as string || "" } });
     }
   }
 
@@ -261,15 +284,21 @@ function translateUserContent(content: any): any {
   return { role: "user", content: textParts.join("\n") || "" };
 }
 
-function translateAssistantContent(item: any): any {
-  const content = item.content || [];
+/**
+ * Translates a Responses API assistant output item to a Chat Completions assistant message.
+ * Extracts output_text content and embedded tool calls.
+ * Note: tool calls in Responses API are separate output items, not embedded in the message.
+ * This function handles the embedded case for providers that embed tool_calls.
+ */
+function translateAssistantContent(item: Record<string, unknown>): Record<string, unknown> {
+  const content = (item.content as Record<string, unknown>[]) || [];
   const text = content
-    .filter((p: any) => p.type === "output_text")
-    .map((p: any) => p.text || "")
+    .filter((p) => p.type === "output_text")
+    .map((p) => String(p.text || ""))
     .join("\n");
   const toolCalls = extractToolCalls(item);
 
-  const assistantMsg: any = { role: "assistant" };
+  const assistantMsg: Record<string, unknown> = { role: "assistant" };
   // Always set content (null if no text, for tool call responses)
   assistantMsg.content = text || null;
   if (toolCalls.length > 0) {
@@ -279,11 +308,16 @@ function translateAssistantContent(item: any): any {
   return assistantMsg;
 }
 
-function extractToolCalls(item: any): any[] {
+/**
+ * Extracts tool call blocks from a Responses API assistant item content.
+ * Filters out function_call_output (which are tool results, not tool calls).
+ * Returns an array of OpenAI-format tool call objects.
+ */
+function extractToolCalls(item: Record<string, unknown>): Record<string, unknown>[] {
   // Responses API assistant items may have tool_calls attached
   // but in Responses API format, tool calls are separate output items, not embedded
-  const content = item.content || [];
-  const result: any[] = [];
+  const content = (item.content as Record<string, unknown>[]) || [];
+  const result: Record<string, unknown>[] = [];
   for (const p of content) {
     if (p.type === "function_call_output") continue;
     if (p.type === "tool_call") {

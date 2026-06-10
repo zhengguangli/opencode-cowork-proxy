@@ -6,14 +6,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Goal:** Anthropic↔OpenAI and OpenAI Responses API translation gateway (Hono app, deployable to Cloudflare Workers, Vercel, or macOS standalone binary).
 
-**Trigger:** For proxy-related work (translation bugs, streaming issues, routing changes, model updates, code review, deployment, testing, performance audit, investigation-only diagnosis), invoke the `proxy-orchestrator` skill. Specialized skills: `field-mapping` (Anthropic↔OpenAI/Responses field reference), `stream-debug` (SSE streaming diagnosis), `deployment` (CF/Vercel/binary + LaunchAgent + CI/CD), `model-registry` (which models exist on which upstream + vision model selection). Simple questions can be answered directly.
-
-**Agents (6):** `translation-specialist`, `streaming-specialist`, `routing-specialist`, `qa-inspector`, `code-reviewer`, `deployment-manager` — definitions in `.claude/agents/`. Orchestration rules + 4 domain skills in `.claude/skills/`. Sub-agent execution mode (fan-out/fan-in for diagnosis, single sub-agents for review/QA). All Agent calls use `model: "opus"`.
+**Trigger:** For proxy-related work (translation bugs, streaming issues, routing changes, model updates, code review, deployment, testing, performance audit, investigation-only diagnosis), answer directly from the documentation below. The 7-agent Harness Engineering system in `.claude/agents/` and 11 skills in `.claude/skills/` provide automated support when needed. Use `harness-orchestrator` skill for multi-agent orchestration.
 
 **Harness Change History:**
 
 | Date | Change | Target | Reason |
 |------|--------|--------|--------|
+| 2026-06-10 | Agent 可读性优化 | src/, docs/ | 新增 19 个 src 文件 "WHEN TO READ" 文件头 + 9 个 docs "何时读此文件" 指引 + 超时值常量化 |
+| 2026-06-10 | Entropy GC: 3 项清理 | .gitignore, docs/, ARCHITECTURE.md | PR1: .workspace/ gitignored + 清理; PR2: 骨架文档 TODO 清理; PR3: ARCHITECTURE.md File Map 同步 |
+| 2026-06-10 | Quality Gate 修复: 3 项缺口 | test/, src/request.ts, docs/ | P0 think-tag-stripper 测试 + P1 backpressure 测试 + P2 checkBodySize 增强 |
+| 2026-06-09 | 7-agent + 11-skill Harness Engineering 体系 | All | 从 6-agent 专用体系升级到通用 Harness Engineering 体系 |
 | 2026-06-05 | Initial configuration (6 agents, 3 skills) | All | First harness built |
 | 2026-06-07 | Full rebuild from scratch | All | Tightened agent descriptions, added `model-registry` skill |
 | 2026-06-07 | Added `model-registry` skill | New skill | Source of truth for upstream model catalogs |
@@ -26,7 +28,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 bun install            # Install dependencies
 bun install --frozen-lockfile  # CI-style clean install (verifies lockfile)
-bun test               # Run all tests (vitest)
+bun test               # Run all tests (vitest) — 360 tests
 bun run test:watch     # Watch mode
 bun run dev            # wrangler dev (CF Workers runtime)
 DEBUG=true bun run server.ts  # Bun dev server with verbose Responses API logging
@@ -139,3 +141,64 @@ vi.restoreAllMocks();
 10. **Temp directory space:** The Claude Code tempfs (`/private/tmp/claude-*/`) can fill up with build artifacts. If commands fail with ENOSPC, set `TMPDIR=/tmp` or clear old temp dirs.
 11. **Image detection before DeepSeek thinking injection (Responses API):** In `/v1/responses` handling, `hasResponsesImages()` + `getVisionModel()` runs **BEFORE** the auto-injection of `thinking: {type:"enabled"}` for deepseek-* models. This is deliberate: if image detection forces a model change to a non-DeepSeek model (e.g., `mimo-v2.5-free`), the thinking param must NOT be added. Reversing this order would inject unsupported params on the replaced model. Always check this ordering when adding a new model-specific feature to the Responses API handler.
 12. **`VISION_CAPABLE_GO` / `VISION_CAPABLE_ZEN` sets drift from upstream reality:** These sets in `src/index.ts` must match what the upstream actually serves. When adding a new vision-capable model, update BOTH the source code AND the `model-registry` skill. If the upstream removes a model, remove it from both. A stale entry means `getVisionModel()` returns a model ID the upstream no longer recognizes, causing 404 errors. See `model-registry` skill for the full catalog and run `curl -s <upstream>/v1/models` to verify.
+
+13. **Known fixes in `docs/FIXES.md`:** `<think>` tag stripping, `input_text` block recognition, Vercel adapter workaround, and model cache fallback are documented in `docs/FIXES.md`. Check this file before modifying related code to avoid reintroducing fixed bugs.
+
+<!-- HARNESS-PILOT:START -->
+
+## Harness: Harness Engineering
+
+**Goal:** 为任意项目一键配置 AI agent 团队和 harness 体系
+
+**Trigger:** 工作请求涉及 harness 配置、agent 团队搭建、知识库架构时，使用 `harness-orchestrator` skill。简单问题直接回答。
+
+### Agents（7个）
+
+| Agent | 文件 | 职责 |
+|-------|------|------|
+| orchestrator | `.claude/agents/orchestrator.md` | 团队协调者 |
+| architect | `.claude/agents/architect.md` | 架构设计师 |
+| builder | `.claude/agents/builder.md` | 代码生成器 |
+| reviewer | `.claude/agents/reviewer.md` | 质量审查员 |
+| qa | `.claude/agents/qa.md` | 验证工程师 |
+| sre | `.claude/agents/sre.md` | 站点可靠性工程师 |
+| context-engineer | `.claude/agents/context-engineer.md` | 上下文工程师 |
+
+### Skills（11个）
+
+| Skill | 文件 | 用途 |
+|-------|------|------|
+| harness-orchestrator | `.claude/skills/harness-orchestrator/SKILL.md` | 团队编排器 |
+| harness-init | `.claude/skills/harness-init/SKILL.md` | 一键初始化 harness |
+| context-setup | `.claude/skills/context-setup/SKILL.md` | 知识库架构生成 |
+| architecture-guard | `.claude/skills/architecture-guard/SKILL.md` | 架构边界强制执行 |
+| entropy-gc | `.claude/skills/entropy-gc/SKILL.md` | 熵管理与垃圾收集 |
+| observability-setup | `.claude/skills/observability-setup/SKILL.md` | 可观测性堆栈配置 |
+| sandbox-exec | `.claude/skills/sandbox-exec/SKILL.md` | 安全代码执行环境 |
+| quality-gate | `.claude/skills/quality-gate/SKILL.md` | 质量审查门禁 |
+| agent-readability | `.claude/skills/agent-readability/SKILL.md` | 智能体可读性优化 |
+| harness-evolve | `.claude/skills/harness-evolve/SKILL.md` | 反馈驱动演进 |
+| hooks-framework | `.claude/skills/hooks-framework/SKILL.md` | 确定性执行钩子 |
+
+### Harness 组件模型
+
+```
+Agent = Model + Harness
+
+Harness = System Prompts + Tools/Skills/MCPs
+        + Bundled Infrastructure (filesystem, sandbox, browser)
+        + Orchestration Logic (subagent spawning, handoffs, routing)
+        + Hooks/Middleware (compaction, continuation, lint checks)
+```
+
+### 核心原则
+
+1. **人类掌舵，智能体执行**
+2. **仓库即记录系统**
+3. **给地图，不给说明书**
+4. **约束即加速器**
+5. **渐进式披露**
+6. **纠错成本低，等待成本高**
+7. **Agent = Model + Harness** — 模型提供智能，Harness 让智能可用
+
+<!-- HARNESS-PILOT:END -->

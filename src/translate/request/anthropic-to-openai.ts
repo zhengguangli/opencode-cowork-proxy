@@ -1,7 +1,19 @@
+/**
+ * Anthropic Messages → OpenAI Chat Completions request translator.
+ *
+ * WHEN TO READ THIS FILE: Debugging request translation for /v1/messages,
+ * adding support for a new Anthropic content block type, or changing how
+ * system prompts / images / tools are mapped.
+ */
 import { hashSystemPrompt } from '../../cache';
 
+/**
+ * Converts an Anthropic image content block to OpenAI image_url format.
+ * Supports both URL-based and base64-encoded images.
+ * Returns null if no source is found.
+ */
 function translateImageBlock(part: Record<string, unknown>): Record<string, unknown> | null {
-  const src = part.source;
+  const src = part.source as Record<string, unknown> | undefined;
   if (!src) return null;
   if (src.type === "url") {
     return { type: "image_url", image_url: { url: src.url } };
@@ -12,11 +24,11 @@ function translateImageBlock(part: Record<string, unknown>): Record<string, unkn
   return null;
 }
 
-export function formatAnthropicToOpenAI(body: any): any {
+export function formatAnthropicToOpenAI(body: Record<string, unknown>): Record<string, unknown> {
   const { model, messages, system, temperature, max_tokens, top_p, top_k, tool_choice, stop_sequences, tools, stream, metadata, thinking } = body;
 
   const openAIMessages = Array.isArray(messages)
-    ? messages.flatMap((msg: any) => {
+    ? messages.flatMap((msg: Record<string, unknown>) => {
         if (typeof msg.content === "string") {
           return [{ role: msg.role, content: msg.content }];
         }
@@ -30,7 +42,7 @@ export function formatAnthropicToOpenAI(body: any): any {
           let reasoningContent = "";
           const toolCalls: Array<Record<string, unknown>> = [];
 
-          msg.content.forEach((part: any) => {
+          (msg.content as Record<string, unknown>[]).forEach((part) => {
             if (part.type === "text") {
               text += (typeof part.text === "string" ? part.text : JSON.stringify(part.text)) + "\n";
             } else if (part.type === "thinking") {
@@ -57,7 +69,7 @@ export function formatAnthropicToOpenAI(body: any): any {
           const contentParts: Array<Record<string, unknown>> = [];
           const toolResults: Array<Record<string, unknown>> = [];
 
-          msg.content.forEach((part: any) => {
+          (msg.content as Record<string, unknown>[]).forEach((part) => {
             if (part.type === "text") {
               userText += (typeof part.text === "string" ? part.text : JSON.stringify(part.text)) + "\n";
             } else if (part.type === "image") {
@@ -89,10 +101,10 @@ export function formatAnthropicToOpenAI(body: any): any {
     : [];
 
   const systemMessages = Array.isArray(system)
-    ? system.map((item: any) => ({ role: "system", content: item.text }))
+    ? (system as Record<string, unknown>[]).map((item) => ({ role: "system", content: item.text }))
     : system ? [{ role: "system", content: system }] : [];
 
-  const data: any = {
+  const data: Record<string, unknown> = {
     model,
     messages: [...systemMessages, ...openAIMessages],
   };
@@ -112,7 +124,7 @@ export function formatAnthropicToOpenAI(body: any): any {
   if (thinking !== undefined) data.thinking = thinking;
 
   if (tools) {
-    data.tools = tools.map((item: any) => ({
+    data.tools = (tools as Record<string, unknown>[]).map((item) => ({
       type: "function",
       function: {
         name: item.name,

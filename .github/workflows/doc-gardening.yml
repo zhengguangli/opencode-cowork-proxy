@@ -1,0 +1,52 @@
+name: Doc Gardening
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # 每周一 09:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  garden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check AGENTS.md freshness
+        run: |
+          if [[ -f .claude/skills/hooks-framework/scripts/context-check.sh ]]; then
+            .claude/skills/hooks-framework/scripts/context-check.sh || true
+          fi
+
+      - name: Check for stale docs
+        run: |
+          echo "## 文档新鲜度报告" > /tmp/doc-report.md
+          echo "" >> /tmp/doc-report.md
+          stale=0
+          for doc in docs/*.md; do
+            if [[ -f "$doc" ]]; then
+              age_days=$(( ($(date +%s) - $(stat -c %Y "$doc" 2>/dev/null || stat -f %m "$doc")) / 86400 ))
+              if [[ $age_days -gt 30 ]]; then
+                echo "- ⚠️ \`${doc}\` — ${age_days} 天未更新" >> /tmp/doc-report.md
+                ((stale++))
+              fi
+            fi
+          done
+          if [[ $stale -eq 0 ]]; then
+            echo "- ✅ 所有文档新鲜（<30 天）" >> /tmp/doc-report.md
+          fi
+          cat /tmp/doc-report.md
+
+      - name: Quality metrics
+        run: |
+          if [[ -f .claude/skills/hooks-framework/scripts/quality-metric.mjs ]]; then
+            node .claude/skills/hooks-framework/scripts/quality-metric.mjs || true
+          fi
+          if [[ -f .workspace/metrics/quality_$(date +%Y%m%d).json ]]; then
+            echo "### 质量指标" >> /tmp/doc-report.md
+            echo '```json' >> /tmp/doc-report.md
+            cat .workspace/metrics/quality_$(date +%Y%m%d).json >> /tmp/doc-report.md
+            echo '```' >> /tmp/doc-report.md
+          fi

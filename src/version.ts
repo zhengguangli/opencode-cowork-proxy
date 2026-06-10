@@ -1,4 +1,9 @@
-// Unified version string — reads from package.json at build/bundle time.
+/**
+ * Unified version string — reads from package.json at build/bundle time.
+ *
+ * WHEN TO READ THIS FILE: Bumping the version number (change it in package.json,
+ * this is a pure re-export), or debugging version resolution across runtimes.
+ */
 // Works across all deployment targets:
 //   - Bun dev server      → bundle-time resolve
 //   - Bun standalone binary → compile-time bundle

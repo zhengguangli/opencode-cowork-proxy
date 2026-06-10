@@ -9,11 +9,7 @@
  * - finish_reason/stop_reason mapping
  */
 import { mapUsage } from '../../cache';
-
-/** Strip <think>...</think> blocks from text content (Minimax-style reasoning in content) */
-function stripThinkTags(text: string): string {
-  return text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-}
+import { stripThinkTags } from '../../think-tag-stripper';
 
 export function formatChatCompletionsToResponses(completion: Record<string, unknown>, model: string): Record<string, unknown> {
   const choice = (completion.choices as Array<Record<string, unknown>>)?.[0] || {};
@@ -33,7 +29,7 @@ export function formatChatCompletionsToResponses(completion: Record<string, unkn
   }
 
   // 2. Content → type:"message" output item with output_text content block
-  const contentText = message.content ? stripThinkTags(message.content) : message.content;
+  const contentText = message.content ? stripThinkTags(String(message.content)) : message.content;
   if (contentText || message.tool_calls) {
     const contentBlocks: Array<Record<string, unknown>> = [];
 
@@ -56,14 +52,16 @@ export function formatChatCompletionsToResponses(completion: Record<string, unkn
   }
 
   // 3. Tool calls → separate function_call output items
-  if (message.tool_calls) {
-    for (const tc of message.tool_calls) {
+  const tcs = (message.tool_calls as Array<Record<string, unknown>> | undefined);
+  if (tcs) {
+    for (const tc of tcs) {
+      const fn = tc.function as Record<string, unknown> | undefined;
       output.push({
         id: "fc_" + Date.now() + Math.random().toString(36).slice(2, 4),
         type: "function_call",
         call_id: tc.id,
-        name: tc.function?.name || "",
-        arguments: tc.function?.arguments || "",
+        name: fn?.name || "",
+        arguments: fn?.arguments || "",
         status: "completed",
       });
     }
@@ -81,12 +79,16 @@ export function formatChatCompletionsToResponses(completion: Record<string, unkn
 
   // 5. Usage mapping
   if (completion.usage) {
-    response.usage = mapUsage(completion.usage);
+    response.usage = mapUsage(completion.usage as Record<string, unknown>);
   }
 
   return response;
 }
 
+/**
+ * Maps OpenAI Chat Completions finish_reason to Responses API status.
+ * Handles DeepSeek-specific "insufficient_system_resource" → "incomplete".
+ */
 function mapFinishReason(finishReason: string | undefined): string {
   switch (finishReason) {
     case "stop":

@@ -1,5 +1,29 @@
+/**
+ * Request utilities: upstream fetch, auth orchestration, error relay, streaming signal,
+ * gzip compression, JSON response construction, and body size checking.
+ *
+ * WHEN TO READ THIS FILE: Debugging upstream connection issues, changing auth flow,
+ * modifying timeout/retry behavior, or adding response compression.
+ *
+ * DEPENDENCY NOTE: This is a singleton module that combines multiple concerns
+ * (auth, fetch, gzip, error relay) because index.ts needs all of them at every
+ * branch point. See ARCHITECTURE.md ADR-3 for rationale.
+ *
+ * KEY FUNCTIONS:
+ *   authenticateRequest()   — Extract + validate API key, return auth result
+ *   safeJsonBody()          — Parse JSON with try/catch, return Result type
+ *   safeUpstreamFetch()     — Fetch with retry, jitter, and error handling
+ *   upstreamErrorResponse() — Forward upstream error body + headers unchanged
+ *   createStreamSignal()    — Stream abort signal (STREAM_TIMEOUT + client disconnect)
+ *   checkBodySize()         — Reject oversized request bodies (>MAX_BODY_SIZE)
+ *   anthropicHeaders()      — Build Anthropic-format auth headers
+ *   jsonResponse()          — Build JSON response with optional gzip compression
+ *   forwardUpstreamHeaders()— Copy upstream rate-limit headers to response
+ *   formatUptime()          — Format uptime seconds as human-readable string
+ */
+
 import { extractApiKey, validateApiKey, authErrorResponse } from './auth';
-import { UPSTREAM_FORWARD_HEADERS } from './config';
+import { UPSTREAM_FORWARD_HEADERS, MAX_BODY_SIZE, MAX_RETRIES, RETRY_BASE_DELAY, IS_DEBUG, STREAM_TIMEOUT } from './config';
 
 export function anthropicHeaders(request: Request, key: string): Record<string, string> {
   const headers: Record<string, string> = {
@@ -23,7 +47,7 @@ export function upstreamErrorResponse(res: Response, body: string): Response {
 
 export function createStreamSignal(request: Request): AbortSignal {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 120_000);
+  const timeoutId = setTimeout(() => controller.abort(), STREAM_TIMEOUT);
   request.signal.addEventListener('abort', () => {
     clearTimeout(timeoutId);
     controller.abort();
@@ -33,7 +57,7 @@ export function createStreamSignal(request: Request): AbortSignal {
 
 export async function safeJsonBody<T>(request: Request): Promise<{ ok: true; data: T } | { ok: false; response: Response }> {
   try {
-    const data = await request.json();
+    const data = await request.json() as T;
     return { ok: true, data };
   } catch {
     return {
@@ -46,6 +70,42 @@ export async function safeJsonBody<T>(request: Request): Promise<{ ok: true; dat
   }
 }
 
+/** Check request body size against max body size. Returns 413 if exceeded.
+ *
+ * Fast path: uses Content-Length header when present (no body read).
+ * Fallback: when header is missing (e.g. chunked transfer), clones the request
+ * and reads the actual body. The original request body is preserved for downstream
+ * consumers (safeJsonBody, request.text()).
+ */
+export async function checkBodySize(request: Request): Promise<Response | null> {
+  const contentLength = request.headers.get("Content-Length");
+  if (contentLength) {
+    const size = parseInt(contentLength, 10);
+    if (!isNaN(size) && size > MAX_BODY_SIZE) {
+      return new Response(
+        JSON.stringify({ error: { type: "invalid_request_error", message: `Request body exceeds maximum size of ${MAX_BODY_SIZE} bytes` } }),
+        { status: 413, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    return null;
+  }
+
+  // No Content-Length header — read actual body via clone to preserve original
+  try {
+    const cloned = request.clone();
+    const body = await cloned.arrayBuffer();
+    if (body.byteLength > MAX_BODY_SIZE) {
+      return new Response(
+        JSON.stringify({ error: { type: "invalid_request_error", message: `Request body exceeds maximum size of ${MAX_BODY_SIZE} bytes` } }),
+        { status: 413, headers: { "Content-Type": "application/json" } },
+      );
+    }
+  } catch {
+    // clone() or arrayBuffer() failed (e.g., body already consumed) — pass through
+  }
+  return null;
+}
+
 export function authenticateRequest(request: Request, path: string): { key: string } | { response: Response } {
   const key = extractApiKey(request.headers);
   const err = validateApiKey(key);
@@ -55,20 +115,56 @@ export function authenticateRequest(request: Request, path: string): { key: stri
 }
 
 export async function safeUpstreamFetch(url: string, init: RequestInit): Promise<Response> {
-  try {
-    return await fetch(url, init);
-  } catch (err: unknown) {
-    if (err?.name === "AbortError") {
+  // Don't retry streaming requests — can't replay SSE
+  const isStreaming = typeof init.body === "string" && init.body.includes('"stream":true');
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch(url, init);
+
+      // Not retryable — return immediately
+      if (res.status < 500) {
+        // 2xx, 3xx, 4xx (incl. 429) — no retry
+        return res;
+      }
+
+      // 5xx Server Error — retryable (exponential backoff with full jitter)
+      if (attempt < MAX_RETRIES) {
+        const delay = Math.min(RETRY_BASE_DELAY * Math.pow(2, attempt) + Math.random() * 200, 10_000);
+        if (IS_DEBUG) console.log(`[RETRY] Attempt ${attempt + 1}/${MAX_RETRIES} got ${res.status}, retrying in ${delay}ms`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+
+      // Last attempt — return whatever we got
+      return res;
+    } catch (err: unknown) {
+      if ((err as Error)?.name === "AbortError") {
+        return new Response(
+          JSON.stringify({ error: { type: "upstream_error", message: "Request aborted" } }),
+          { status: 499, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      // Network error — retry if attempts remain
+      if (attempt < MAX_RETRIES && !isStreaming) {
+        const delay = Math.min(RETRY_BASE_DELAY * Math.pow(2, attempt) + Math.random() * 200, 10_000);
+        if (IS_DEBUG) console.log(`[RETRY] Network error on attempt ${attempt + 1}/${MAX_RETRIES}, retrying in ${delay}ms`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+
       return new Response(
-        JSON.stringify({ error: { type: "upstream_error", message: "Request aborted" } }),
-        { status: 499, headers: { "Content-Type": "application/json" } },
+        JSON.stringify({ error: { type: "upstream_error", message: "Upstream unreachable" } }),
+        { status: 502, headers: { "Content-Type": "application/json" } },
       );
     }
-    return new Response(
-      JSON.stringify({ error: { type: "upstream_error", message: "Upstream unreachable" } }),
-      { status: 502, headers: { "Content-Type": "application/json" } },
-    );
   }
+  // Should not reach here, but satisfy TypeScript
+  return new Response(
+    JSON.stringify({ error: { type: "upstream_error", message: "Exhausted retries" } }),
+    { status: 502, headers: { "Content-Type": "application/json" } },
+  );
 }
 
 export function forwardUpstreamHeaders(target: Headers, source: Response): void {

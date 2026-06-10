@@ -1,5 +1,16 @@
+/**
+ * OpenAI Chat Completions → Anthropic Messages response (non-streaming) translator.
+ *
+ * WHEN TO READ THIS FILE: Debugging response shape when proxying from OpenAI SDK
+ * to Anthropic client, adding new response field mappings, or changing how
+ * finish_reason / tool_calls map to Anthropic stop_reason / tool_use.
+ */
 import { extractCachedTokens, extractOutputTokens, extractUncachedInputTokens } from '../../cache';
 
+/**
+ * Safely parses a tool call arguments JSON string (response-side).
+ * Returns empty object on parse failure. Guards against non-object values.
+ */
 function parseToolArguments(value: string | undefined): Record<string, unknown> {
   if (!value) return {};
   try {
@@ -14,7 +25,8 @@ export function formatOpenAIToAnthropic(completion: Record<string, unknown>, mod
   const messageId = "msg_" + Date.now();
 
   let content: Array<Record<string, unknown>> = [];
-  const message = completion.choices?.[0]?.message;
+  const choices = completion.choices as Array<Record<string, unknown>> | undefined;
+  const message = choices?.[0]?.message as Record<string, unknown> | undefined;
 
   if (message?.reasoning_content) {
     content.push({ type: "thinking", thinking: message.reasoning_content, signature: "" });
@@ -25,16 +37,20 @@ export function formatOpenAIToAnthropic(completion: Record<string, unknown>, mod
   }
 
   if (message?.tool_calls) {
-    content.push(...message.tool_calls.map((item: Record<string, unknown>) => ({
-      type: 'tool_use',
-      id: item.id,
-      name: item.function?.name,
-      input: parseToolArguments(item.function?.arguments),
-    })));
+    const tcs = message.tool_calls as Array<Record<string, unknown>>;
+    content.push(...tcs.map((item) => {
+      const fn = item.function as Record<string, unknown> | undefined;
+      return {
+        type: 'tool_use',
+        id: item.id,
+        name: fn?.name,
+        input: parseToolArguments(fn?.arguments as string | undefined),
+      };
+    }));
   }
 
   // Map OpenAI finish_reason to Anthropic stop_reason
-  const finishReason = completion.choices?.[0]?.finish_reason;
+  const finishReason = choices?.[0]?.finish_reason as string | undefined;
   let stopReason = "end_turn";
   if (finishReason === "tool_calls") stopReason = "tool_use";
   else if (finishReason === "length") stopReason = "max_tokens";
@@ -52,10 +68,11 @@ export function formatOpenAIToAnthropic(completion: Record<string, unknown>, mod
   };
 
   if (completion.usage) {
-    const cached = extractCachedTokens(completion.usage);
+    const usage = completion.usage as Record<string, unknown>;
+    const cached = extractCachedTokens(usage);
     result.usage = {
-      input_tokens: extractUncachedInputTokens(completion.usage),
-      output_tokens: extractOutputTokens(completion.usage),
+      input_tokens: extractUncachedInputTokens(usage),
+      output_tokens: extractOutputTokens(usage),
       cache_read_input_tokens: cached,
       cache_creation_input_tokens: 0, // OpenAI doesn't expose write tokens
     };

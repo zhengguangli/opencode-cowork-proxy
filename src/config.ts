@@ -1,3 +1,21 @@
+/**
+ * Project-wide constants and configuration.
+ *
+ * WHEN TO READ THIS FILE: Adding a new upstream, updating vision model lists,
+ * changing timeouts/retries/body limits, or understanding upstream routing.
+ *
+ * ⚠️ VISION MODEL SETS (VISION_CAPABLE_GO / VISION_CAPABLE_ZEN):
+ * These must match what the upstream actually serves. When adding a new
+ * vision-capable model to the upstream, update BOTH sets. When the upstream
+ * removes a model, remove it from both sets. A stale entry means
+ * getVisionModel() returns a model ID the upstream no longer recognizes,
+ * causing 404 errors.
+ *
+ * Verify against upstream catalogs:
+ *   curl -s https://opencode.ai/zen/go/v1/models  (for /go)
+ *   curl -s https://opencode.ai/zen/v1/models     (for /zen)
+ */
+
 export const GO_UPSTREAM = "https://opencode.ai/zen/go";
 export const ZEN_UPSTREAM = "https://opencode.ai/zen";
 export const DEFAULT_UPSTREAM = GO_UPSTREAM;
@@ -47,4 +65,26 @@ export const UPSTREAM_FORWARD_HEADERS = [
   "X-RateLimit-Limit-Tokens",
 ];
 
-export const IS_DEBUG = typeof process !== 'undefined' && process.env?.DEBUG;
+declare const process: { env?: Record<string, string | undefined> } | undefined;
+export const IS_DEBUG = typeof process !== 'undefined' && process?.env?.DEBUG;
+
+/** Cloudflare Cache TTL for model list responses (in seconds) */
+export const MODEL_CACHE_TTL = 300;
+
+/** Max request body size in bytes (10 MB — typical API payloads are under 1 MB) */
+export const MAX_BODY_SIZE = 10 * 1024 * 1024;
+
+/** Max retries for transient upstream errors (5xx, 429) */
+export const MAX_RETRIES = 2;
+
+/** Base delay in ms for exponential backoff (actual: base * 2^attempt + jitter) */
+export const RETRY_BASE_DELAY = 500;
+
+/** Default upstream response timeout for non-streaming requests (60 s) */
+export const DEFAULT_TIMEOUT = 60_000;
+
+/** Upstream model list fetch timeout (10 s) */
+export const MODEL_LIST_TIMEOUT = 10_000;
+
+/** Stream abort timeout — client must respond or the connection is dropped (120 s) */
+export const STREAM_TIMEOUT = 120_000;

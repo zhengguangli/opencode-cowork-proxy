@@ -1,5 +1,9 @@
 /**
  * API key extraction and validation.
+ *
+ * WHEN TO READ THIS FILE: Changing authentication logic, adding a new key source,
+ * modifying key validation rules, or debugging 401 errors.
+ *
  * Pure functions with no runtime dependencies (testable without CF Workers).
  */
 
