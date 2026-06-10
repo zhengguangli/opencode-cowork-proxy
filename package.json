@@ -10,10 +10,8 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260504.1",
     "typescript": "^6.0.3",
-    "vitest": "^3.2.4",
-    "wrangler": "^4.87.0"
+    "vitest": "^3.2.4"
   },
   "license": "MIT",
   "description": "Bidirectional AI API translation gateway for Cloudflare Workers. Anthropic↔OpenAI format bridge.",

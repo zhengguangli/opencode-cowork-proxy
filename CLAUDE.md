@@ -30,10 +30,9 @@ bun install            # Install dependencies
 bun install --frozen-lockfile  # CI-style clean install (verifies lockfile)
 bun test               # Run all tests (vitest) — 360 tests
 bun run test:watch     # Watch mode
-bun run dev            # wrangler dev (CF Workers runtime)
+bun run server.ts      # Bun dev server (primary local dev, no wrangler dependency)
 DEBUG=true bun run server.ts  # Bun dev server with verbose Responses API logging
 bun run build:binary     # Build standalone binary (macOS)
-bun run deploy         # wrangler deploy to Cloudflare (config: wrangler.toml)
 bunx vercel deploy --prod  # Deploy to Vercel (alternative to Cloudflare)
 ```
 
