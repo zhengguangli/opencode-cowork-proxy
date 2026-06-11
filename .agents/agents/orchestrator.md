@@ -56,7 +56,7 @@ Coordinates the execution flow of the entire harness agent team. Responsible for
 - Target AI tool (claude-code / codex / opencode)
 
 **Output:**
-- Complete harness configuration (agents + skills + CLAUDE.md)
+- Complete harness configuration (agents + skills + AGENTS.md)
 - Intermediate artifacts in `.harness-pliot/` (auditable)
 
 ## Team Members

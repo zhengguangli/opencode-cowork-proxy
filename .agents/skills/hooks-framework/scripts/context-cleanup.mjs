@@ -74,7 +74,7 @@ if (process.argv[1]?.endsWith('context-cleanup.mjs')) {
   if (args.includes('--seed')) {
     const projectDir = args.find(a => a !== '--seed' && !a.startsWith('--')) || process.cwd()
     const seedPaths = [
-      'package.json', 'tsconfig.json', 'AGENTS.md', 'CLAUDE.md',
+      'package.json', 'tsconfig.json', 'AGENTS.md',
       'README.md', 'ARCHITECTURE.md',
     ]
     for (const p of seedPaths) {

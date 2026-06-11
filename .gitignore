@@ -13,11 +13,6 @@ _workspace/
 MEMORY.txt
 MEMORY.md
 
-# Track .claude/ (agents + skills) but exclude per-user and runtime files
-!.claude/
-.claude/settings.json
-.claude/scheduled_tasks.lock
-.claude/skills/**/_workspace/
 
 # HARNESS-PILOT:START
 # AI working memory — transient artifacts
@@ -29,3 +24,9 @@ MEMORY.md
 # Session artifacts
 claude-logs.txt
 .harness-pliot/
+
+# Sandbox worktrees (isolated task execution)
+.worktrees/
+
+# Local macOS newsyslog configuration
+opencode-cowork-proxy.newsyslog.conf

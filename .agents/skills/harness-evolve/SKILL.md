@@ -95,7 +95,7 @@ Perform systematic checks, modifications, and synchronization on existing harnes
 
 1. **Status Audit**: Compare agent/skill files against orchestrator definitions for consistency
 2. **Incremental Modification**: Add, remove, or change per user requests; synchronize immediately after each modification
-3. **Update History**: Record changes in CLAUDE.md
+3. **Update History**: Record changes in CHANGELOG.md
 4. **Change Verification**: Structural check + trigger verification (if triggers are affected)
 
 ### Step 8: Trace Self-Analysis

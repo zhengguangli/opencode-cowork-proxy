@@ -8,7 +8,7 @@
  *   fmt === "openai"  → Translate Anthropic body → OpenAI body, send to /v1/chat/completions
  *   fmt === "anthropic" → Pass-through or modify Anthropic body, send to /v1/messages
  *
- * IMPORTANT: Model override chain order (URL→vision→thinking) is critical — see CLAUDE.md.
+ * IMPORTANT: Model override chain order (URL→vision→thinking) is critical — see docs/ARCHITECTURE.md.
  */
 
 import {

@@ -22,7 +22,6 @@ Ensure harness configuration is correct, skill triggers are accurate, and delive
 - Agent file location and format correctness
 - Skill frontmatter completeness (name, description)
 - Reference consistency check
-- CLAUDE.md pointer sync with actual files
 
 ### 2. Trigger Verification
 - **Positive trigger queries** (8-10): Various natural expressions

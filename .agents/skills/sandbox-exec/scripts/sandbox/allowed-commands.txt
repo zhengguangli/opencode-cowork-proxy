@@ -1,0 +1,76 @@
+# Sandbox Exec — Command Allowlist
+# Commands permitted in sandbox environment
+# Lines starting with # are comments
+# One command per line (binary name only)
+
+# Version control
+git
+
+# JavaScript/TypeScript runtimes
+bun
+bunx
+node
+npm
+npx
+
+# Shell & text processing
+bash
+sh
+ls
+cat
+grep
+egrep
+fgrep
+find
+head
+tail
+wc
+cut
+sort
+uniq
+tee
+diff
+cmp
+
+# Filesystem operations (safe subset)
+mkdir
+cp
+mv
+rm
+chmod
+chown
+ln
+touch
+
+# Output
+echo
+printf
+
+# Utilities
+jq
+curl
+wget
+tar
+gzip
+gunzip
+zip
+unzip
+
+# Python (scripting)
+python3
+pip3
+
+# Build tools
+make
+cc
+gcc
+g++
+
+# Process management
+ps
+kill
+pkill
+time
+
+# Disallowed:
+# sudo, docker, ping, nc, ssh, scp, rsync, netcat, socat

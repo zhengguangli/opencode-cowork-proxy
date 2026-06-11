@@ -15,7 +15,7 @@ Clients interact with the proxy programmatically via HTTP API calls, not through
 
 ```typescript
 // Example: Claude Code configured with a custom proxy endpoint
-// CLAUDE.md: export CLAUDE_PROXY_URL=https://your-proxy.example.com
+// Environment: export CLAUDE_PROXY_URL=https://your-proxy.example.com
 ```
 
 The only human-facing endpoint is `GET /` which returns a JSON health check payload (no HTML).

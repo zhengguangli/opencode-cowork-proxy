@@ -1,7 +1,7 @@
 <!-- HARNESS-PILOT:START -->
 
 ## Architecture Map
-- See [CLAUDE.md](CLAUDE.md) — main project doc and harness pointer
+- AGENTS.md — main project doc and harness pointer (CLAUDE.md removed)
 - Agent definitions: `.agents/agents/` — 7 specialized agents
 - Skill definitions: `.agents/skills/` — 14 standard skills
 - Install script: `scripts/install.mjs` — unified installer
@@ -53,6 +53,8 @@
 - Web search? Read `.agents/skills/web-search/SKILL.md`
 - MCP integration? Read `.agents/skills/mcp-connector/SKILL.md`
 - Install? Read `README.md` or run `node scripts/install.mjs --help`
+- Sandbox config? Read `docs/SANDBOX.md` or run `.agents/skills/sandbox-exec/scripts/sandbox/run-in-sandbox.sh`
+
 
 
 <!-- HARNESS-PILOT:END -->

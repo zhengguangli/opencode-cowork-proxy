@@ -124,17 +124,18 @@ Check whether future AI agents can reason about the business domain directly fro
 
 ## Automated Verification
 
-### Verification Script
-
-Use `harness-verify.mjs` for cross-platform automated quality checks:
+Run quality checks for this project:
 
 ```bash
-# Run in the target project
-cd /path/to/your/project
-node /path/to/harness-pliot/skills/quality-gate/harness-verify.mjs
+# Run quality gate for this project
+# Architecture boundary tests:
+npx vitest run test/architecture.test.ts
 
-# Or specify a target directory
-node harness-verify.mjs /path/to/your/project
+# Full test suite:
+npx vitest run
+
+# TypeScript type check:
+npx tsc --noEmit
 ```
 
 **Cross-platform support:** macOS / Linux / Windows (no bash required)
@@ -146,7 +147,7 @@ See `VERIFICATION_CHECKLIST.md`, which includes:
 - Hooks framework verification (9 scripts)
 - Agent team verification (7 agents)
 - Skill team verification (14 skills)
-- Configuration file verification (CLAUDE.md, AGENTS.md, settings.json)
+- Configuration file verification (AGENTS.md, hooks.yaml, .codex/hooks.json)
 - Project test verification (unit tests)
 
 ### Quality Standards

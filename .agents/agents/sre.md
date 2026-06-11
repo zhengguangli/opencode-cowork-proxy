@@ -58,3 +58,26 @@ Configure observability stack, design entropy management workflows, manage sandb
 - Report cases requiring new constraints to architect
 - Provide environment configuration to builder
 - Provide observability query capabilities to qa
+
+### Sandbox Scripts (sandbox-exec skill)
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/sandbox/run-in-sandbox.sh` | Run any command in isolated Docker container |
+| `scripts/sandbox/run-test-in-sandbox.sh` | Run tests in sandbox (full isolation) |
+| `scripts/sandbox/create-worktree.sh` | Create isolated git worktree for task execution |
+| `scripts/sandbox/entrypoint.sh` | Container entrypoint enforcing command allowlist |
+
+**Quick commands for agents:**
+```bash
+# Run tests in sandbox (default: full network isolation)
+.agents/skills/sandbox-exec/scripts/sandbox/run-test-in-sandbox.sh
+
+# Run a command in sandbox
+.agents/skills/sandbox-exec/scripts/sandbox/run-in-sandbox.sh bun test
+
+# Create isolated worktree for a feature/fix task
+.agents/skills/sandbox-exec/scripts/sandbox/create-worktree.sh my-task-name
+```
+
+**See:** `docs/SANDBOX.md` for full documentation.
