@@ -54,9 +54,9 @@ jobs:
           if [ -f .agents/skills/hooks-framework/scripts/quality-metric.mjs ]; then
             node .agents/skills/hooks-framework/scripts/quality-metric.mjs || true
           fi
-          if [ -f .harness-polit/metrics/quality_$(date +%Y%m%d).json ]; then
+          if [ -f .harness-pliot/metrics/quality_$(date +%Y%m%d).json ]; then
             echo "### 质量指标" >> /tmp/doc-report.md
             echo '~~~json' >> /tmp/doc-report.md
-            cat .harness-polit/metrics/quality_$(date +%Y%m%d).json >> /tmp/doc-report.md
+            cat .harness-pliot/metrics/quality_$(date +%Y%m%d).json >> /tmp/doc-report.md
             echo '~~~' >> /tmp/doc-report.md
           fi

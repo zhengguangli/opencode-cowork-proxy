@@ -10,7 +10,7 @@ function getWorkspaceDir(projectDir) {
     || process.env.OPENCODE_PROJECT_DIR
     || process.env.PROJECT_DIR
     || process.cwd()
-  return join(root, '.harness-polit')
+  return join(root, '.harness-pliot')
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url))

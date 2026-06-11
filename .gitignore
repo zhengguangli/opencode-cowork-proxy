@@ -21,11 +21,11 @@ MEMORY.md
 
 # HARNESS-PILOT:START
 # AI working memory — transient artifacts
-.harness-polit/docs/generated/
-.harness-polit/metrics/
+.harness-pliot/docs/generated/
+.harness-pliot/metrics/
 # HARNESS-PILOT:END
 
 
 # Session artifacts
 claude-logs.txt
-.harness-polit/
+.harness-pliot/

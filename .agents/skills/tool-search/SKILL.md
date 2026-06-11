@@ -74,7 +74,7 @@ On-demand loaded tools inject context through progressive disclosure:
 ### Step 5: Tool Usage Frequency Tracking
 
 ```
-.harness-polit/metrics/tool_usage.json
+.harness-pliot/metrics/tool_usage.json
 {
   "browser": { "calls": 42, "last_used": "2026-06-10T10:30:00Z" },
   "web_search": { "calls": 18, "last_used": "2026-06-10T09:15:00Z" },

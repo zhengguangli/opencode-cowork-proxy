@@ -14,7 +14,7 @@ export function toolOffload(toolOutput, toolName, projectDir, threshold = DEFAUL
     return { offloaded: false, message: 'Output within threshold' }
   }
 
-  const offloadDir = join(projectDir, '.harness-polit', 'offloaded')
+  const offloadDir = join(projectDir, '.harness-pliot', 'offloaded')
   if (!existsSync(offloadDir)) {
     mkdirSync(offloadDir, { recursive: true })
   }
@@ -33,7 +33,7 @@ export function toolOffload(toolOutput, toolName, projectDir, threshold = DEFAUL
     offloaded: true,
     message: `Output offloaded to ${filename}`,
     reference: {
-      file: `.harness-polit/offloaded/${filename}`,
+      file: `.harness-pliot/offloaded/${filename}`,
       head,
       tail,
       totalLines: lines.length,

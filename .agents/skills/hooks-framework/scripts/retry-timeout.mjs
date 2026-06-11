@@ -12,7 +12,7 @@ const CIRCUIT_BREAKER_THRESHOLD = 5
 const CIRCUIT_BREAKER_TIMEOUT = 600000 // 10 minutes
 
 export function retryTimeout(error, toolName, projectDir) {
-  const harnessDir = join(projectDir, '.harness-polit', 'metrics')
+  const harnessDir = join(projectDir, '.harness-pliot', 'metrics')
   if (!existsSync(harnessDir)) {
     mkdirSync(harnessDir, { recursive: true })
   }

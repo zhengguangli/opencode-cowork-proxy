@@ -8,7 +8,7 @@ import { mkdirSync, existsSync, appendFileSync, writeFileSync, readFileSync } fr
 import { join } from 'path'
 
 export function traceLog(projectDir, logEntry = {}) {
-  const harnessDir = join(projectDir, '.harness-polit')
+  const harnessDir = join(projectDir, '.harness-pliot')
   const traceDir = join(harnessDir, 'trace')
   if (!existsSync(traceDir)) {
     mkdirSync(traceDir, { recursive: true })

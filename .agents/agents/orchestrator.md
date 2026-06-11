@@ -42,7 +42,7 @@ Coordinates the execution flow of the entire harness agent team. Responsible for
 - **Map-style guidance**: Provide each agent with precise input context, not a full information dump
 - **Progressive disclosure**: Load skills and references on demand, protecting the context window
 - **Fail-fast retry**: Retry once on failure; if still failing, log and continue without blocking the entire flow
-- **Files as handoff**: Agents pass intermediate artifacts through the `.harness-polit/` directory
+- **Files as handoff**: Agents pass intermediate artifacts through the `.harness-pliot/` directory
 - **Ralph continuation loop**: Intercept model exit attempts, re-inject original prompts in a clean context, force continuation
 - **Context compaction**: When context window nears capacity, intelligently summarize and offload existing content
 - **Tool output offloading**: For large tool outputs, keep only head and tail tokens; write full content to filesystem
@@ -57,7 +57,7 @@ Coordinates the execution flow of the entire harness agent team. Responsible for
 
 **Output:**
 - Complete harness configuration (agents + skills + CLAUDE.md)
-- Intermediate artifacts in `.harness-polit/` (auditable)
+- Intermediate artifacts in `.harness-pliot/` (auditable)
 
 ## Team Members
 
@@ -74,7 +74,7 @@ Coordinates the execution flow of the entire harness agent team. Responsible for
 
 - Use `TaskCreate` to assign tasks, annotating dependencies
 - Agents coordinate in real-time via `SendMessage`
-- Final artifacts written to project-specified paths; intermediate artifacts kept in `.harness-polit/`
+- Final artifacts written to project-specified paths; intermediate artifacts kept in `.harness-pliot/`
 - At the end of each phase, check output completeness before entering the next phase
 
 ## Error Handling
@@ -161,9 +161,9 @@ When an agent exits prematurely during a long task, the orchestrator intercepts 
 Agent output → Check if complete?
   ├─ Complete → Enter next phase
   └─ Incomplete / Early exit →
-        Save current progress to .harness-polit/
+        Save current progress to .harness-pliot/
         Create new context
-        Inject: original prompt + progress files from .harness-polit/
+        Inject: original prompt + progress files from .harness-pliot/
         Re-invoke agent
 ```
 
@@ -178,14 +178,14 @@ When the context window nears capacity (>80%), trigger compaction:
 
 1. Summarize existing conversation into structured key points
 2. Preserve key decisions and incomplete tasks
-3. Offload completed intermediate steps to `.harness-polit/`
+3. Offload completed intermediate steps to `.harness-pliot/`
 4. Inject compacted summary + original goal into new context
 
 ### Tool Output Offloading
 
 When tool output exceeds the threshold (default 2000 tokens):
 
-1. Write full output to `.harness-polit/tool_output/{timestamp}_{tool}.txt`
+1. Write full output to `.harness-pliot/tool_output/{timestamp}_{tool}.txt`
 2. Keep in context: first 500 tokens + "..." + last 500 tokens
 3. Add file path reference; agent can read full content on demand
 
@@ -339,7 +339,7 @@ Next steps:
 ## Inter-Agent Message Protocol
 
 **Transport Layer:**
-- **Filesystem (default)**: Share data via `.harness-polit/` directory — low latency, auditable, supports resume from checkpoint
+- **Filesystem (default)**: Share data via `.harness-pliot/` directory — low latency, auditable, supports resume from checkpoint
 - **Messaging (real-time)**: Coordinate via `SendMessage` — for urgent notifications, unblocking
 
 **Message Format:**
@@ -360,10 +360,10 @@ Next steps:
 **Message Routing Rules:**
 | Message Type | Delivery Method | Acknowledgment |
 |--------------|-----------------|----------------|
-| `request` | Write to target agent's `.harness-polit/inbox/` | Target agent replies with `response` |
-| `response` | Write to requesting agent's `.harness-polit/inbox/` | No ack needed |
-| `notify` | Broadcast to `all`, write to `.harness-polit/broadcast/` | No ack needed |
-| `error` | Write to orchestrator's `.harness-polit/inbox/` + circuit breaker counter | Orchestrator decides handling strategy |
+| `request` | Write to target agent's `.harness-pliot/inbox/` | Target agent replies with `response` |
+| `response` | Write to requesting agent's `.harness-pliot/inbox/` | No ack needed |
+| `notify` | Broadcast to `all`, write to `.harness-pliot/broadcast/` | No ack needed |
+| `error` | Write to orchestrator's `.harness-pliot/inbox/` + circuit breaker counter | Orchestrator decides handling strategy |
 
 **Example: builder requests reviewer review**
 ```json

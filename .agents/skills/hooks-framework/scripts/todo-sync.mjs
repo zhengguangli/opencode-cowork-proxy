@@ -8,7 +8,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 
 export function todoSync(projectDir, todoData) {
-  const harnessDir = join(projectDir, '.harness-polit')
+  const harnessDir = join(projectDir, '.harness-pliot')
   if (!existsSync(harnessDir)) {
     mkdirSync(harnessDir, { recursive: true })
   }

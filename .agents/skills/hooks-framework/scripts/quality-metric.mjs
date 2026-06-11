@@ -8,7 +8,7 @@ import { writeFileSync, readFileSync, mkdirSync, existsSync, appendFileSync } fr
 import { join } from 'path'
 
 export function qualityMetric(projectDir, metrics = {}) {
-  const harnessDir = join(projectDir, '.harness-polit', 'metrics')
+  const harnessDir = join(projectDir, '.harness-pliot', 'metrics')
   if (!existsSync(harnessDir)) {
     mkdirSync(harnessDir, { recursive: true })
   }

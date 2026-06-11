@@ -9,7 +9,7 @@ function getWorkspaceDir(projectDir) {
     || process.env.OPENCODE_PROJECT_DIR
     || process.env.PROJECT_DIR
     || process.cwd()
-  return join(root, '.harness-polit')
+  return join(root, '.harness-pliot')
 }
 
 // 文件大小阈值

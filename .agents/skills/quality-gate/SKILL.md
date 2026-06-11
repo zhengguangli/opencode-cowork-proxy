@@ -131,7 +131,7 @@ Use `harness-verify.mjs` for cross-platform automated quality checks:
 ```bash
 # Run in the target project
 cd /path/to/your/project
-node /path/to/harness-polit/skills/quality-gate/harness-verify.mjs
+node /path/to/harness-pliot/skills/quality-gate/harness-verify.mjs
 
 # Or specify a target directory
 node harness-verify.mjs /path/to/your/project

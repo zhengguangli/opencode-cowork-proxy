@@ -92,7 +92,7 @@ description: 'MCP tool connector. Integrate MCP servers (Context7, GitHub API) f
 Automatically check the connection status of all configured MCP servers at the start of each session:
 1. Call each server's `ping` / `status` endpoint
 2. Mark unavailable servers as `disconnected`
-3. Generate health report and write to `.harness-polit/mcp_health.json`
+3. Generate health report and write to `.harness-pliot/mcp_health.json`
 
 ## Security Policy
 
@@ -100,7 +100,7 @@ Automatically check the connection status of all configured MCP servers at the s
 - **Token Management**: API Keys are injected via environment variables, not written to config files
 - **Network Isolation**: MCP servers run in sandbox containers (optional)
 - **Command Whitelist**: Filesystem MCP restricts access directories
-- **Audit Log**: All MCP calls logged to `.harness-polit/trace/`
+- **Audit Log**: All MCP calls logged to `.harness-pliot/trace/`
 
 ## Input/Output Protocol
 

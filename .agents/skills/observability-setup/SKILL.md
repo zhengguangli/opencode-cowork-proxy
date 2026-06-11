@@ -219,4 +219,4 @@ services:
 - Query interfaces are accessible to all agents
 - docker-compose starts with one command, no additional configuration needed
 - Lightweight solution can use `jq` instead of Grafana for log queries
-- Screenshot evidence save path is standardized (`.harness-polit/evidence/`)
+- Screenshot evidence save path is standardized (`.harness-pliot/evidence/`)

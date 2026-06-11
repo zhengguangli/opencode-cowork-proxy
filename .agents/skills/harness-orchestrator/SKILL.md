@@ -24,9 +24,9 @@ See `.agents/skills/hooks-framework/SKILL.md` for details.
 
 Before workflow starts, check existing outputs to determine execution mode:
 
-- `.harness-polit/` exists + user requests partial modification → **Partial Re-execution** (only invoke relevant agents)
-- `.harness-polit/` exists + user provides new input → **New Execution** (move `.harness-polit/` to `.harness-polit_prev/`)
-- `.harness-polit/` does not exist → **Initial Execution**
+- `.harness-pliot/` exists + user requests partial modification → **Partial Re-execution** (only invoke relevant agents)
+- `.harness-pliot/` exists + user provides new input → **New Execution** (move `.harness-pliot/` to `.harness-pliot_prev/`)
+- `.harness-pliot/` does not exist → **Initial Execution**
 
 ## Phase 1: Project Discovery & Requirements Analysis
 
@@ -109,9 +109,9 @@ for (const group of groups) {
 
 ### Sub-agent Communication
 
-- **Shared Filesystem**: Share data via `.harness-polit/` directory
+- **Shared Filesystem**: Share data via `.harness-pliot/` directory
 - **Message Passing**: Coordinate via SendMessage (only when necessary)
-- **Status Files**: Each sub-agent writes status files (`.harness-polit/subagent_*.json`)
+- **Status Files**: Each sub-agent writes status files (`.harness-pliot/subagent_*.json`)
 
 ## Phase 4: Skill Generation
 
@@ -151,7 +151,7 @@ for (const group of groups) {
 **Execution Mode: Sub-agent**
 
 1. Generate CLAUDE.md (harness pointer only, change history → CHANGELOG.md)
-2. Clean up `.harness-polit/` intermediate artifacts
+2. Clean up `.harness-pliot/` intermediate artifacts
 3. Generate final delivery checklist
 
 **Output:**
@@ -162,17 +162,17 @@ for (const group of groups) {
 
 | Phase | Output Location | Next Phase Reads |
 |-------|----------|---------------------|
-| 1 | `.harness-polit/01_*.json` | Phase 2 reads |
-| 2 | `.harness-polit/02_*.md` | Phase 3 reads |
+| 1 | `.harness-pliot/01_*.json` | Phase 2 reads |
+| 2 | `.harness-pliot/02_*.md` | Phase 3 reads |
 | 3 | Project root | Phase 4+ reads directly |
 | 4 | `.agents/skills/` | Phase 5 reads |
-| 5 | `.harness-polit/05_*.md` | Phase 6 reads |
-| 6 | `.harness-polit/06_*.md` | Phase 7 reads |
+| 5 | `.harness-pliot/05_*.md` | Phase 6 reads |
+| 6 | `.harness-pliot/06_*.md` | Phase 7 reads |
 | 7 | Project root | Final delivery |
 
 ## Plan File Specification
 
-**File Location:** `.harness-polit/02_plan.md`
+**File Location:** `.harness-pliot/02_plan.md`
 
 **Format Requirements:**
 ```markdown
@@ -214,7 +214,7 @@ graph LR
 - Phase 2 generates the plan file
 - Phase 4 reads the plan file, executes per parallel grouping
 - Update status after each task completion
-- Archive to `.harness-polit/completed/` during final cleanup
+- Archive to `.harness-pliot/completed/` during final cleanup
 
 ## Error Handling
 
@@ -243,11 +243,11 @@ graph LR
 - **Sharding**: Shard codebase by directory/module; independent agent per shard
 - **Shared State Isolation**: Independent git worktree per agent; merge results via merge
 - **Batch Merge**: Unified merge after all agents complete; conflicts arbitrated by orchestrator
-- **Progress Aggregation**: All agents write to unified progress file (`.harness-polit/progress.json`)
+- **Progress Aggregation**: All agents write to unified progress file (`.harness-pliot/progress.json`)
 
 **Constraints:**
 - Disable intermediate user messaging during massively parallel execution (avoid information flood)
-- All agents communicate only via `.harness-polit/`, do not use `SendMessage` (avoid message storm)
+- All agents communicate only via `.harness-pliot/`, do not use `SendMessage` (avoid message storm)
 - Single agent timeout does not affect others; check completeness during final aggregation
 
 ## Test Scenarios

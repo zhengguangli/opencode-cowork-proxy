@@ -103,7 +103,7 @@ Perform systematic checks, modifications, and synchronization on existing harnes
 **Purpose:** Analyze agent execution traces to identify and fix harness-level failure patterns.
 
 **Analysis Process:**
-1. Load the most recent N execution logs from `.harness-polit/trace/`
+1. Load the most recent N execution logs from `.harness-pliot/trace/`
 2. Scan for failure patterns:
    - Same error type appearing repeatedly
    - Certain tool calls consistently timing out → may need timeout adjustment or alternative tool
@@ -166,7 +166,7 @@ Perform systematic checks, modifications, and synchronization on existing harnes
    | Execution Time | Wall clock time |
    | Error Recovery Count | Extracted from trace |
    | User Correction Count | Extracted from feedback |
-4. Generate comparison report (`.harness-polit/benchmark/comparison.html`)
+4. Generate comparison report (`.harness-pliot/benchmark/comparison.html`)
 5. Variant B outperforms A → Suggest merge; underperforms A → Analyze cause
 
 **Configurable Variant Dimensions (independently A/B testable):**

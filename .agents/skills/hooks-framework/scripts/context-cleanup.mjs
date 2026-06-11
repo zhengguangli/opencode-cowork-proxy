@@ -21,7 +21,7 @@ function findProjectRoot(startDir) {
 }
 
 export function contextCleanup(projectDir, filePath, ttlMs = DEFAULT_TTL_MS) {
-  const harnessDir = join(projectDir, '.harness-polit')
+  const harnessDir = join(projectDir, '.harness-pliot')
   if (!existsSync(harnessDir)) {
     mkdirSync(harnessDir, { recursive: true })
   }

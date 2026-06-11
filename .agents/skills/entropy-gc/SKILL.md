@@ -156,7 +156,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: entropy-reports
-          path: .harness-polit/drift-scan-*.md
+          path: .harness-pliot/drift-scan-*.md
           retention-days: 30
 
       - name: Create issue on drift
@@ -165,7 +165,7 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const report = fs.readFileSync('.harness-polit/drift-scan-${{ steps.scan.outputs.mode == '--full' && 'full' || 'quick' }}.md', 'utf8');
+            const report = fs.readFileSync('.harness-pliot/drift-scan-${{ steps.scan.outputs.mode == '--full' && 'full' || 'quick' }}.md', 'utf8');
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,

@@ -8,7 +8,7 @@ import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 
 export function continuation(projectDir) {
-  const harnessDir = join(projectDir, '.harness-polit')
+  const harnessDir = join(projectDir, '.harness-pliot')
   
   // Check for pending tasks
   const pendingFile = join(harnessDir, 'pending-tasks.json')

@@ -26,7 +26,7 @@ All notable changes to the opencode-cowork-proxy harness.
 ### Removed
 - `src/handlers/health.ts` — unused `IS_DEBUG` import cleaned
 - All raw `console.log`/`console.error` calls from handler and translate files — centralized in `src/logger.ts`
-- `.claude/skills/.harness-polit/` — stray runtime data removed
+- `.claude/skills/.harness-pliot/` — stray runtime data removed
 
 ### Fixed
 - Double-directory drift between `.claude/` and `.agents/` — `.agents/` now single source of truth

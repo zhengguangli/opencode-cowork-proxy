@@ -44,7 +44,7 @@ Provide visual evidence for key verifications, attached to PRs:
 | Fix verification | Record post-fix behavior | Regression baseline |
 | UI flow | Record user journey | Acceptance evidence |
 
-Use Chrome DevTools or equivalent tools for automated recording, save to `.harness-polit/evidence/`.
+Use Chrome DevTools or equivalent tools for automated recording, save to `.harness-pliot/evidence/`.
 
 ### 5. Dry-Run Verification
 - Orchestrator phase sequence logic

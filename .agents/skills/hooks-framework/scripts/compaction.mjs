@@ -8,7 +8,7 @@ import { writeFileSync, readFileSync, mkdirSync, existsSync, readdirSync, statSy
 import { join } from 'path'
 
 export function compaction(projectDir) {
-  const harnessDir = join(projectDir, '.harness-polit')
+  const harnessDir = join(projectDir, '.harness-pliot')
   if (!existsSync(harnessDir)) {
     mkdirSync(harnessDir, { recursive: true })
   }
@@ -52,7 +52,7 @@ export function compaction(projectDir) {
   // Read workspace stats (native, avoids command injection)
   let workspaceStats = { fileCount: 0 }
   try {
-    const skip = new Set(['node_modules', '.git', '.harness-polit', 'target', 'dist', 'build'])
+    const skip = new Set(['node_modules', '.git', '.harness-pliot', 'target', 'dist', 'build'])
     function countFiles(dir) {
       let count = 0
       let entries

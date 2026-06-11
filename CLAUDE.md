@@ -43,6 +43,6 @@
 | 2026-06-11 | Initial harness setup | Full | Harness Engineering initialization |
 | 2026-06-11 | Sync `.agents/` → `.claude/` | agents, skills, scripts | Double-directory drift cleanup; unify on `.agents/` as SOT |
 | 2026-06-11 | Update config paths | `.claude/settings.json`, CI workflows | Reference `.agents/skills/` instead of `.claude/skills/` |
-| 2026-06-11 | Remove stray `.claude/skills/.harness-polit/` | cleanup | Residual runtime data under skill tree |
+| 2026-06-11 | Remove stray `.claude/skills/.harness-pliot/` | cleanup | Residual runtime data under skill tree |
 | 2026-06-11 | Logging refactor | `src/logger.ts`, handlers, streams | Structured logger with JSON-per-line output; 15 unprotected console.log fixed; centralized logging
 
