@@ -1,29 +1,42 @@
-# PLANS
+# Development Plans: opencode-cowork-proxy
 
-## 项目路线图
+> Recent changes, current focus, and future roadmap for the API translation gateway.
 
-### 已完成
+## Recent (Completed)
 
-| 阶段 | 内容 | 时间 |
-|------|------|------|
-| 初始化 | Harness 工程体系（7 agent + 11 skill） | 2026-06-09 |
-| P0 架构改进 | Handler 拆分 431→7 文件，测试拆分 1074→18 文件 | 2026-06-10 |
-| P1 共享提取 | SSE 编码器、finish_reason 映射、response helpers | 2026-06-10 |
-| P2 类型安全 | 类型守卫替换 34 处 as Record | 2026-06-10 |
-| 文档填充 | ARCHITECTURE/DESIGN/SECURITY/QUALITY_SCORE/FIXES | 2026-06-10 |
-| 测试清理 | 27 处 as Record 断言 → 0，2 处 any → 0 | 2026-06-10 |
-| 余下文档 | FRONTEND/PLANS/PRODUCT_SENSE/RELIABILITY/design-docs/product-specs/tech-debt | 2026-06-10 |
+- **Vercel deployment addition** -- Added Vercel serverless support alongside Cloudflare Workers and Bun standalone. Added `vercel.json` configuration. Motivation: Cloudflare Workers returned 429 rate limits, Vercel provides alternative reliable hosting. (Commit: 009a732... via earlier work)
+- **Pass-through fast path** -- Implemented fast-path optimization that avoids JSON parsing when no model override or image markers are present. Uses `rawBodyMayHaveImages()` for lightweight string scan before full parse. (Commit: 8402f9a)
+- **Gzip response compression** -- Added automatic gzip compression for responses over 1KB when client supports it. (Commit: 8402f9a)
+- **Health check polish** -- Added uptime formatting, upstream URL display, endpoint documentation to `GET /` response. (Commit: 8402f9a)
+- **Architecture refactor** -- Split monolithic `index.ts` into 4 focused modules: routing, handlers, config, request utilities. Added architecture boundary tests. (Commit: 009a732)
+- **Vision-aware model override** -- Detect images in request body and automatically switch to a vision-capable model. (Commit: b83b61b)
+- **DeepSeek thinking injection** -- Auto-inject `thinking: {type: "enabled"}` for DeepSeek reasoning models in Responses API path. (Commit: b34199d)
+- **Multi-deployment targets** -- Cloudflare Workers (primary), Bun standalone binary (local), Vercel serverless (fallback).
+- **All 8 knowledge base docs filled** -- DESIGN.md, SECURITY.md, QUALITY_SCORE.md, RELIABILITY.md, FRONTEND.md, PLANS.md, PRODUCT_SENSE.md, and ARCHITECTURE.md all populated with project-specific content. FIXES.md recreated. 7 TODO placeholder docs filled. (Commits: aa654ae, 60b9526)
+- **brew services deployment doc** -- Updated local deployment docs to use `brew services` for the Bun standalone binary. (Commit: 5552dc7)
 
-### 待办
+## Current (In Progress)
 
-| 优先级 | 项 | 预估 |
-|--------|----|------|
-| P2 | 流转换器重构（436 行 + 341 行 → 拆分） | 需要设计讨论 |
-| P2 | 完整端到端测试套件（含 mock upstream） | ~40 min |
-| P3 | 量化性能基准（每秒请求数、P95 延迟） | ~30 min |
+- **Documentation completeness** -- Ensuring all knowledge base documents contain specific, project-derived content (this task).
+- **Type assertion cleanup** -- Replacing bare `as` casts in test files with `as` pattern compatible with TypeScript 6.x strict mode. 27 test file type assertions cleaned in commit aa654ae.
+- **Test quality** -- Maintaining 19 test files (~4000 lines) covering architecture boundaries, translation logic, error handling, streaming, auth, routing, vision, and backpressure.
 
-### 长期
+## Future (Planned)
 
-- Upstream 版本兼容性 CI 检查（上游 API 变更感知）
-- 独立二进制自动更新机制
-- 更多上游提供商接入
+### Short-Term
+
+- **Enhanced monitoring** -- Add structured logging, metrics endpoint, or tracing header propagation for production observability.
+- **Upstream health checking** -- Add optional upstream health validation to the `GET /` endpoint (without wasting upstream request quota).
+- **CI/CD pipeline** -- Add GitHub Actions for automated test runs, architecture boundary checks, and deployment.
+
+### Medium-Term
+
+- **Additional upstream provider support** -- Add routing and translation for alternate non-opencode.ai providers (e.g., provider-specific auth header formats, custom model catalogs).
+- **Rate limit awareness** -- Add client-side rate-limit header consumption to throttle requests before reaching upstream caps.
+- **Request validation hardening** -- Add schema validation for request bodies (via Zod or similar) instead of relying solely on runtime type guards.
+
+### Long-Term
+
+- **Full Responses API bidirectional translation** -- Add Chat Completions -> Responses API request translation for complete bidirectional support.
+- **Plugin architecture** -- Abstract translation implementations behind interfaces so new format pairs can be added without modifying core routing.
+- **Load testing benchmarks** -- Establish baseline throughput/latency numbers for each deployment target.

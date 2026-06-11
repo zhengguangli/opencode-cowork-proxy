@@ -9,7 +9,7 @@
  */
 
 import { VERSION } from '../version';
-import { IS_DEBUG, START_TIME, GO_UPSTREAM, ZEN_UPSTREAM } from '../config';
+import { START_TIME, GO_UPSTREAM, ZEN_UPSTREAM } from '../config';
 import { jsonResponse, formatUptime } from '../request';
 
 /**

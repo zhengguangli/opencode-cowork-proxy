@@ -1,48 +1,25 @@
-# FRONTEND
+# Frontend: opencode-cowork-proxy
 
-本项目是 API 代理网关（后端服务），**无前端 UI**。
+This is a **backend-only API proxy**. No frontend exists.
 
-## 客户端交互方式
+## What This Project Does
 
-| 方式 | 说明 |
-|------|------|
-| HTTP API | 直接的 REST 端点（`/v1/messages`、`/v1/chat/completions` 等） |
-| Claude Code 代理 | 设置 `--proxy` 或 `CLAUDE_PROXY` 环境变量指向本服务 |
-| 任意 HTTP 客户端 | curl、Postman、Insomnia 等直接发送请求 |
+- Accepts HTTP API requests from AI client SDKs (Anthropic SDK, OpenAI SDK, Codex CLI).
+- Translates request/response formats between Anthropic and OpenAI.
+- Forwards to upstream AI API provider (opencode.ai).
+- Returns translated responses.
 
-## 推荐客户端配置
+## How It Is Used
 
-### Claude Code
+Clients interact with the proxy programmatically via HTTP API calls, not through a web UI:
 
-```bash
-export CLAUDE_PROXY=http://localhost:18787
-# 或
-claude-code --proxy http://localhost:18787
+```typescript
+// Example: Claude Code configured with a custom proxy endpoint
+// CLAUDE.md: export CLAUDE_PROXY_URL=https://your-proxy.example.com
 ```
 
-### curl
+The only human-facing endpoint is `GET /` which returns a JSON health check payload (no HTML).
 
-```bash
-curl -X POST http://localhost:18787/go/v1/messages \
-  -H "Content-Type: application/json" \
-  -H "X-Api-Key: your-api-key" \
-  -d '{"model":"deepseek-v4-flash","messages":[{"role":"user","content":"Hello"}],"max_tokens":100}'
-```
+## If a Frontend Were to Be Added
 
-### OpenAI SDK (Python)
-
-```python
-from openai import OpenAI
-client = OpenAI(base_url="http://localhost:18787", api_key="your-api-key")
-response = client.chat.completions.create(
-    model="deepseek-v4-flash",
-    messages=[{"role": "user", "content": "Hello"}]
-)
-```
-
-## 健康检查端点
-
-```
-GET /
-→ { name: "opencode-cowork-proxy", version: "...", uptime: "...", routes: [...], endpoints: {...} }
-```
+This would require a new package or subdirectory for UI assets. The proxy code itself has no UI-related dependencies or build tooling. Any frontend would be deployed separately and communicate with this proxy as an API agent.

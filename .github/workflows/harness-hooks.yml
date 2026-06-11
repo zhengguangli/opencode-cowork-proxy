@@ -14,23 +14,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Pre-execution hooks
         run: |
-          if [[ -f .claude/skills/hooks-framework/scripts/run-hooks.sh ]]; then
-            .claude/skills/hooks-framework/scripts/run-hooks.sh pre --verbose
+          if [ -f .agents/skills/hooks-framework/scripts/context-check.mjs ]; then
+            node .agents/skills/hooks-framework/scripts/context-check.mjs
           fi
 
       - name: Post-execution hooks
         run: |
-          if [[ -f .claude/skills/hooks-framework/scripts/run-hooks.sh ]]; then
-            .claude/skills/hooks-framework/scripts/run-hooks.sh post --verbose
-          fi
-
-      - name: Observation hooks
-        if: always()
-        run: |
-          if [[ -f .claude/skills/hooks-framework/scripts/run-hooks.sh ]]; then
-            .claude/skills/hooks-framework/scripts/run-hooks.sh observe --verbose
+          if [ -f .agents/skills/hooks-framework/scripts/lint-check.mjs ]; then
+            node .agents/skills/hooks-framework/scripts/lint-check.mjs
           fi
 
       - name: Upload trace logs
@@ -38,5 +36,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: harness-trace
-          path: .workspace/
+          path: .harness-polit/
           retention-days: 7

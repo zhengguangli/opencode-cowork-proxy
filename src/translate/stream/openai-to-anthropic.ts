@@ -6,7 +6,7 @@
  * types (tool_calls, function_call), or changing content block lifecycle management.
  */
 import { extractCachedTokens, extractOutputTokens, extractUncachedInputTokens } from '../../cache';
-import { IS_DEBUG } from '../../config';
+import { log } from '../../logger';
 import { applyBackpressure } from '../../backpressure';
 import { createSseEncoder } from './sse-encoder';
 import { parseSseFrame, parseSseBuffer } from './sse-parser';
@@ -274,7 +274,7 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
           await applyBackpressure(controller);
         }
       } catch (err) {
-        if (IS_DEBUG) console.error('streamOpenAIToAnthropic error:', err);
+        log.debug('STREAM', 'streamOpenAIToAnthropic error:', err);
         // Close active content block
         if (isToolUse || hasStartedTextBlock || hasStartedThinkingBlock) {
           enqueueSSE(controller, "content_block_stop", {

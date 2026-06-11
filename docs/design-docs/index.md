@@ -1,45 +1,24 @@
-# design-docs / index
+# Design Documents Index
 
-## 设计文档索引
+> Index of design documents for the opencode-cowork-proxy project.
 
-| 文档 | 说明 | 状态 |
-|------|------|------|
-| — | 暂无独立设计文档 | — |
+## Available Documents
 
-主要设计决策和架构信息记录在以下位置：
+| Document | Description | Status |
+|----------|-------------|--------|
+| [core-beliefs.md](core-beliefs.md) | Foundational design philosophy | COMPLETE |
+| [TRANSFER.md](TRANSFER.md) | (future) Transfer patterns and protocol mapping | PLANNED |
+| [STREAMING.md](STREAMING.md) | (future) Streaming architecture deep-dive | PLANNED |
+| [ERROR_MODEL.md](ERROR_MODEL.md) | (future) Error classification and propagation | PLANNED |
 
-- `docs/ARCHITECTURE.md` — 分层架构、路由机制、ADR
-- `docs/DESIGN.md` — 设计哲学、字段映射、错误策略
-- `docs/QUALITY_SCORE.md` — 品味规则、代码约束
+## Purpose
 
-### 何时创建设计文档
+Design documents capture architectural decisions, trade-offs, and rationale that are too detailed for ARCHITECTURE.md. They serve as reference for builders implementing new features and for reviewers evaluating design conformance.
 
-当满足以下条件时，应在 `docs/design-docs/` 下创建设计文档：
+## Document Template
 
-1. 引入新的大规模特性（ > 2 天工作量）
-2. 改变核心翻译逻辑（新的格式对、新的上游协议）
-3. 引入架构性变更（新的部署目标、新的路由模式）
-4. 需要团队评审的决策
-
-### 模板
-
-```
-# <Title>
-
-## 动机
-- 为什么需要这个变更？
-
-## 方案对比
-- **方案 A：** ...
-- **方案 B：** ...
-
-## 选择与理由
-- 选择了 [方案 X]，因为 ...
-
-## 影响
-- 正向：
-- 负向/折衷：
-
-## 迁移计划
-- ...
-```
+Each design document should:
+1. State the problem or decision to be made.
+2. Present 2-3 alternatives considered.
+3. Document the chosen approach with rationale.
+4. List consequences and migration notes.

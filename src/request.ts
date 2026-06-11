@@ -23,7 +23,8 @@
  */
 
 import { extractApiKey, validateApiKey, authErrorResponse } from './auth';
-import { UPSTREAM_FORWARD_HEADERS, MAX_BODY_SIZE, MAX_RETRIES, RETRY_BASE_DELAY, IS_DEBUG, STREAM_TIMEOUT } from './config';
+import { UPSTREAM_FORWARD_HEADERS, MAX_BODY_SIZE, MAX_RETRIES, RETRY_BASE_DELAY, STREAM_TIMEOUT } from './config';
+import { log } from './logger';
 
 export function anthropicHeaders(request: Request, key: string): Record<string, string> {
   const headers: Record<string, string> = {
@@ -131,7 +132,7 @@ export async function safeUpstreamFetch(url: string, init: RequestInit): Promise
       // 5xx Server Error — retryable (exponential backoff with full jitter)
       if (attempt < MAX_RETRIES) {
         const delay = Math.min(RETRY_BASE_DELAY * Math.pow(2, attempt) + Math.random() * 200, 10_000);
-        if (IS_DEBUG) console.log(`[RETRY] Attempt ${attempt + 1}/${MAX_RETRIES} got ${res.status}, retrying in ${delay}ms`);
+        log.debug("RETRY", `Attempt ${attempt + 1}/${MAX_RETRIES} got ${res.status}, retrying in ${delay}ms`);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
@@ -149,7 +150,7 @@ export async function safeUpstreamFetch(url: string, init: RequestInit): Promise
       // Network error — retry if attempts remain
       if (attempt < MAX_RETRIES && !isStreaming) {
         const delay = Math.min(RETRY_BASE_DELAY * Math.pow(2, attempt) + Math.random() * 200, 10_000);
-        if (IS_DEBUG) console.log(`[RETRY] Network error on attempt ${attempt + 1}/${MAX_RETRIES}, retrying in ${delay}ms`);
+        log.debug("RETRY", `Network error on attempt ${attempt + 1}/${MAX_RETRIES}, retrying in ${delay}ms`);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }

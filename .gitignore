@@ -18,3 +18,14 @@ MEMORY.md
 .claude/settings.json
 .claude/scheduled_tasks.lock
 .claude/skills/**/_workspace/
+
+# HARNESS-PILOT:START
+# AI working memory — transient artifacts
+.harness-polit/docs/generated/
+.harness-polit/metrics/
+# HARNESS-PILOT:END
+
+
+# Session artifacts
+claude-logs.txt
+.harness-polit/

@@ -4,7 +4,7 @@
  * WHEN TO READ THIS FILE: Debugging streaming response issues for /v1/messages,
  * adding support for new Anthropic stream event types, or changing the SSE format.
  */
-import { IS_DEBUG } from '../../config';
+import { log } from '../../logger';
 import { applyBackpressure } from '../../backpressure';
 
 export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: string): ReadableStream {
@@ -185,7 +185,7 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
           processEvents(buffer.split("\n"));
         }
       } catch (err) {
-        if (IS_DEBUG) console.error('streamAnthropicToOpenAI error:', err);
+        log.debug('STREAM', 'streamAnthropicToOpenAI error:', err);
         // On error, close without [DONE] to signal abnormal termination
         controller.close();
         reader.releaseLock();

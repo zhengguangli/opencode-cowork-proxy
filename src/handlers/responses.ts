@@ -11,8 +11,8 @@
  * 1. Vision model override runs BEFORE DeepSeek thinking injection — this prevents
  *    injecting "thinking: {type:'enabled'}" on a model that was force-changed to
  *    a non-DeepSeek model by image detection.
- * 2. IS_DEBUG debug logging provides verbose input/output inspection for tracing
- *    translation behavior.
+ * 2. Debug logging via log.debug() provides verbose input/output inspection for tracing
+ *    translation behavior — enabled when IS_DEBUG is true (config.ts).
  */
 
 import {
@@ -20,7 +20,7 @@ import {
   formatChatCompletionsToResponses,
   streamChatCompletionsToResponses,
 } from '../translate';
-import { IS_DEBUG, DEFAULT_TIMEOUT, UPSTREAM_FORWARD_HEADERS } from '../config';
+import { DEFAULT_TIMEOUT, UPSTREAM_FORWARD_HEADERS } from '../config';
 import { hasResponsesImages, getVisionModel } from '../vision';
 import {
   authenticateRequest,
@@ -33,6 +33,7 @@ import {
 } from '../request';
 import { asRecord, asRecordArray, asRecordOptional } from '../translate/type-guards';
 import { RouteInfo } from './shared';
+import { log } from '../logger';
 
 /**
  * Handle POST /v1/responses — OpenAI Responses API client → Chat Completions upstream.
@@ -55,29 +56,27 @@ export async function handleResponsesAPI(
   const req = parsed.data;
 
   const originalModel = req.model;
-  if (IS_DEBUG) {
-    console.log(`[RESPONSES] Incoming model=${req.model}, originalModel=${originalModel}, route.modelOverride=${route.modelOverride}`);
-    console.log(`[RESPONSES] Input type=${typeof req.input}, has thinking=${!!req.thinking}`);
+  log.debug('RESPONSES', `Incoming model=${req.model}, originalModel=${originalModel}, route.modelOverride=${route.modelOverride}`);
+  log.debug('RESPONSES', `Input type=${typeof req.input}, has thinking=${!!req.thinking}`);
 
-    if (Array.isArray(req.input)) {
-      for (let ii = 0; ii < req.input.length; ii++) {
-        const item = asRecord(req.input[ii]);
-        if (item.type === 'message') {
-          const contentPreview = Array.isArray(item.content)
-            ? asRecordArray(item.content).map((p) => p.type).join(',')
-            : typeof item.content;
-          console.log(`[RESPONSES]   input[${ii}] type=${item.type} role=${item.role} content_types=[${contentPreview}]`);
-        } else if (item.type === 'reasoning') {
-          console.log(`[RESPONSES]   input[${ii}] type=${item.type} reasoning_len=${String(item.reasoning_text || '').length}`);
-        } else {
-          console.log(`[RESPONSES]   input[${ii}] type=${item.type}`);
-        }
+  if (Array.isArray(req.input)) {
+    for (let ii = 0; ii < req.input.length; ii++) {
+      const item = asRecord(req.input[ii]);
+      if (item.type === 'message') {
+        const contentPreview = Array.isArray(item.content)
+          ? asRecordArray(item.content).map((p) => p.type).join(',')
+          : typeof item.content;
+        log.debug('RESPONSES', `  input[${ii}] type=${item.type} role=${item.role} content_types=[${contentPreview}]`);
+      } else if (item.type === 'reasoning') {
+        log.debug('RESPONSES', `  input[${ii}] type=${item.type} reasoning_len=${String(item.reasoning_text || '').length}`);
+      } else {
+        log.debug('RESPONSES', `  input[${ii}] type=${item.type}`);
       }
-    } else if (typeof req.input === 'string') {
-      console.log(`[RESPONSES]   input string len=${req.input.length}`);
-    } else {
-      console.log(`[RESPONSES]   input other type=${typeof req.input}`);
     }
+  } else if (typeof req.input === 'string') {
+    log.debug('RESPONSES', `  input string len=${req.input.length}`);
+  } else {
+    log.debug('RESPONSES', `  input other type=${typeof req.input}`);
   }
 
   if (route.modelOverride) req.model = route.modelOverride;
@@ -93,18 +92,16 @@ export async function handleResponsesAPI(
   }
 
   const chatReq = formatResponsesToChatCompletions(req);
-  if (IS_DEBUG) {
-    const { model, messages } = chatReq;
-    console.log(`[RESPONSES] ChatReq model=${model}, messages count=${asRecordArray(messages).length}`);
-    const msgs = asRecordArray(messages);
-    for (let mi = 0; mi < msgs.length; mi++) {
-      const m = msgs[mi];
-      const preview = m.role === 'user' ? `"${String(m.content || '').slice(0, 120)}"`
-        : m.role === 'assistant' ? `len=${String(m.content || '').length} reasoning=${!!m.reasoning_content} tool_calls=${((m.tool_calls || []) as unknown[]).length}`
-        : `"${String(m.content || '').slice(0, 80)}"`;
-      console.log(`[RESPONSES]   msg[${mi}] role=${m.role} content=${preview}`);
-    }
+  log.debug('RESPONSES', `ChatReq model=${chatReq.model}, messages count=${asRecordArray(chatReq.messages).length}`);
+  const msgs = asRecordArray(chatReq.messages);
+  for (let mi = 0; mi < msgs.length; mi++) {
+    const m = msgs[mi];
+    const preview = m.role === 'user' ? `"${String(m.content || '').slice(0, 120)}"`
+      : m.role === 'assistant' ? `len=${String(m.content || '').length} reasoning=${!!m.reasoning_content} tool_calls=${((m.tool_calls || []) as unknown[]).length}`
+      : `"${String(m.content || '').slice(0, 80)}"`;
+    log.debug('RESPONSES', `  msg[${mi}] role=${m.role} content=${preview}`);
   }
+
   const upstreamSignal = chatReq.stream ? createStreamSignal(request) : AbortSignal.timeout(DEFAULT_TIMEOUT);
   const upstreamRes = await safeUpstreamFetch(`${upstream}/v1/chat/completions`, {
     method: "POST",
@@ -115,7 +112,7 @@ export async function handleResponsesAPI(
   if (!upstreamRes.ok) return upstreamErrorResponse(upstreamRes, await upstreamRes.text());
 
   if (chatReq.stream) {
-    if (IS_DEBUG) console.log(`[RESPONSES] Streaming response`);
+    log.debug('RESPONSES', 'Streaming response');
     const streamHeaders = new Headers({
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
@@ -128,27 +125,23 @@ export async function handleResponsesAPI(
   }
 
   const data: Record<string, unknown> = await upstreamRes.json();
-  if (IS_DEBUG) {
-    console.log(`[RESPONSES] Upstream response keys=${Object.keys(data).join(',')}`);
-    const firstChoice = asRecordOptional(asRecordArray(data.choices)[0]);
-    const firstMsg = asRecordOptional(firstChoice?.message);
-    console.log(`[RESPONSES] Upstream reasoning_content=${!!firstMsg?.reasoning_content}`);
-    const upstreamContent = String(firstMsg?.content || '');
-    console.log(`[RESPONSES] Upstream content preview=${upstreamContent.slice(0, 200)}`);
-    if (upstreamContent.includes('<think>')) {
-      console.log(`[RESPONSES] ⚠️  FOUND <think> tags in upstream content!`);
-    }
+  log.debug('RESPONSES', `Upstream response keys=${Object.keys(data).join(',')}`);
+  const firstChoice = asRecordOptional(asRecordArray(data.choices)[0]);
+  const firstMsg = asRecordOptional(firstChoice?.message);
+  log.debug('RESPONSES', `Upstream reasoning_content=${!!firstMsg?.reasoning_content}`);
+  const upstreamContent = String(firstMsg?.content || '');
+  log.debug('RESPONSES', `Upstream content preview=${upstreamContent.slice(0, 200)}`);
+  if (upstreamContent.includes('<think>')) {
+    log.warn('RESPONSES', '⚠️  FOUND <think> tags in upstream content!');
   }
 
   const respData = formatChatCompletionsToResponses(data, originalModel);
-  if (IS_DEBUG) {
-    const outputItems = asRecordArray(respData.output);
-    console.log(`[RESPONSES] Translated output item types=${outputItems.map((o) => o.type).join(',')}`);
-    const msgItem = asRecordOptional(outputItems.find((o) => o.type === 'message'));
-    const textOutput = String(asRecordArray(msgItem?.content)?.[0]?.text || '');
-    if (textOutput.includes('<think>')) {
-      console.log(`[RESPONSES] ⚠️  FOUND <think> tags in translated output text!`);
-    }
+  const outputItems = asRecordArray(respData.output);
+  log.debug('RESPONSES', `Translated output item types=${outputItems.map((o) => o.type).join(',')}`);
+  const msgItem = asRecordOptional(outputItems.find((o) => o.type === 'message'));
+  const textOutput = String(asRecordArray(msgItem?.content)?.[0]?.text || '');
+  if (textOutput.includes('<think>')) {
+    log.warn('RESPONSES', '⚠️  FOUND <think> tags in translated output text!');
   }
 
   const upstreamHeaders: Record<string, string> = {};

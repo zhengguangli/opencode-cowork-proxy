@@ -9,7 +9,9 @@
  */
 
 import { anthropicHeaders, authenticateRequest, safeUpstreamFetch, upstreamErrorResponse } from '../request';
-import { MODEL_CACHE_TTL, MODEL_LIST_TIMEOUT, IS_DEBUG } from '../config';
+import { MODEL_CACHE_TTL, MODEL_LIST_TIMEOUT } from '../config';
+
+import { log } from '../logger';
 import { RouteInfo } from './shared';
 
 /**
@@ -56,7 +58,7 @@ export async function handleModelList(
   });
   // Fire-and-forget cache put (no await to avoid blocking response)
   if (modelCache) {
-    (async () => { try { await modelCache.put(cacheRequest, response.clone()); } catch (e) { if (IS_DEBUG) console.error('modelCache.put failed:', e); } })();
+    (async () => { try { await modelCache.put(cacheRequest, response.clone()); } catch (e) { log.debug('MODELS', 'modelCache.put failed:', e); } })();
   }
   return response;
 }

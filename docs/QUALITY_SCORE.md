@@ -1,196 +1,125 @@
-# QUALITY_SCORE
+# Quality Score: opencode-cowork-proxy
 
-## 品味不变量
+> Architecture compliance, test coverage, and document completeness assessment.
 
-### 自动检查规则
+## 1. Architecture Compliance
 
-以下规则由 `.claude/skills/architecture-guard/scripts/` 目录下的 4 个脚本自动检查：
+### 1.1 Layer Isolation
 
-| 检查项 | 脚本 | 阈值 |
-|--------|------|------|
-| 文件大小 | `check-file-size.mjs` | 多数 ≤300 行，流翻译器 ≤450 行 |
-| 命名约定 | `check-naming.mjs` | 文件名使用 kebab-case + 有意义的后缀 |
-| 类型安全 | `check-type-safety.mjs` | `as Record<string, unknown>` = 0（业务代码） |
-| 依赖方向 | `check-layers.mjs` | 单向依赖：config → routing → index → handlers → request → translate |
+All layer boundaries enforced by `test/architecture.spec.ts` (Vitest-based, run via `vitest run`):
 
-### 文件大小标准
+| Rule | Files Checked | Status | Enforcement |
+|------|---------------|--------|-------------|
+| L1: Translate isolation | 9 translate modules | PASS | No imports from request/entry |
+| L2: request.ts isolation | `request.ts` | PASS | No imports from translate |
+| L3: Utilities isolation | routing, auth, vision, backpressure, think-tag-stripper | PASS | No imports from translate/request/index |
+| L5: Entry point isolation | server.ts | PASS | Only imports index.ts |
+| C3 (D1): Translation purity | 9 translate modules | PASS | No fetch() or fs.* calls |
+| Barrel integrity | translate/index.ts | PASS | No imports (pure re-exports) |
 
-| 分类 | 上限 | 说明 |
-|------|------|------|
-| Handler 文件 | 160 行 | handler = I/O 编排 + 翻译器调用 |
-| 翻译器（非流） | 300 行 | 纯函数 payload 变换 |
-| 翻译器（流） | 450 行 | 状态机 + 闭包耦合 |
-| 共享辅助 | 50 行 | 单一职责函数 |
-| 测试文件 | 500 行 | 每个文件测试一个领域 |
-| 配置文件 | 100 行 | 仅常量和注释 |
-| 文档 | 350 行 | 目录/README 可略长 |
+### 1.2 File Size Compliance (M3)
 
-超过上限的文件需提供注释说明原因。
+Limit: 500 lines per source file.
 
-### 类型安全标准
+| Largest Files | Lines | Status |
+|---------------|-------|--------|
+| `translate/stream/chat-completions-to-responses.ts` | 428 | PASS |
+| `translate/stream/openai-to-anthropic.ts` | 340 | PASS |
+| `translate/stream/anthropic-to-openai.ts` | 217 | PASS |
+| `translate/request/openai-to-anthropic.ts` | 203 | PASS |
+| `handlers/responses.ts` | 161 | PASS |
+| `request.ts` | 221 | PASS |
 
-**严格禁止（业务代码）：**
-- `as Record<string, unknown>` — 必须替换为 `asRecord()` / `asRecordArray()` / `asRecordOptional()`
-- `as any` — 零容忍
-- `as unknown as X` — 零容忍
+### 1.3 Import Count Compliance (M4)
 
-**允许（带注释）：**
-- 类型守卫文件本身（`type-guards.ts` 内部使用 `as` 实现守卫函数）
-- 测试代码中的 `as`（但推荐使用显式类型标注）
-- Stream controller / Transformer 构造（API 强制类型签名）
+Limit: 10 imports per file. All files pass (architecture test M4).
 
-### 命名规范
+### 1.4 Type Safety Compliance (C9)
 
-| 文件类型 | 模式 | 示例 |
-|----------|------|------|
-| 源文件 | `kebab-case.ts` | `think-tag-stripper.ts` |
-| 测试文件 | `kebab-case.test.ts` | `responses-api.test.ts` |
-| Handler | `handlers/<noun>.ts` | `handlers/messages.ts` |
-| 翻译器 | `translate/{direction}/<format>-to-<format>.ts` | `translate/request/anthropic-to-openai.ts` |
-| 共享工具 | `translate/{direction}/<tool-name>.ts` | `translate/stream/sse-encoder.ts` |
-| 根级模块 | `camel-name.ts` | `config.ts`, `routing.ts` |
+Rules enforced by `.claude/skills/architecture-guard/scripts/check-type-safety.mjs`:
+- Use `type-guards.ts` helpers instead of bare `as` casts -- largely compliant in source, some test files use `as` for narrowing in assertions.
+- No `any` type annotations -- compliant.
+- No `@ts-ignore` / `@ts-expect-error` -- compliant.
+- Non-null assertions limited to 3 per file -- compliant.
 
-### 日志规范
+### 1.5 Naming Convention Compliance (C10, C11)
 
-| 环境 | 允许 | 禁止 |
-|------|------|------|
-| 生产 | `console.log`/`console.error` 仅在 `IS_DEBUG` 保护下 | 裸 `console.log` |
-| 调试 | `console.log(...)` 带 `[PREFIX]` 标签 | 无标签的裸输出 |
+| Pattern | Convention | Status |
+|---------|-----------|--------|
+| Handler exports | `handle[Endpoint]` | Compliant (handleAnthropicToOpenAI, etc.) |
+| Request translators | `format[From]To[To]` | Compliant |
+| Response translators | `to[Format]Response` or `format[From]To[To]` | Compliant |
+| Stream translators | `stream[From]To[To]` | Compliant |
+| Utility exports | Descriptive camelCase | Compliant |
 
-**IS_DEBUG 模式格式：**
-```typescript
-if (IS_DEBUG) console.log(`[SOME_CONTEXT] message ${value}`);
-```
+## 2. Test Coverage
 
----
+### 2.1 Test Files and Focus Areas
 
-## 代码约定
+| Test File | Lines | Focus | Type |
+|-----------|-------|-------|------|
+| `architecture.spec.ts` | 203 | Layer isolation, file size, purity | Architecture |
+| `auth.test.ts` | 124 | Key extraction, validation, error responses | Unit |
+| `routing.test.ts` | 325 | URL parsing, prefix stripping, upstream resolution | Unit |
+| `vision.test.ts` | 470 | Image detection (3 formats), vision model selection | Unit |
+| `cache.test.ts` | 92 | Token extraction, usage mapping | Unit |
+| `backpressure.test.ts` | 85 | Stream backpressure behavior | Unit |
+| `think-tag-stripper.test.ts` | 152 | Non-stream + streaming tag stripping | Unit |
+| `model-override.test.ts` | 109 | URL/vision override logic | Unit |
+| `error-handling.test.ts` | 165 | Upstream error relay, retry logic | Unit |
+| `utils.test.ts` | 170 | Shared utility functions | Unit |
+| `anthropic-to-openai-request.test.ts` | 396 | Request translation A->O | Unit |
+| `openai-to-anthropic-request.test.ts` | 203 | Request translation O->A | Unit |
+| `response.test.ts` | 217 | Response translation A->O and O->A | Unit |
+| `responses-request.test.ts` | 455 | Responses request translation | Unit |
+| `responses-response.test.ts` | 139 | Responses response translation | Unit |
+| `responses-stream.test.ts` | 130 | Responses streaming translation | Unit |
+| `stream.test.ts` | 299 | SSE stream translation | Unit |
+| `responses-api.test.ts` | 244 | Responses API full pipeline | Integration |
+| `index.test.ts` | 10 | Full request/response pipeline | Integration |
+| **Total** | **3988** | **19 test files** | |
 
-### 函数风格
+### 2.2 Coverage Gaps
 
-1. **纯函数优先：** 无副作用、无 I/O、可预测的输出
-2. **显式参数：** 避免隐式全局依赖（如 `process.env`），通过参数传入
-3. **单一返回点：** 避免提前 return 的混乱，但 guard clause 允许
-4. **Result 类型：** 需要返回错误状态的函数使用 `{ ok: true, data } | { ok: false, response }` 模式
+- **Integration tests**: Only 1 integration test file (`index.test.ts`, 10 lines). Tests focus on unit-level translation logic.
+- **Stream timeout edge cases**: No tests for stream abort signals or timeout expiration.
+- **Non-streaming response format variants**: No tests for edge cases in response translators (null fields, missing fields, unexpected structure).
+- **Pass-through path**: No dedicated tests for the pass-through fast path (no model override + no images scenario).
+- **Concurrent request handling**: No tests for concurrent request behavior.
+- **CORS preflight**: No tests for OPTIONS handling.
 
-### 导入顺序
+### 2.3 Test Framework
 
-```
-1. 第三方库 (hono, vitest)
-2. 项目内模块 (相对路径)
-3. 类型/接口
-```
+- **Runner**: Vitest (v3.2.4)
+- **Run command**: `vitest run`
+- **Watch mode**: `vitest`
 
-### 注释规范
+## 3. Document Completeness
 
-1. **"WHEN TO READ THIS FILE" 头注释：** 每个源文件顶部必须包含一段描述该文件何时被阅读的注释。示例：
-   ```
-   /**
-    * URL-based routing: path prefix parsing, upstream resolution, model segment extraction.
-    *
-    * WHEN TO READ THIS FILE: Adding a new path prefix, changing upstream resolution
-    * logic, or debugging model-override-from-URL behavior.
-    */
-   ```
-2. **函数 JSDoc：** 公开函数应有 `@param` 和 `@returns` 说明
-3. **关键逻辑注释：** 复杂翻译逻辑、状态机、排序约束必须附原因说明
-4. **不要注释显而易见的事：** `const x = 5; // set x to 5` 是噪音
+| Document | Status | Notes |
+|----------|--------|-------|
+| `docs/ARCHITECTURE.md` | COMPLETE | 620 lines, 7 sections, full layer docs + ADRs |
+| `docs/DESIGN.md` | COMPLETE | Translation patterns, error handling, model routing, extensibility |
+| `docs/SECURITY.md` | COMPLETE | Auth, integrity, no-persistence, CORS, dependencies |
+| `docs/RELIABILITY.md` | COMPLETE | Failover, timeouts, retries, CF Workers model |
+| `docs/FRONTEND.md` | COMPLETE | Backend-only notice |
+| `docs/PLANS.md` | COMPLETE | Recent/current/future roadmap |
+| `docs/PRODUCT_SENSE.md` | COMPLETE | User personas, problem, value prop |
+| `docs/QUALITY_SCORE.md` | COMPLETE (this file) | Architecture, tests, docs assessment |
+| `docs/design-docs/index.md` | COMPLETE | Design index |
+| `docs/design-docs/core-beliefs.md` | COMPLETE | Design philosophy |
+| `docs/product-specs/index.md` | COMPLETE | Feature overview |
+| `docs/exec-plans/tech-debt-tracker.md` | COMPLETE | Current tech debt |
+| `docs/exec-plans/active/index.md` | COMPLETE | Placeholder index |
+| `docs/exec-plans/completed/index.md` | COMPLETE | Placeholder index |
 
----
+## 4. Quality Score Summary
 
-## 架构约束
-
-### 依赖方向（不可逆）
-
-```
-config.ts → routing.ts → index.ts → handlers/ → request.ts → translate/
-                                  ↑                        ↓
-                                vision.ts               auth.ts
-                                  ↓                        ↓
-                              config.ts               config.ts
-```
-
-- `config.ts` 可被任何模块引用（最底层）
-- `request.ts` 可引用 `auth.ts` 和 `config.ts`
-- `translate/` 不可引用 `handlers/`、`index.ts`、`routing.ts`
-- `vision.ts` 只引用 `config.ts`
-- `cache.ts` 只引用 `translate/type-guards.ts`
-
-### 跨切面关注点
-
-认证、fetch、超时、压缩、错误转发通过 `request.ts` 进入。其他模块不应直接执行 fetch 或认证。
-
-**允许的例外：**
-- `handlers/` 通过调用 `request.ts` 的 `authenticateRequest()` 和 `safeUpstreamFetch()` 间接执行 fetch/auth
-- stream 翻译器不通过 `request.ts` fetch（直接操作 `ReadableStream`）
-
----
-
-## 测试规范
-
-### 测试文件组织
-
-- 纯翻译器测试：不需要 mock，构造输入 → 断言输出
-- 集成测试（handler + fetch）：`vi.spyOn(globalThis, 'fetch')`
-- 每个测试文件聚焦一个领域（见 DESIGN.md §测试策略）
-
-### 断言样式
-
-```typescript
-// ✅ 推荐：显式断言
-expect(result.id).toBe("msg_123");
-expect(result.content).toHaveLength(1);
-expect(result.content[0]).toMatchObject({ type: "text" });
-
-// ❌ 不推荐：toMatchSnapshot（脆弱）
-// ❌ 不推荐：toString() 比较（字节级依赖）
-```
-
-### 测试命名
-
-```typescript
-describe('function/area name', () => {
-  it('should [expected behavior] when [condition/scenario]', () => { ... });
-});
-```
-
-示例：
-```typescript
-describe('formatAnthropicToOpenAI', () => {
-  it('should extract content as string when single text block', () => { ... });
-  it('should handle empty messages array', () => { ... });
-});
-```
-
----
-
-## 知识库维护
-
-### 源文件覆盖率
-
-所有 `src/` 源文件必须包含 "WHEN TO READ THIS FILE" 头注释。当前覆盖率：**94%**（30/32 文件）。
-
-目标：**100%**。
-
-### 文档目录
-
-`docs/` 下的每个文档文件应按顺序阅读：
-
-1. `CLAUDE.md` — 项目入口 + harness 体系 + 常见陷阱
-2. `docs/ARCHITECTURE.md` — 分层架构 + 路由机制 + 部署
-3. `docs/DESIGN.md` — 设计哲学 + 核心决策
-4. `docs/SECURITY.md` — 安全策略
-5. `docs/QUALITY_SCORE.md` — 质量约束 + 代码规范
-
----
-
-## 质量指标
-
-| 指标 | 当前值 | 目标 |
-|------|--------|------|
-| 测试通过率 | 100%（390/390） | 100% |
-| `as Record<string, unknown>`（业务代码） | 0 | 0 |
-| 文件大小（≥300 行） | 2（流翻译器） | 0 |
-| "WHEN TO READ" 覆盖率 | 94% | 100% |
-| 空文档 | 0 | 0 |
-| console.log（无 IS_DEBUG 保护） | 0 | 0 |
+| Category | Score | Notes |
+|----------|-------|-------|
+| Architecture compliance | A | All tests passing, strict enforcement |
+| Test coverage | B | Strong unit coverage, weak integration coverage |
+| Code quality | A | Pure functions, type safety, naming conventions |
+| Documentation | A | All documents complete with project-specific content |
+| Security | A | Minimal attack surface, no data persistence |
+| Reliability | B | No automatic failover, limited monitoring |

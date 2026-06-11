@@ -1,171 +1,91 @@
-# SECURITY
+# Security: opencode-cowork-proxy
 
-## 认证流程
+> API key validation, request/response integrity, rate limiting considerations, dependency vulnerability management, and no-data-persistence design.
 
-所有 API 请求（除健康检查 `GET /` 外）必须提供 API key。
+## 1. API Key Validation
 
-### 密钥提取顺序
+### 1.1 Key Extraction
 
-1. `X-Api-Key` 请求头（优先级最高）
-2. `Authorization: Bearer <key>` 请求头（去除 `Bearer` 前缀）
-3. `Authorization: Token <key>` 请求头（去除 `Token` 前缀）
+Keys are extracted from two header sources (checked in order):
+1. `X-Api-Key` header (preferred)
+2. `Authorization: Bearer <key>` or `Authorization: Token <key>` header (fallback)
 
-### 密钥验证规则
+### 1.2 Key Validation
 
-| 条件 | 结果 |
-|------|------|
-| 无 API key | 401 `{ error: { type: "authentication_error", message: "Missing API key" } }` |
-| API key < 32 字符 | 401 `{ error: { type: "authentication_error", message: "Invalid API key: must be at least 32 characters" } }` |
-| API key ≥ 32 字符 | 通过验证，forward 到上游 |
+- Minimum length check: 32 characters.
+- No specific key format beyond length.
+- The proxy does not generate or manage API keys -- it only validates them before forwarding to upstream.
+- The 32-char minimum prevents accidental empty or obviously invalid keys from wasting upstream calls.
 
-### 认证实现
+### 1.3 Auth Flow
 
-认证逻辑在 `src/auth.ts` 中实现为纯函数：
+Authentication happens in `src/request.ts` via `authenticateRequest()`, which combines extraction and validation. On failure, returns an HTTP 401 response with format-aware error body (Anthropic format for `/v1/messages` paths, OpenAI format otherwise).
 
-```
-extractApiKey(headers) → string | null
-validateApiKey(key)    → AuthError | null
-authErrorResponse(err, path) → Response
-```
+**All POST endpoints require authentication.** The health check endpoint (`GET /`) does not.
 
-`authenticateRequest()` 在 `src/request.ts` 中编排三个纯函数。
+## 2. Request/Response Integrity
 
-### 错误格式
+### 2.1 Body Size Gate
 
-Anthropic 路径（`/v1/messages`、`/v1/models`）使用 Anthropic 错误响应格式：
-```json
-{ "type": "error", "error": { "type": "authentication_error", "message": "..." } }
-```
+All POST requests pass through `checkBodySize()` before any processing:
+- Fast path: Uses `Content-Length` header when present (no body read).
+- Fallback: Reads body via `request.clone()` to preserve original body for downstream consumers.
+- Threshold: 10 MB (`MAX_BODY_SIZE` in config.ts).
 
-OpenAI 路径使用标准错误格式：
-```json
-{ "error": { "type": "authentication_error", "message": "..." } }
-```
+### 2.2 Gzip Compression
 
----
+Responses are gzip-compressed when the client sends `Accept-Encoding: gzip` and the response body exceeds 1 KB. Compression is applied in `jsonResponse()`.
 
-## 请求体安全
+### 2.3 Upstream Forwarded Headers
 
-### 大小限制
+Rate-limit and request-tracking headers are forwarded from upstream responses to clients:
+- `X-Request-Id`
+- `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`
+- `X-RateLimit-Limit-Requests`, `X-RateLimit-Limit-Tokens`
 
-- **最大值：** 10 MB（`MAX_BODY_SIZE`）
-- **413 响应：** `{ error: { type: "invalid_request_error", message: "Request body exceeds maximum size of 10485760 bytes" } }`
-- **检测方法：** 优先使用 `Content-Length` 头（快速路径，不读取 body）；没有 Content-Length 时，clone 请求并读取实际 body
+### 2.4 JSON Body Parsing Safety
 
-### JSON 解析安全
+All JSON parsing uses `safeJsonBody()` which wraps `request.json()` in try/catch and returns a 400 error for malformed bodies. The translate layer uses `type-guards.ts` helpers (`asRecord`, `asRecordArray`, `asRecordOptional`) for safe runtime type narrowing rather than bare `as` casts.
 
-`safeJsonBody()` 使用 try/catch 包裹 `request.json()`，返回 Result 类型：
-- `{ ok: true, data }` — 解析成功
-- `{ ok: false, response }` — 解析失败，返回 400 错误响应
+## 3. No Data Persistence Design
 
----
+The proxy is **stateless by design**:
 
-## CORS 配置
+- No database connections.
+- No file system writes.
+- No in-memory request state across invocations.
+- The only cache is the Cloudflare Cache API for model list responses (300s TTL, URL-based cache key, auth-independent).
 
-```
-Access-Control-Allow-Origin: *
-Access-Control-Allow-Methods: GET, POST, OPTIONS
-Access-Control-Allow-Headers: Content-Type, X-Api-Key, Authorization, X-Upstream-Url, X-Upstream-Format, Anthropic-Version, Anthropic-Beta
-```
+This eliminates data breach surface area for stored data.
 
-- 所有路径启用 CORS
-- OPTIONS 预检请求直接返回 204，不经过认证
-- 通配 Origin 适用于浏览器客户端和 Edge 函数
+## 4. Rate Limiting Considerations
 
----
+Rate limiting is handled by the **upstream provider** (opencode.ai/zen), not by this proxy. The proxy:
+- Forwards upstream rate-limit headers to the client for visibility.
+- Has no built-in rate limiting -- the Cloudflare Workers plan provides basic network-level protection.
+- Uses exponential backoff with jitter for retryable upstream errors (5xx, network failures), max 2 retries.
 
-## 敏感信息处理
+## 5. Dependency Vulnerability Management
 
-### API Key 传输
+### 5.1 Minimal Dependency Surface
 
-- **请求：** 通过 HTTP 头传递（`X-Api-Key` 或 `Authorization: Bearer`）
-- **转发：** API key 通过 `anthropicHeaders()` 函数构造 `X-Api-Key` 头转发到上游
-- **日志：** 生产环境不记录请求/响应 body，`DEBUG=true` 模式下仅用于开发调试
+The project has a single runtime dependency: **Hono** (HTTP framework, v4.12.17).
 
-### 上游 URL 覆盖
+All other dependencies are dev-only: TypeScript, Vitest, `@types/node`.
 
-`X-Upstream-Url` 请求头允许客户端覆盖路由上游。验证机制：
-- 仅检查该值是否为合法 URL（`new URL(header)`）
-- 不做域名白名单限制（工具需要灵活性）
-- 风险：客户端可重定向到任意 URL
+### 5.2 Supply Chain Risk
 
----
+- `package.json` is the sole dependency source -- no lockfiles committed.
+- Hono is a well-audited framework with minimal surface area (routing + CORS).
+- The Bun standalone binary bundles all dependencies at compile time via `bun build --compile`.
 
-## 调试模式隔离
+### 5.3 Runtime Versions
 
-### `IS_DEBUG` 标志
+Three deployment targets with different runtime environments:
+- **Cloudflare Workers**: Workers runtime (V8 isolates), controlled by `compatibility_date`.
+- **Bun standalone**: Bun runtime, compiled binary, no runtime dependency resolution.
+- **Vercel**: Node.js/Edge runtime as configured by Vercel.
 
-```typescript
-export const IS_DEBUG = typeof process !== 'undefined' && process?.env?.DEBUG;
-```
+## 6. CORS Configuration
 
-- **生产环境：** `IS_DEBUG` 为 `false`，所有 `console.log` / `console.error` 不执行
-- **调试模式：** 设置 `DEBUG=true` 环境变量，输出结构化的请求/响应调试信息
-- **受保护位置：** handler 文件、stream 翻译器、fetch 重试逻辑
-
----
-
-## 流请求安全
-
-### SSE 连接管理
-
-- **超时：** 120 秒无数据自动中止（`STREAM_TIMEOUT`）
-- **客户端断开：** 通过 `request.signal` 事件监听自动触发上游 abort
-- **缓冲区：** 使用 `applyBackpressure()` 防止消费者滞后时无限缓冲
-
-### 背压控制
-
-```
-当 controller.desiredSize ≤ 0 时:
-  waitMs = min(|desiredSize| × 0.5, 100ms)
-  异步等待 waitMs 后继续生产数据
-```
-
----
-
-## 上游通信
-
-### 头转发
-
-认证后的请求转发以下控制头到上游：
-
-```
-Content-Type, X-Api-Key, Anthropic-Version, Anthropic-Beta
-```
-
-上游响应转发以下速率限制头到客户端：
-
-```
-X-Request-Id, RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset,
-X-RateLimit-Limit-Requests, X-RateLimit-Limit-Tokens
-```
-
-### 错误透传
-
-上游非 2xx 响应原样转发到客户端：
-- 状态码不变
-- 响应 body 不变（不翻译错误）
-- `Content-Type`、`Retry-After`、速率限制头不变
-
----
-
-## 部署安全建议
-
-| 场景 | 建议 |
-|------|------|
-| 生产部署 | 确保 `DEBUG` 环境变量未设置 |
-| API key 管理 | 使用服务端环境变量而非硬编码 |
-| 自定义上游 | 自建代理时验证 `X-Upstream-Url` 的目标安全 |
-| 速率限制 | 依赖上游的 `RateLimit-*` 限制，代理本身不做速率限制 |
-| 日志 | 生产环境使用独立日志服务，避免 `console.log` |
-
----
-
-## 已知风险
-
-| 风险 | 严重度 | 缓解措施 |
-|------|--------|----------|
-| `X-Upstream-Url` 可实现 SSRF | 中 | 仅检查 URL 合法性，不自动跟进重定向 |
-| API key 通过 HTTP 头明文传递 | 低 | 生产环境应使用 HTTPS |
-| 无请求速率限制 | 低 | 依赖上游限流机制 |
-| 无 IP 白名单 | 低 | 通配 CORS + 开放部署，适合工具而非公开服务 |
+CORS allows all origins (`*`) for GET, POST, OPTIONS methods. Allowed headers include X-Api-Key, Authorization, X-Upstream-Url, X-Upstream-Format, Anthropic-Version, Anthropic-Beta. Preflight (OPTIONS) returns 204 with no body.

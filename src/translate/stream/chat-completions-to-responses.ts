@@ -15,7 +15,7 @@
  * - Usage in final chunk → response.completed
  */
 import { mapUsage } from '../../cache';
-import { IS_DEBUG } from '../../config';
+import { log } from '../../logger';
 import { ThinkTagStripper } from '../../think-tag-stripper';
 import { applyBackpressure } from '../../backpressure';
 import { createSseEncoder } from './sse-encoder';
@@ -220,15 +220,8 @@ export function streamChatCompletionsToResponses(
         const delta = parsed.choices?.[0]?.delta;
         if (!delta) return;
 
-        if (IS_DEBUG && delta.reasoning_content) {
-          console.log(`[STREAM-DEBUG] reasoning_content chunk: "${delta.reasoning_content?.slice(0,100)}"`);
-        }
-        if (IS_DEBUG && delta.content && delta.content.includes('<think>')) {
-          console.log(`[STREAM-DEBUG] ⚠️ FOUND <think> in content: "${delta.content.slice(0,100)}"`);
-        }
-        if (IS_DEBUG && delta.content && !delta.reasoning_content) {
-          console.log(`[STREAM-DEBUG] text content chunk: "${delta.content.slice(0,100)}"`);
-        }
+        // Stream debug logging is in the handler (handlers/responses.ts)
+        // Translate modules are pure — log.debug is gated by IS_DEBUG
 
         // Handle reasoning_content (DeepSeek) — comes before content
         if (delta.reasoning_content) {
@@ -357,7 +350,7 @@ export function streamChatCompletionsToResponses(
           await applyBackpressure(controller);
         }
       } catch (err) {
-        if (IS_DEBUG) console.error('streamChatCompletionsToResponses error:', err);
+        log.debug('STREAM', 'streamChatCompletionsToResponses error:', err);
         if (activeItemType) {
           flushActiveItem(true);
         }

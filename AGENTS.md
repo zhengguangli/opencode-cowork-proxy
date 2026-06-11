@@ -1,52 +1,58 @@
 <!-- HARNESS-PILOT:START -->
 
-## 架构地图
-- 详见 [CLAUDE.md](CLAUDE.md) — 项目主文档和 harness 指针
-- Agent 定义：`.claude/agents/` — 7 个专业 agent
-- Skill 定义：`.claude/skills/` — 11 个标准技能
-- 安装脚本：`scripts/install.mjs` — 统一安装器
+## Architecture Map
+- See [CLAUDE.md](CLAUDE.md) — main project doc and harness pointer
+- Agent definitions: `.agents/agents/` — 7 specialized agents
+- Skill definitions: `.agents/skills/` — 14 standard skills
+- Install script: `scripts/install.mjs` — unified installer
 
-## 关键约束
-- **人类掌舵，智能体执行** — 工程师设计环境，AI 执行代码
-- **仓库即记录系统** — 仓库外的知识对智能体不存在
-- **给地图，不给说明书** — AGENTS.md 是目录，不是百科全书
-- **约束即加速器** — 严格的架构边界是倍增器
+## Key Constraints
+- **Humans steer, agents execute** — engineer designs environment, AI writes code
+- **Repo = system of record** — knowledge outside repo doesn't exist to agents
+- **Map, not manual** — AGENTS.md is TOC, not encyclopedia
+- **Constraints = multipliers** — rigid architecture boundaries enable speed
 
-## Agent 团队
+## Agent Team
 
-| Agent | 职责 |
+| Agent | Role |
 |-------|------|
-| orchestrator | 团队协调者，管理任务分派和阶段流转 |
-| architect | 架构设计师，定义分层边界和品味不变量 |
-| builder | 代码生成器，在约束内生成实现代码 |
-| reviewer | 质量审查员，代码审查和品味校验 |
-| qa | 验证工程师，测试和触发检查 |
-| sre | 站点可靠性工程师，可观测性和熵管理 |
-| context-engineer | 上下文工程师，知识库架构管理 |
+| orchestrator | Team coordinator, manages task dispatch and phase transitions |
+| architect | Architecture designer, defines layer boundaries and taste invariants |
+| builder | Code generator, produces implementation within constraints |
+| reviewer | Quality reviewer, code review and taste validation |
+| qa | Verification engineer, testing and trigger checks |
+| sre | Site reliability engineer, observability and entropy management |
+| context-engineer | Context engineer, knowledge architecture management |
 
-## 技能包
+## Skills
 
-| Skill | 用途 |
-|-------|------|
-| harness-orchestrator | 团队编排器，协调所有 agent 执行 |
-| harness-init | 一键初始化 harness |
-| context-setup | 知识库架构生成 |
-| architecture-guard | 架构边界强制执行 |
-| entropy-gc | 熵管理与垃圾收集 |
-| observability-setup | 可观测性堆栈配置 |
-| sandbox-exec | 安全代码执行环境 |
-| quality-gate | 质量审查门禁 |
-| agent-readability | 智能体可读性优化 |
-| harness-evolve | 反馈驱动演进 |
-| hooks-framework | 确定性执行钩子 |
+| Skill | Purpose |
+|-------|---------|
+| harness-orchestrator | Team orchestrator, coordinates all agents |
+| harness-init | One-click harness init |
+| context-setup | Knowledge base architecture generation |
+| architecture-guard | Architecture boundary enforcement |
+| entropy-gc | Entropy management & garbage collection |
+| observability-setup | Observability stack config |
+| sandbox-exec | Secure code execution environment |
+| quality-gate | Quality review gate |
+| agent-readability | Agent readability optimization |
+| harness-evolve | Feedback-driven evolution |
+| hooks-framework | Deterministic execution hooks |
+| web-search | Web search integration |
+| mcp-connector | MCP tool connector |
+| tool-search | Dynamic tool discovery |
 
-## 导航指引
-- 新项目初始化？使用 `harness-init` 或 `harness-orchestrator` skill
-- 架构设计？读 `.claude/agents/architect.md`
-- 质量审查？读 `.claude/skills/quality-gate/SKILL.md`
-- 知识库管理？读 `.claude/skills/context-setup/SKILL.md`
-- 演进反馈？读 `.claude/skills/harness-evolve/SKILL.md`
-- Hooks 配置？读 `.claude/skills/hooks-framework/SKILL.md`
-- 安装部署？读 `README.md` 或运行 `node scripts/install.mjs --help`
+## Navigation
+- New project init? Use `harness-init` or `harness-orchestrator` skill
+- Architecture design? Read `.agents/agents/architect.md`
+- Quality review? Read `.agents/skills/quality-gate/SKILL.md`
+- Knowledge management? Read `.agents/skills/context-setup/SKILL.md`
+- Evolution feedback? Read `.agents/skills/harness-evolve/SKILL.md`
+- Hooks config? Read `.agents/skills/hooks-framework/SKILL.md`
+- Web search? Read `.agents/skills/web-search/SKILL.md`
+- MCP integration? Read `.agents/skills/mcp-connector/SKILL.md`
+- Install? Read `README.md` or run `node scripts/install.mjs --help`
+
 
 <!-- HARNESS-PILOT:END -->
