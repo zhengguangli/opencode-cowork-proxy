@@ -21,4 +21,4 @@ project:
   name: opencode-cowork-proxy
   type: cloudflare-worker
   test_command: vitest run
-  lint_command: npx tsc --noEmit
+  lint_command: bun tsc --noEmit

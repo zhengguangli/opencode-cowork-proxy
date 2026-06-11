@@ -3,7 +3,7 @@
   "version": "2.1.1",
   "main": "src/index.ts",
   "scripts": {
-    "dev": "npx wrangler dev",
+    "dev": "bun run scripts/build-entry.ts",
     "build:binary": "bun build --compile --outfile opencode-cowork-proxy scripts/build-entry.ts",
     "deploy": "npx wrangler deploy",
     "test": "vitest run",

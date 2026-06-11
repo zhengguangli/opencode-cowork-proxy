@@ -129,13 +129,13 @@ Run quality checks for this project:
 ```bash
 # Run quality gate for this project
 # Architecture boundary tests:
-npx vitest run test/architecture.test.ts
+bun test test/architecture.test.ts
 
 # Full test suite:
-npx vitest run
+bun test
 
 # TypeScript type check:
-npx tsc --noEmit
+bun tsc --noEmit
 ```
 
 **Cross-platform support:** macOS / Linux / Windows (no bash required)

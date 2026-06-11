@@ -319,7 +319,7 @@ Detailed context:
 - Added `helper.ts` to reuse Z logic
 
 Next steps:
-- Suggested: run `npm test`
+- Suggested: run `bun test`
 - Suggested commit: `git add . && git commit -m "..." `
 ```
 
