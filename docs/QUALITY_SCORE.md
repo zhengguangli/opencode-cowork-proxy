@@ -13,7 +13,7 @@ All layer boundaries enforced by `test/architecture.spec.ts` (Vitest-based, run 
 | L1: Translate isolation | 9 translate modules | PASS | No imports from request/entry |
 | L2: request.ts isolation | `request.ts` | PASS | No imports from translate |
 | L3: Utilities isolation | routing, auth, vision, backpressure, think-tag-stripper | PASS | No imports from translate/request/index |
-| L5: Entry point isolation | server.ts | PASS | Only imports index.ts |
+| L5: Entry point isolation | scripts/build-entry.ts | PASS | Only imports index.ts |
 | C3 (D1): Translation purity | 9 translate modules | PASS | No fetch() or fs.* calls |
 | Barrel integrity | translate/index.ts | PASS | No imports (pure re-exports) |
 

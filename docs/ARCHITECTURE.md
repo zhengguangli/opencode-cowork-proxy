@@ -21,7 +21,7 @@
 
 ```
 +--------------------+
-|   Entry Point      |  index.ts, server.ts (Bun), Vercel serverless
+|   Entry Point      |  index.ts, scripts/build-entry.ts (Bun), Vercel serverless
 +--------------------+
          |  imports only from index.ts (barrier)
 +--------------------+
@@ -65,7 +65,7 @@ Request Util:     request.ts              (no imports from translate/ or handler
 Translate Layer:  translate/**/*           (no fetch(), no fs.*, no imports from request/ or index)
 Handlers:         handlers/**             (imports from translate, request, config)
 Router:           routing.ts              (imports from config only)
-Entry:            index.ts, server.ts     (must NOT import from translate/ directly)
+Entry:            index.ts, scripts/build-entry.ts     (must NOT import from translate/ directly)
 ```
 
 ### Layer Isolation Rules
@@ -141,7 +141,7 @@ src/index.ts                          (Hono app, CORS, route dispatch)
 ### Deployment Entry Points
 
 ```
-server.ts                             (Bun standalone binary entry)
+scripts/build-entry.ts                             (Bun standalone binary entry)
     |-- src/index.ts
 
 wrangler.toml                         (Cloudflare Workers entry: src/index.ts)
@@ -312,11 +312,11 @@ Worker Config (wrangler.toml):
 +-----------------------------------------------+
 |                                                 |
 |  Client  <-->  Bun Process (Bun.serve)  <--> Upstream|
-|                   server.ts                          |
+|                   scripts/build-entry.ts                          |
 |                   Port 8787 (default)                |
 +-----------------------------------------------+
 
-Build: bun build --compile --outfile opencode-cowork-proxy server.ts
+Build: bun build --compile --outfile opencode-cowork-proxy scripts/build-entry.ts
 ```
 
 ### Tertiary: Vercel Serverless
@@ -480,7 +480,7 @@ Enforced by: test/architecture.spec.ts "L3 -- Utilities isolation"
 ### C7: Entry point isolation (L5)
 
 ```
-Entry points (server.ts, vercel entry) must ONLY import index.ts
+Entry points (scripts/build-entry.ts, vercel entry) must ONLY import index.ts
 (no direct imports from handlers/, translate/, request/, etc.)
 
 Enforced by: test/architecture.spec.ts "L5 -- Entry point isolation"
@@ -602,7 +602,7 @@ Enforced by: .claude/skills/architecture-guard/scripts/check-naming.mjs
 | File | Role |
 |------|------|
 | `wrangler.toml` | Cloudflare Workers configuration |
-| `server.ts` | Bun standalone server entry |
+| `scripts/build-entry.ts` | Bun standalone server entry |
 | `vercel.json` | Vercel serverless configuration |
 | `package.json` | Dependency management, scripts |
 
@@ -645,4 +645,4 @@ Keep `test/architecture.spec.ts` as the primary architecture enforcement mechani
 
 - Add a check that translate modules contain no `fetch()` or `fs.` references
 - Add a check that barrel files (`translate/index.ts`, `handlers/index.ts`) contain no imports
-- Add a check that `server.ts` only imports `src/index.ts`
+- Add a check that `scripts/build-entry.ts` only imports `src/index.ts`

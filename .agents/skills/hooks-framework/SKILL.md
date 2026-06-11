@@ -12,7 +12,7 @@ description: 'Hooks/middleware framework. Deterministic execution hooks: compact
 ## Architecture
 
 ```
-hooks.yaml (declarative layer: abstract event names)
+.agents/hooks.yaml (declarative layer: abstract event names)
     ↓
 install.mjs (adaptation layer: translate to each tool's native format)
     ↓
@@ -193,7 +193,6 @@ Currently defaults to script approach for cross-platform compatibility. When run
 ```
 .agents/skills/hooks-framework/
 ├── SKILL.md
-├── hooks.yaml               ← Unified configuration
 ├── opencode-plugin.ts       ← OpenCode plugin template
 └── scripts/
     ├── context-check.mjs     ← AGENTS.md freshness check
@@ -210,6 +209,8 @@ Currently defaults to script approach for cross-platform compatibility. When run
     ├── todo-sync.mjs         ← Todo state synchronization
     └── quality-metric.mjs    ← Quality metrics
 ```
+
+> **Project-level hooks config:** `.agents/hooks.yaml`
 
 ### Script Dual-Mode
 

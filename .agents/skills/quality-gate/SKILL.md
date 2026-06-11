@@ -147,7 +147,7 @@ See `VERIFICATION_CHECKLIST.md`, which includes:
 - Hooks framework verification (9 scripts)
 - Agent team verification (7 agents)
 - Skill team verification (14 skills)
-- Configuration file verification (AGENTS.md, hooks.yaml, .codex/hooks.json)
+- Configuration file verification (AGENTS.md, .agents/hooks.yaml, .codex/hooks.json)
 - Project test verification (unit tests)
 
 ### Quality Standards

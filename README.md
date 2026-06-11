@@ -16,12 +16,12 @@ No configuration needed — it just works as long as you have an OpenCode Go or 
 
 ## Local Deployment (macOS LaunchAgent)
 
-The proxy can also run as a standalone Bun HTTP server via `server.ts`, managed by `launchctl` for automatic startup on login.
+The proxy can also run as a standalone Bun HTTP server via `scripts/build-entry.ts`, managed by `launchctl` for automatic startup on login.
 
 ### Build
 
 ```bash
-bun build --compile --outfile opencode-cowork-proxy server.ts
+bun build --compile --outfile opencode-cowork-proxy scripts/build-entry.ts
 ```
 
 This produces a standalone `opencode-cowork-proxy` binary (Mach-O, no runtime dependencies). Copy it to `/usr/local/bin/`:
@@ -71,7 +71,7 @@ To restart after rebuilding:
 
 ```bash
 cd /path/to/project
-bun build --compile --outfile opencode-cowork-proxy server.ts
+bun build --compile --outfile opencode-cowork-proxy scripts/build-entry.ts
 sudo cp opencode-cowork-proxy /usr/local/bin/
 launchctl unload ~/Library/LaunchAgents/ai.opencode.proxy.plist
 launchctl load ~/Library/LaunchAgents/ai.opencode.proxy.plist

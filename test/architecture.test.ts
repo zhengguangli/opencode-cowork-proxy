@@ -79,7 +79,7 @@ describe('Architecture boundaries', () => {
   // L5: Entry points must ONLY import index.ts
   describe('L5 — Entry point isolation', () => {
     const entries = [
-      path.resolve(__dirname, '../server.ts'),
+      path.resolve(__dirname, '../scripts/build-entry.ts'),
       path.resolve(__dirname, '../api/[[...route]].ts'),
     ];
 

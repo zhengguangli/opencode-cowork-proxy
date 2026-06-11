@@ -86,8 +86,8 @@
 
 ### 5.2 Bun Standalone Binary
 
-- **Entry**: `server.ts` (Bun.serve)
-- **Build**: `bun build --compile --outfile opencode-cowork-proxy server.ts`
+- **Entry**: `scripts/build-entry.ts` (Bun.serve)
+- **Build**: `bun build --compile --outfile opencode-cowork-proxy scripts/build-entry.ts`
 - **Run**: Direct binary or `brew services`
 - **Port**: 8787 (default, `PORT` env override)
 
