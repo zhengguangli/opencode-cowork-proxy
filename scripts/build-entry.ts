@@ -1,4 +1,4 @@
-import app from "./src/index";
+import app from "../src/index";
 
 const port = parseInt(process.env.PORT || "8787");
 
