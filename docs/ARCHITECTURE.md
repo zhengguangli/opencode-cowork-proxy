@@ -325,11 +325,9 @@ Build: bun build --compile --outfile opencode-cowork-proxy scripts/build-entry.t
 +-----------------------------------------------------+
 |                                                       |
 |  Client  -->  Vercel Edge/Serverless  -->  Upstream    |
-|               vercel.json                              |
 |               (outputDirectory: ".")                   |
 +-----------------------------------------------------+
 
-Config: minimal vercel.json -- Hono app is self-contained.
 ```
 
 ### Upstream Architecture
@@ -480,7 +478,7 @@ Enforced by: test/architecture.spec.ts "L3 -- Utilities isolation"
 ### C7: Entry point isolation (L5)
 
 ```
-Entry points (scripts/build-entry.ts, vercel entry) must ONLY import index.ts
+Entry points (scripts/build-entry.ts) must ONLY import index.ts
 (no direct imports from handlers/, translate/, request/, etc.)
 
 Enforced by: test/architecture.spec.ts "L5 -- Entry point isolation"
@@ -603,7 +601,6 @@ Enforced by: .claude/skills/architecture-guard/scripts/check-naming.mjs
 |------|------|
 | `wrangler.toml` | Cloudflare Workers configuration |
 | `scripts/build-entry.ts` | Bun standalone server entry |
-| `vercel.json` | Vercel serverless configuration |
 | `package.json` | Dependency management, scripts |
 
 ### Architecture enforcement files

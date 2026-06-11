@@ -33,7 +33,7 @@ Upstream URLs, timeout values, retry counts, body size limits, vision model sets
 - Configuration validation code.
 - Secret management complexity.
 
-Deployment-specific configuration (which upstream, which port) is handled by the deployment mechanism (wrangler.toml for CF Workers, process.env for Bun, vercel.json for Vercel).
+Deployment-specific configuration (which upstream, which port) is handled by the deployment mechanism (wrangler.toml for CF Workers, process.env for Bun).
 
 ## 5. Single Runtime Dependency Is a Feature
 

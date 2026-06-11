@@ -93,7 +93,7 @@
 
 ### 5.3 Vercel Serverless
 
-- **Config**: `vercel.json` (outputDirectory: ".")
+<!-- Vercel config removed -->
 - **Entry**: Hono app served via Vercel adapter
 
 ## 6. Request/Response Processing

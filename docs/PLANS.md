@@ -4,7 +4,7 @@
 
 ## Recent (Completed)
 
-- **Vercel deployment addition** -- Added Vercel serverless support alongside Cloudflare Workers and Bun standalone. Added `vercel.json` configuration. Motivation: Cloudflare Workers returned 429 rate limits, Vercel provides alternative reliable hosting. (Commit: 009a732... via earlier work)
+- ~~**Vercel deployment addition** -- Removed, Vercel no longer used.~~
 - **Pass-through fast path** -- Implemented fast-path optimization that avoids JSON parsing when no model override or image markers are present. Uses `rawBodyMayHaveImages()` for lightweight string scan before full parse. (Commit: 8402f9a)
 - **Gzip response compression** -- Added automatic gzip compression for responses over 1KB when client supports it. (Commit: 8402f9a)
 - **Health check polish** -- Added uptime formatting, upstream URL display, endpoint documentation to `GET /` response. (Commit: 8402f9a)

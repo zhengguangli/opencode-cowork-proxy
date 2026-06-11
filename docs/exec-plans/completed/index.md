@@ -9,7 +9,7 @@
 - **model-override-order-fix**: Fixed override chain order so vision override runs before DeepSeek thinking injection.
 - **pass-through-fast-path**: Added fast-path optimization to bypass JSON parsing when no model/image overrides are needed.
 - **gzip-response-compression**: Added automatic gzip compression for responses over 1KB.
-- **vercel-deployment**: Added Vercel serverless configuration as third deployment target.
+- ~~**vercel-deployment**: Removed — Vercel no longer used.~~
 - **docs-fill-phase1**: Filled initial placeholder docs (ARCHITECTURE, DESIGN, SECURITY, QUALITY_SCORE, RELIABILITY).
 - **brew-services-deployment**: Updated local deployment to use `brew services` for Bun binary.
 
