@@ -14,25 +14,33 @@ When you attach an image in Claude Code and send it through this proxy, the requ
 
 No configuration needed — it just works as long as you have an OpenCode Go or Zen subscription.
 
-## Local Deployment (macOS LaunchAgent)
+## Local Deployment (macOS)
 
-The proxy can also run as a standalone Bun HTTP server via `scripts/build-entry.ts`, managed by `launchctl` for automatic startup on login.
-
-### Build
+### Build (standalone binary)
 
 ```bash
-bun build --compile --outfile opencode-cowork-proxy scripts/build-entry.ts
+bun install
+bun run build:binary
 ```
 
-This produces a standalone `opencode-cowork-proxy` binary (Mach-O, no runtime dependencies). Copy it to `/usr/local/bin/`:
+This produces a standalone `opencode-cowork-proxy` binary (no runtime dependencies).
+
+### Install via Homebrew
 
 ```bash
-cp opencode-cowork-proxy /usr/local/bin/opencode-cowork-proxy
+# Copy to Homebrew-managed path
+cp opencode-cowork-proxy /usr/local/opt/opencode-cowork-proxy/bin/
+
+# Start as a background service
+brew services restart opencode-cowork-proxy
+
+# Check status
+brew services list | grep opencode
 ```
 
-### LaunchAgent Plist
+### Manual LaunchAgent
 
-Create `~/Library/LaunchAgents/ai.opencode.proxy.plist`:
+Or create `~/Library/LaunchAgents/ai.opencode.proxy.plist`:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -52,36 +60,19 @@ Create `~/Library/LaunchAgents/ai.opencode.proxy.plist`:
     <true/>
     <key>KeepAlive</key>
     <true/>
-    <key>StandardOutPath</key>
-    <string>/usr/local/var/log/opencode-cowork-proxy.log</string>
-    <key>StandardErrorPath</key>
-    <string>/usr/local/var/log/opencode-cowork-proxy.log</string>
 </dict>
 </plist>
 ```
 
-### Load / Unload
-
 ```bash
-launchctl load ~/Library/LaunchAgents/ai.opencode.proxy.plist
-launchctl unload ~/Library/LaunchAgents/ai.opencode.proxy.plist
-```
-
-To restart after rebuilding:
-
-```bash
-cd /path/to/project
-bun build --compile --outfile opencode-cowork-proxy scripts/build-entry.ts
-sudo cp opencode-cowork-proxy /usr/local/bin/
-launchctl unload ~/Library/LaunchAgents/ai.opencode.proxy.plist
 launchctl load ~/Library/LaunchAgents/ai.opencode.proxy.plist
 ```
 
 ### Verify
 
 ```bash
-launchctl print gui/$(id -u)/ai.opencode.proxy
-tail -f /usr/local/var/log/opencode-cowork-proxy.log
+curl http://localhost:18787/
+# {"name":"opencode-cowork-proxy","version":"2.1.1","status":"ok","uptime":"1m 23s",...}
 ```
 
 ## Free Models
@@ -128,181 +119,80 @@ For the default example above, use `/zen` because `mimo-v2.5-free` is a Zen mode
 
 ## What This Does
 
-The Worker accepts Claude's Anthropic-style requests at `/v1/messages`, converts them to OpenAI-style requests, and sends them to OpenCode Go by default.
+The Worker accepts Claude's Anthropic-style requests at `/v1/messages` and translates them before sending to OpenCode Go (or OpenCode Zen) at their OpenAI-compatible endpoint. Responses are translated back to Anthropic format. It also supports OpenAI SDK clients sending to `/v1/chat/completions` (pass-through to OpenAI upstream, or translate to Anthropic) and the OpenAI Responses API at `/v1/responses`.
 
-You can choose an OpenCode upstream by adding a prefix to the Worker URL:
+It adds support for:
+- Image/vision model routing — transparently switches to Qwen3.6 Plus when images are detected
+- DeepSeek thinking/reasoning blocks — automatically injects `thinking: {type: "enabled"}` for DeepSeek models
+- Tool use / function calling in both directions
+- Streaming SSE in all three API formats
+- Prompt caching from system prompt hash for OpenAI node affinity
+- Gzip response compression (including SSE streams)
+- Prometheus-format metrics for observability
+- Zod-validated request bodies with detailed error messages
+- Structured audit logging for security events
+- Auto-tracked upstream rate-limit headers with low-quota warnings
 
-| Worker URL suffix | Upstream |
-|-------------------|----------|
-| no suffix | OpenCode Go |
-| `/go` | OpenCode Go |
-| `/zen` | OpenCode Zen |
+## API Endpoints
 
-For example, use `YOUR_DEPLOYED_WORKER_URL/go` for Go models and `YOUR_DEPLOYED_WORKER_URL/zen` for Zen models.
-
-It also handles tool calls, streaming, and DeepSeek reasoning output so coding-agent workflows work correctly.
-
-Important: this proxy has been live-tested with `minimax-m3` and `minimax-m2.7`. Other OpenCode Go models are included from the public OpenCode Go model list, but provider behavior can vary, especially around streaming usage/token accounting.
-
-## Important Zen Limitation
-
-OpenCode Zen support is partial.
-
-This proxy currently works with Zen models that use the OpenAI-compatible `/chat/completions` endpoint.
-
-Known Zen model categories that should work through `/zen`:
-
-| Zen model category | Examples |
-|--------------------|----------|
-| OpenAI-compatible chat models | `minimax-m2.7`, `minimax-m2.5`, `mimo-v2.5-free`, `glm-5.1`, `glm-5`, `kimi-k2.5`, `kimi-k2.6`, `grok-build-0.1`, `big-pickle`, `deepseek-v4-flash`, `deepseek-v4-flash-free`, `nemotron-3-super-free` |
-
-Known Zen model categories that do not work yet through this proxy:
-
-| Zen model category | Why it does not work yet |
-|--------------------|--------------------------|
-| GPT models such as `gpt-5.5`, `gpt-5.5-pro`, `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.3-codex`, `gpt-5.2` | Zen exposes these through `/responses`, and this proxy does not yet translate Anthropic Messages to OpenAI Responses API. |
-| Claude models such as `claude-opus-4-8`, `claude-sonnet-4-6`, `claude-haiku-4-5` | Zen exposes these through `/messages`; this proxy's `/zen` Claude path currently translates to OpenAI format for the Go upstream. A `/zen/claude` sub-route or pass-through may be added later. |
-| DeepSeek V4 Pro, DeepSeek V4 Flash | Already available on Go (paid) — behavior on Zen may differ. |
-
-## OpenCode Go Models
-
-This proxy is tested with `minimax-m3`. It also provides access to all OpenCode Go models listed in its public model manifest.
-
-The built-in model list is compiled from the [opencode.ai/models](https://opencode.ai/models) page (see `src/models.ts`).
-
-```json
-{
-  "models": [
-    {
-      "name": "deepseek-v4-pro"
-    },
-    {
-      "name": "deepseek-v4-flash"
-    },
-    {
-      "name": "deepseek-v4-flash-free"
-    },
-    {
-      "name": "minimax-m3"
-    },
-    {
-      "name": "minimax-m2.7"
-    },
-    {
-      "name": "minimax-m2.5"
-    },
-    {
-      "name": "qwen3.7-max"
-    },
-    {
-      "name": "qwen3.6-plus"
-    }
-  ]
-}
-```
-
-## Deploy On Cloudflare
-
-This project is intended to run as a Cloudflare Worker. Deploy it to Cloudflare using either the deploy button above or Cloudflare's Git-based Worker deployment flow.
-
-Use these settings when connecting the repository in Cloudflare:
-
-| Setting | Value |
-|---------|-------|
-| Build command | empty |
-| Deploy command | `bun run deploy` |
-| Production branch | `main` |
-
-Do not deploy this as a normal Node.js web app. `wrangler deploy` builds and publishes the Worker from `wrangler.toml`.
+| Path | Method | Purpose | Auth |
+|------|--------|---------|------|
+| `/v1/messages` | POST | Anthropic Messages API — translates to OpenAI format | Required |
+| `/v1/chat/completions` | POST | OpenAI Chat Completions API — pass-through or translate to Anthropic | Required |
+| `/v1/responses` | POST | OpenAI Responses API — internally translates to Chat Completions | Required |
+| `/v1/models` | GET | Model list — proxied from upstream with 5min Cloudflare Cache | Required |
+| `/` | GET | Health check — service info, version, uptime, endpoints | None |
+| `/metrics` | GET | Prometheus-format metrics (requests, latency, upstreams, streams) | None |
+| `/health/upstream` | GET | Upstream connectivity — add `?probe=true` for live probe | None |
+| `/audit/log` | GET | Recent audit events from in-memory ring buffer (max 1000) | None |
+| `/ws/v1/messages` | GET | WebSocket upgrade — returns 426 with SSE fallback instructions | Required |
 
 ## Configuration
 
-The Worker is zero-config by default. It forwards to OpenCode Go using OpenAI-compatible format. You can also route to OpenCode Zen by adding `/zen` to the Worker URL.
+Requests are sent by default to OpenCode Go at `https://opencode.ai/zen/go`v1. See [Configuration section](#configuration) for header-based overrides.
 
-Optional request headers:
-
-| Header | Default | Description |
-|--------|---------|-------------|
-| `x-upstream-url` | `https://opencode.ai/zen/go/v1` | Upstream API base URL |
-| `x-upstream-format` | `openai` | Upstream format: `openai` or `anthropic` |
-| `x-api-key` | required | Upstream API key |
-| `authorization` | optional | `Bearer <key>` also works |
-| `anthropic-version` | `2023-06-01` | Forwarded when calling Anthropic-compatible upstreams |
-| `anthropic-beta` | unset | Forwarded when calling Anthropic-compatible upstreams |
-
-The API key is validated locally before any upstream call. Missing or short keys receive a 401 response.
+### Routing
 
 Prefix routes:
 
 | Path prefix | Upstream base URL |
 |-------------|-------------------|
-| `/go` | `https://opencode.ai/zen/go/v1` |
+| `/go` | `https://opencode.ai/zen/go`v1 |
 | `/zen` | `https://opencode.ai/zen/v1` |
+
+### Headers
+
+| Header | Default | Description |
+|--------|---------|-------------|
+| `x-upstream-url` | Route-based | Override upstream base URL |
+| `x-upstream-format` | `openai` | Upstream format: `openai` or `anthropic` |
+| `x-api-key` | required | Upstream API key |
+| `authorization` | optional | `Bearer <key>` also accepted |
 
 ### Model Name Override
 
-Claude Desktop may reject model names that don't look like Anthropic models (e.g. `claude-sonnet-4-5` or `anthropic/claude-*`). To work around this, embed the real model name in the URL path after the prefix:
+Embed the real model name in the URL path after the prefix:
 
 ```
-YOUR_DEPLOYED_WORKER_URL/zen/mimo-v2.5-free   # free Zen models
-YOUR_DEPLOYED_WORKER_URL/go/deepseek-v4-pro   # paid Go models
+YOUR_WORKER_URL/zen/mimo-v2.5-free/v1/messages
 ```
 
-Claude appends `/v1/messages`, so the full request becomes `YOUR_WORKER_URL/zen/mimo-v2.5-free/v1/messages`. The proxy extracts the model from the path and uses it regardless of what Claude sends in the request body.
-
-**Usage:**
-1. Configure Claude with any Anthropic-looking model name (e.g. `claude-sonnet-4-5-20250514`) — this passes Claude's client-side validation.
-2. Set the base URL to `YOUR_WORKER_URL/zen/REAL_MODEL_ID` (replace `REAL_MODEL_ID` with the actual OpenCode model).
-3. The proxy silently maps the model for the upstream request.
-4. The response uses the original model name you configured, so Claude sees consistency.
-
-| Setting | Value |
-|---------|-------|
-| Base URL | `YOUR_WORKER_URL/zen/mimo-v2.5-free` |
-| Auth scheme | `x-api-key` |
-| API key | Your OpenCode API key |
-| Model | `claude-sonnet-4-5-20250514` (any Anthropic-looking name) |
-
-This works with all Go and Zen models.
-
-## API Endpoints
-
-| Path | Method | Purpose |
-|------|--------|---------|
-| `/v1/messages` | POST | Anthropic Messages API. Translates to OpenAI format by default. |
-| `/v1/chat/completions` | POST | OpenAI Chat Completions API. Pass-through by default. |
-| `/v1/models` | GET | Model discovery proxy. |
-| `/v1/responses` | POST | OpenAI Responses API. Translates to/from Chat Completions internally. |
+The proxy extracts the model from the path and uses it regardless of what the client sends in the request body.
 
 ## OpenAI SDK Usage
-
-Point any OpenAI-compatible client at the gateway. By default, `/v1/chat/completions` passes through to OpenCode Go.
 
 ```python
 from openai import OpenAI
 
 client = OpenAI(
     base_url="YOUR_DEPLOYED_WORKER_URL/v1",
-    api_key="your-opencode-go-api-key",
+    api_key="your-api-key",
 )
 
 response = client.chat.completions.create(
     model="deepseek-v4-pro",
     messages=[{"role": "user", "content": "Hello"}],
 )
-```
-
-## OpenAI SDK To Anthropic
-
-Set `x-upstream-format: anthropic` and point `x-upstream-url` at an Anthropic-compatible API.
-
-```bash
-curl YOUR_DEPLOYED_WORKER_URL/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: YOUR_ANTHROPIC_KEY" \
-  -H "x-upstream-url: https://api.anthropic.com" \
-  -H "x-upstream-format: anthropic" \
-  -d '{"model":"claude-sonnet-4-20250514","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
 ## Translation Notes
@@ -314,41 +204,97 @@ The gateway handles:
 - Tool calls and tool results in both directions
 - Streaming SSE in both directions
 - DeepSeek/OpenAI `reasoning_content` as Anthropic `thinking` blocks
-- Prompt cache key injection for OpenAI-style prefix caching
 - OpenAI Responses API to/from Chat Completions internal translation
+- Think tag stripping (`<think>...</think>`) for models that embed reasoning in text
 
-## Prompt Caching
+## Observability
 
-When translating Anthropic to OpenAI, the gateway injects a `prompt_cache_key` derived from a hash of the system prompt. This keeps requests with the same system prompt routed to the same backend node when the upstream supports OpenAI-style prefix caching.
+### Metrics
 
-Cache hit tokens from OpenAI-compatible usage metadata are mapped back to Anthropic's `cache_read_input_tokens` field.
+```bash
+curl http://localhost:18787/metrics
+```
+
+Returns Prometheus-format metrics:
+- `http_requests_total` — by method, path, status code
+- `http_request_duration_ms` — histogram with configurable buckets
+- `upstream_requests_total` — by upstream target
+- `upstream_errors_total` — by upstream target and status
+- `active_streams` — currently active streaming connections
+- `uptime_seconds` — proxy uptime
+
+### Upstream Health
+
+```bash
+# Config-only (no request)
+curl http://localhost:18787/health/upstream
+
+# Live probe (hits upstream /v1/models with 10s timeout)
+curl http://localhost:18787/health/upstream?probe=true
+```
+
+### Audit Log
+
+```bash
+curl http://localhost:18787/audit/log?limit=50
+```
+
+Returns the last 50 security-relevant events (auth, upstream switches, model overrides, errors).
+
+## Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/load-test.mjs` | Load testing with concurrency support |
+| `scripts/audit-deps.mjs` | Dependency vulnerability scanning |
+| `scripts/generate-openapi.mjs` | OpenAPI spec generation (→ `docs/openapi.json`) |
+| `scripts/install.mjs` | Harness structure verification |
 
 ## Development
 
 ```bash
 bun install
-bun test
-bun run deploy -- --dry-run
+bun test                 # Run 516 tests across 28 files
+npx tsc --noEmit         # TypeScript check (0 errors expected)
+bun run dev              # Local server on port 8787
+bun run build:binary     # Compile standalone binary
 ```
 
 Project structure:
 
 ```text
 src/
-├── index.ts                          Main Worker router and auth gate
-├── auth.ts                           API key extraction and validation
-├── cache.ts                          Prompt cache key utilities
-└── translate/
-    ├── request/                      Request translators
-    ├── response/                     Response translators
-    └── stream/                       SSE stream translators
-test/
-├── auth.test.ts
-├── cache.test.ts
-├── index.test.ts
-├── request.test.ts
-├── response.test.ts
-└── stream.test.ts
+├── index.ts                 Main Hono router and request handler
+├── auth.ts                  API key extraction and format validation
+├── audit.ts                 Structured audit logging
+├── compress.ts              Streaming gzip compression
+├── config.ts                Project-wide configuration
+├── logger.ts                Unified structured logger
+├── providers.ts             Upstream provider registry
+├── rate-limit.ts            Rate-limit header tracking
+├── request.ts               Request utilities and upstream fetch
+├── response-cache.ts        In-memory LRU response cache
+├── routing.ts               URL parsing and model override logic
+├── validate.ts              Zod v4 request body validation
+├── vision.ts                Image detection and vision model routing
+├── handlers/                7 handler modules (messages, chat-completions,
+│                            responses, models, health, metrics, health-upstream,
+│                            audit-log, websocket)
+└── translate/               Plugin architecture with 3 registered format pairs
+    ├── plugin.ts            Translator interfaces + registry
+    ├── registry.ts          Built-in format pair registration
+    ├── request/             3 request translators
+    ├── response/            3 response translators
+    └── stream/              3 SSE stream translators
+
+scripts/
+├── build-entry.ts           Bun standalone server
+├── load-test.mjs            Load testing tool
+├── audit-deps.mjs           Dependency audit
+└── generate-openapi.mjs     OpenAPI spec generator
+
+test/                        28 test files, 516 tests
+└── architecture.test.ts     Architecture boundary enforcement (127 checks)
 ```
 
 ## License

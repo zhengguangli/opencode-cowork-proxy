@@ -125,3 +125,212 @@ Headers like `X-Upstream-Format`, `X-Upstream-Url`, `X-Api-Key` are processed at
 - **Import cap**: 10 imports per file.
 - **Translation purity**: No I/O in translate layer.
 - **Type safety**: Use `type-guards.ts` helpers (`asRecord`, `asRecordArray`, `asRecordOptional`) instead of bare `as` casts. No `any`. Max 3 non-null assertions per file.
+
+
+## 6. Response Caching Design
+
+### 6.1 Cache Architecture
+
+The proxy has two caching layers:
+
+| Layer | Scope | Storage | TTL | Capacity |
+|-------|-------|---------|-----|----------|
+| Cloudflare Cache API | Model lists only | CF edge cache | 300s | Unlimited |
+| In-memory LRU | All deterministic endpoints | `Map<string, CacheEntry>` | Configurable (default 60s) | 50 entries |
+
+### 6.2 In-Memory Cache
+
+`src/response-cache.ts` implements a write-through in-memory cache:
+
+- **Cache key**: `upstream|path|bodyHash` (body hash via `simpleHash()` — 32-bit djb2 variant)
+- **Eviction**: LRU-like (oldest creation time removed first when at capacity)
+- **Cache policy**: Only 2xx non-streaming responses; error responses and SSE are never cached
+- **Header injection**: Cached responses include `X-Cache: hit` / `X-Cache: miss`
+- **Cleanup**: Periodic timer every 30s removes expired entries; timer auto-stops when empty
+
+### 6.3 Limitations
+
+- Per-isolate cache — no coordination across Cloudflare Workers isolates
+- Body hash is a simple hash, not a cryptographic digest — collision risk is non-zero but acceptable for deduplication
+
+## 7. Rate-Limit Awareness Design
+
+### 7.1 Architecture
+
+`src/rate-limit.ts` provides advisory-only rate-limit tracking (not enforcement). The upstream is the authority on rate limits.
+
+```
+Upstream Response
+  ↓
+safeUpstreamFetch() → trackRateLimits(url, res)
+  ↓
+State Map (per upstream)
+  ↓
+getRateLimitState() | isUpstreamThrottled() | recommendThrottleDelay()
+```
+
+### 7.2 Tracked Headers
+
+- `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset` — standard IETF rate-limit headers
+- `X-RateLimit-Limit-Requests`, `X-RateLimit-Limit-Tokens` — OpenCode-specific headers
+
+### 7.3 Throttle Logic
+
+| Condition | Action |
+|-----------|--------|
+| Remaining < 5 | `log.warn()` with reset time |
+| Remaining = 0, window not expired | `isUpstreamThrottled()` returns true |
+| Remaining/Limit < 20% | `recommendThrottleDelay()` returns per-request delay (capped at 5s) |
+
+### 7.4 Design Decisions
+
+- **Advisory only**: The proxy never blocks requests based on rate-limit data. Blocking is the upstream's responsibility.
+- **No persisted state**: Rate-limit state is in-memory only, lost on process restart.
+
+## 8. Request Body Validation Design
+
+### 8.1 Architecture
+
+`src/validate.ts` uses Zod v4 schemas to validate request bodies at the handler boundary, BEFORE translation logic executes.
+
+```
+Client Request Body
+  ↓
+Handler → validateBody(body, schema)
+  ↓                    ↓
+  success           failure
+  ↓                    ↓
+  translate()     400 Response + error details
+```
+
+### 8.2 Schema Design Principles
+
+- **Lenient by default**: Zod v4 strips unknown keys. New API fields won't break existing clients.
+- **Type narrowing**: Validation output is fully typed (`z.infer<typeof schema>`).
+- **Granular error reporting**: Each validation failure includes path, message, and error code.
+- **Separate schemas per endpoint**: Three schemas for three API formats.
+
+### 8.3 Schemas
+
+| Schema | Validates | Used By |
+|--------|-----------|---------|
+| `anthropicMessagesSchema` | POST /v1/messages | Anthropic clients |
+| `openAIChatSchema` | POST /v1/chat/completions | OpenAI SDK clients |
+| `responsesAPISchema` | POST /v1/responses | Responses API clients |
+
+## 9. Audit Logging Design
+
+### 9.1 Architecture
+
+All audit events flow through the unified logger (`log.audit()`) AND are buffered in an in-memory ring buffer for the `/audit/log` endpoint.
+
+```
+Security Event
+  ↓
+auditAuth() / auditError() / auditModelOverride() / auditUpstreamSwitch() / auditStream()
+  ↓
+recordAudit(type, action, details)
+  ↓                           ↓
+log.audit(pfx, msg, details)  bufferEvent(event) → Ring Buffer (1000)
+  ↓
+JSON stdout
+```
+
+### 9.2 Event Types
+
+| Type | Prefix | Events |
+|------|--------|--------|
+| auth | AUTH | authenticated, auth_failed |
+| upstream | UPSTREAM | switch |
+| model | MODEL | override_url, override_vision, override_thinking |
+| error | ERROR | unhandled_exception, upstream_failure |
+| stream | STREAM | ws_upgrade, start, end, abort |
+| proxy | PROXY | startup |
+
+## 10. Plugin Translator Architecture
+
+### 10.1 Interfaces
+
+`src/translate/plugin.ts` defines three translator interfaces and a `FormatPair` aggregator:
+
+```
+RequestTranslator<TBody>    translate(body, model?) → Record
+ResponseTranslator           translate(body, model) → Record
+StreamTranslator             translate(stream, model) → ReadableStream
+```
+
+A `FormatPair` bundles all three for one translation direction:
+
+```typescript
+interface FormatPair {
+  key: FormatPairKey;
+  label: string;
+  request: RequestTranslator;
+  response: ResponseTranslator;
+  stream: StreamTranslator;
+}
+```
+
+### 10.2 Registration
+
+```typescript
+import { translatorRegistry, FormatPairKey } from './translate/plugin';
+import { ensureTranslatorsRegistered } from './translate/registry';
+
+// Auto-register built-in pairs at startup
+ensureTranslatorsRegistered();
+
+// Register a custom pair
+translatorRegistry.register(myCustomPair);
+
+// Look up at runtime
+const pair = translatorRegistry.get(FormatPairKey.AnthropicToOpenAI);
+```
+
+### 10.3 Registered Pairs
+
+| Key | Direction | Files |
+|-----|-----------|-------|
+| `AnthropicToOpenAI` | Anthropic Messages ↔ OpenAI Chat | `request/anthropic-to-openai`, `response/anthropic-to-openai`, `stream/*` |
+| `OpenAIToAnthropic` | OpenAI Chat ↔ Anthropic Messages | `request/openai-to-anthropic`, `response/openai-to-anthropic`, `stream/*` |
+| `ResponsesToChat` | Responses API ↔ Chat Completions | `request/responses-to-chat`, `response/chat-completions-to-responses`, `stream/*` |
+
+## 11. Unified Logging Design
+
+### 11.1 Output Format
+
+Every log line across the entire proxy follows this schema:
+
+```json
+{
+  "level": "INFO",
+  "ts": "2026-06-12T07:56:17.346Z",
+  "pfx": "HTTP",
+  "msg": "POST /v1/messages 200 1384ms",
+  "details": { "method": "POST", "path": "/v1/messages", "status": 200, "durationMs": 1384 }
+}
+```
+
+### 11.2 Levels
+
+| Level | Priority | Gated | Use Cases |
+|-------|----------|-------|-----------|
+| DEBUG | 0 | `IS_DEBUG` env var | Translation debugging, retry details |
+| AUDIT | 1 | Always on | Security events (auth, upstream, errors) |
+| INFO | 1 | Always on | Access logs, startup, operational info |
+| WARN | 2 | Always on | Low quota, think tag detection, cache failures |
+| ERROR | 3 | Always on | Upstream errors, unhandled exceptions |
+
+### 11.3 PREFIX Convention
+
+| Prefix | Source | When |
+|--------|--------|------|
+| HTTP | build-entry.ts | Every HTTP request |
+| STARTUP | index.ts | Module initialization |
+| AUTH | audit.ts | Authentication events |
+| STREAM | audit.ts, stream translators | Stream lifecycle |
+| RETRY | request.ts | Upstream retry attempts |
+| RATELIMIT | rate-limit.ts | Low quota warnings |
+| RESPONSES | handlers/responses.ts | Responses API debug |
+| MODELS | handlers/models.ts | Model list operations |
+| COMPRESS | compress.ts | Compression events |

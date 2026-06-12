@@ -28,7 +28,7 @@ const spec = {
   },
   servers: [
     { url: 'https://your-worker.example.com', description: 'Cloudflare Workers (production)' },
-    { url: 'http://localhost:8787', description: 'Local development (Bun standalone)' },
+    { url: 'http://localhost:18787', description: 'Local development (Bun standalone)' },
   ],
   paths: {
     '/': {
