@@ -351,7 +351,7 @@ export function streamChatCompletionsToResponses(
           await applyBackpressure(controller);
         }
       } catch (err) {
-        log.debug('STREAM', 'streamChatCompletionsToResponses error:', err);
+        log.debug('STREAM', 'streamChatCompletionsToResponses error', { error: err });
         if (activeItemType) {
           flushActiveItem(true);
         }

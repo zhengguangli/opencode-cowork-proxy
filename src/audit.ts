@@ -1,14 +1,21 @@
 /**
  * Structured audit logging for security-relevant events.
  *
- * WHEN TO READ THIS FILE: Adding a new audit event type, changing audit
- * output format, or debugging audit trail issues.
+ * WHY READ THIS FILE: Audit events capture security-relevant operations.
+ * They're ALWAYS ON (not gated by DEBUG) and both written through logger.ts
+ * AND buffered in-memory for the /audit/log endpoint.
  *
- * Audit events are JSON-per-line (stdout) AND buffered in-memory for the
- * /audit/log endpoint. The buffer retains the last 1000 events.
+ * RELATIONSHIP WITH logger.ts:
+ *   audit.ts uses log.audit() from logger.ts to produce unified log lines.
+ *   The format is identical to other log lines:
+ *     {"level":"AUDIT","ts":"...","pfx":"AUTH","msg":"authenticated","details":{...}}
+ *   This is the ONLY difference: audit events are logged at the AUDIT level
+ *   so log aggregators can filter them separately.
  *
- * Audit logging is ALWAYS on — not gated by DEBUG.
+ * The in-memory ring buffer (1000 events) is separate from the log output
+ * and serves the GET /audit/log endpoint for real-time debugging.
  */
+import { log } from './logger';
 import { identifyKeyType } from './auth';
 
 export type AuditEventType = 'auth' | 'upstream' | 'model' | 'error' | 'stream' | 'proxy';
@@ -39,19 +46,26 @@ export function getRecentAuditEvents(limit = 200): AuditEvent[] {
 
 // ---- Core ----
 
+const PREFIX_MAP: Record<AuditEventType, string> = {
+  auth: 'AUTH',
+  upstream: 'UPSTREAM',
+  model: 'MODEL',
+  error: 'ERROR',
+  stream: 'STREAM',
+  proxy: 'PROXY',
+};
+
 function ts(): string {
   return new Date().toISOString();
 }
 
-function emit(event: AuditEvent): void {
-  const line = JSON.stringify({ audit: true, ...event });
-  console.log(line);
-  bufferEvent(event);
-}
-
-/** Record a generic audit event. */
+/** Record a generic audit event — writes through logger.ts AND buffers for /audit/log. */
 export function recordAudit(type: AuditEventType, action: string, details: Record<string, unknown>): void {
-  emit({ ts: ts(), type, action, details });
+  const event: AuditEvent = { ts: ts(), type, action, details };
+  // Write through unified logger
+  log.audit(PREFIX_MAP[type], action, details);
+  // Buffer for /audit/log endpoint
+  bufferEvent(event);
 }
 
 // ---- Typed helpers ----

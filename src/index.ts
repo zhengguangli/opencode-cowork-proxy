@@ -43,7 +43,7 @@ ensureProvidersRegistered();
 
 const startupMs = Date.now() - startupStart;
 startupComplete = true;
-log.info('STARTUP', `Plugin registries initialized in ${startupMs}ms`);
+log.info('STARTUP', `Plugin registries initialized in ${startupMs}ms`, { startupMs, registries: ['translators', 'providers'] });
 recordAudit('proxy', 'startup', { startupMs, registries: ['translators', 'providers'] });
 
 // ---- Main Request Handler ----

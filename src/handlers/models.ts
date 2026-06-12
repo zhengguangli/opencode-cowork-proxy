@@ -58,7 +58,7 @@ export async function handleModelList(
   });
   // Fire-and-forget cache put (no await to avoid blocking response)
   if (modelCache) {
-    (async () => { try { await modelCache.put(cacheRequest, response.clone()); } catch (e) { log.debug('MODELS', 'modelCache.put failed:', e); } })();
+    (async () => { try { await modelCache.put(cacheRequest, response.clone()); } catch (e) { log.debug('MODELS', 'modelCache.put failed', { error: e }); } })();
   }
   return response;
 }

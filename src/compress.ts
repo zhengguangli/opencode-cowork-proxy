@@ -48,7 +48,7 @@ export function compressibleStream(
     const compressed = stream.pipeThrough(new CompressionStream('gzip'));
     return { stream: compressed, contentEncoding: 'gzip' };
   } catch (err) {
-    log.debug('COMPRESS', `CompressionStream not available: ${err}`);
+    log.debug('COMPRESS', 'CompressionStream not available', { error: err });
     return { stream, contentEncoding: null };
   }
 }

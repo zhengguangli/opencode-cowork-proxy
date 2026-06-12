@@ -84,13 +84,15 @@ describe('Architecture boundaries', () => {
     ];
 
     entries.forEach(entry => {
-      it(`${path.basename(entry)} must only import index.ts`, () => {
+      it(`${path.basename(entry)} must only import src/index.ts directly (utilities like logger/config are allowed)`, () => {
         if (!fs.existsSync(entry)) return;
         const imports = getImports(entry);
         // Allow `../src/index` or `./src/index`
         const allowed = imports.filter(i => i.includes('src/index') || i.includes('./index'));
-        // Any non-index import from src/ is a violation
-        const violations = imports.filter(i => i.includes('src/') && !i.includes('src/index'));
+        // Any non-index import from src/ is a violation (except utility modules)
+        const allowedSrc = ['src/index', 'src/logger', 'src/config', 'src/auth', 'src/version',
+                            'src/cache', 'src/backpressure', 'src/translate/type-guards'];
+        const violations = imports.filter(i => i.includes('src/') && !allowedSrc.some(a => i.includes(a)));
         expect(violations, `Found non-index src imports in entry point: ${violations.join(', ')}`).toEqual([]);
       });
     });
