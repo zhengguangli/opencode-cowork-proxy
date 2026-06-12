@@ -255,7 +255,7 @@ Returns the last 50 security-relevant events (auth, upstream switches, model ove
 ```bash
 bun install
 bun test                 # Run 516 tests across 28 files
-npx tsc --noEmit         # TypeScript check (0 errors expected)
+bun run typecheck         # TypeScript check (0 errors expected)
 bun run dev              # Local server on port 8787
 bun run build:binary     # Compile standalone binary
 ```

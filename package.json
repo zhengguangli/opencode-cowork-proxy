@@ -5,9 +5,10 @@
   "scripts": {
     "dev": "bun run scripts/build-entry.ts",
     "build:binary": "bun build --compile --outfile opencode-cowork-proxy scripts/build-entry.ts",
-    "deploy": "npx wrangler deploy",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck": "bunx tsc --noEmit",
+    "deploy": "bunx wrangler deploy"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260611.1",
