@@ -54,12 +54,12 @@ export async function handleOpenAIChatCompletions(
     if (!parsed.ok) return parsed.response;
     const req = parsed.data;
 
-    const originalModel = req.model;
-    if (route.modelOverride) req.model = route.modelOverride;
-    if (hasOpenAIImages(req)) req.model = getVisionModel(upstream, req.model);
-    const anthReq = formatOpenAIToAnthropic(req);
-    const upstreamSignal = anthReq.stream ? createStreamSignal(request) : AbortSignal.timeout(DEFAULT_TIMEOUT);
-    const res = await safeUpstreamFetch(`${upstream}/v1/messages`, {
+    const originalModel = req.model as string | undefined;
+    if (route.modelOverride) req.model = route.modelOverride as string;
+    if (hasOpenAIImages(req)) req.model = getVisionModel(upstream, req.model as string | null);
+    const anthReq = formatOpenAIToAnthropic(req as Record<string, unknown>);
+    const upstreamSignal = (anthReq as Record<string, unknown>).stream ? createStreamSignal(request) : AbortSignal.timeout(DEFAULT_TIMEOUT);
+    const res = await safeUpstreamFetch(`${upstream}/v1/messages` as string, {
       method: "POST",
       headers: anthropicHeaders(request, key),
       body: JSON.stringify(anthReq),
@@ -74,17 +74,17 @@ export async function handleOpenAIChatCompletions(
         "Connection": "keep-alive",
       });
       forwardUpstreamHeaders(streamHeaders, res);
-      return new Response(streamAnthropicToOpenAI(res.body as ReadableStream, originalModel), {
+      return new Response(streamAnthropicToOpenAI(res.body as ReadableStream, originalModel || ""), {
         headers: streamHeaders,
       });
     }
-    const data: Record<string, unknown> = await res.json();
+    const data = await res.json() as Record<string, unknown>;
     const upstreamHeaders: Record<string, string> = {};
     for (const name of UPSTREAM_FORWARD_HEADERS) {
       const value = res.headers.get(name);
       if (value) upstreamHeaders[name] = value;
     }
-    return jsonResponse(request, toOpenAIResponse(data, originalModel), upstreamHeaders);
+    return jsonResponse(request, toOpenAIResponse(data, originalModel || ""), upstreamHeaders);
   }
 
   // ---- Pass-through: send OpenAI body as-is to OpenAI upstream ----

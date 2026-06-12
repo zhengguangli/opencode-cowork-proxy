@@ -11,7 +11,7 @@ describe('model override', () => {
   it('overrides model from URL path segment with /go prefix', async () => {
     let capturedBody: Record<string, unknown> | null = null;
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async (_url: string, init: { body?: string }) => {
+      async (_url: any, init: any) => {
         capturedBody = JSON.parse(init.body ?? '{}');
         return new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }] }), {
           status: 200,
@@ -37,7 +37,7 @@ describe('model override', () => {
   it('overrides model from URL path segment with /zen prefix', async () => {
     let capturedBody: Record<string, unknown> | null = null;
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async (_url: string, init: { body?: string }) => {
+      async (_url: any, init: any) => {
         capturedBody = JSON.parse(init.body ?? '{}');
         return new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }] }), {
           status: 200,
@@ -85,7 +85,7 @@ describe('model override', () => {
   it('does not override model when no model segment in path', async () => {
     let capturedBody: Record<string, unknown> | null = null;
     vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async (_url: string, init: { body?: string }) => {
+      async (_url: any, init: any) => {
         capturedBody = JSON.parse(init.body ?? '{}');
         return new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }] }), {
           status: 200,

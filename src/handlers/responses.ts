@@ -83,16 +83,16 @@ export async function handleResponsesAPI(
 
   // Vision model override before DeepSeek thinking injection
   if (hasResponsesImages(req)) {
-    req.model = getVisionModel(upstream, req.model);
+    req.model = getVisionModel(upstream, req.model as string | null);
   }
 
   // DeepSeek: auto-inject thinking for reasoning models
-  if (req.model?.startsWith('deepseek-') && !req.thinking) {
+  if ((req.model as string)?.startsWith('deepseek-') && !(req as Record<string, unknown>).thinking) {
     req.thinking = { type: "enabled" };
   }
 
-  const chatReq = formatResponsesToChatCompletions(req);
-  log.debug('RESPONSES', `ChatReq model=${chatReq.model}, messages count=${asRecordArray(chatReq.messages).length}`);
+  const chatReq = formatResponsesToChatCompletions(req as Record<string, unknown>);
+  log.debug('RESPONSES', `ChatReq model=${(chatReq as Record<string, unknown>).model}, messages count=${asRecordArray((chatReq as Record<string, unknown>).messages).length}`);
   const msgs = asRecordArray(chatReq.messages);
   for (let mi = 0; mi < msgs.length; mi++) {
     const m = msgs[mi];
@@ -119,7 +119,7 @@ export async function handleResponsesAPI(
       "Connection": "keep-alive",
     });
     forwardUpstreamHeaders(streamHeaders, upstreamRes);
-    return new Response(streamChatCompletionsToResponses(upstreamRes.body as ReadableStream, originalModel), {
+    return new Response(streamChatCompletionsToResponses(upstreamRes.body as ReadableStream, originalModel as string), {
       headers: streamHeaders,
     });
   }
@@ -135,7 +135,7 @@ export async function handleResponsesAPI(
     log.warn('RESPONSES', '⚠️  FOUND <think> tags in upstream content!');
   }
 
-  const respData = formatChatCompletionsToResponses(data, originalModel);
+  const respData = formatChatCompletionsToResponses(data, originalModel as string || "");
   const outputItems = asRecordArray(respData.output);
   log.debug('RESPONSES', `Translated output item types=${outputItems.map((o) => o.type).join(',')}`);
   const msgItem = asRecordOptional(outputItems.find((o) => o.type === 'message'));

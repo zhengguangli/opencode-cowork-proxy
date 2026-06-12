@@ -48,11 +48,11 @@ describe('extractCachedTokens', () => {
   });
 
   it('returns 0 for undefined usage', () => {
-    expect(extractCachedTokens(undefined)).toBe(0);
+    expect(extractCachedTokens(undefined as unknown as Record<string, unknown>)).toBe(0);
   });
 
   it('returns 0 for null usage', () => {
-    expect(extractCachedTokens(null)).toBe(0);
+    expect(extractCachedTokens(null as unknown as Record<string, unknown>)).toBe(0);
   });
 
   it('returns 0 when cached_tokens is 0', () => {

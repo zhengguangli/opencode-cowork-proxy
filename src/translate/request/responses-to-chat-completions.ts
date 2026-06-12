@@ -188,7 +188,7 @@ export function formatResponsesToChatCompletions(body: Record<string, unknown>):
   }
 
   // Text config → response_format
-  if (text && text.type === "json_object") {
+  if (text && (text as Record<string, unknown>).type === "json_object") {
     chatReq.response_format = { type: "json_object" };
   }
 

@@ -57,23 +57,24 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
 
           let evt: Record<string, unknown>;
           try { evt = JSON.parse(raw); } catch { continue; }
+          const e = evt as any;
 
-          switch (evt.type) {
+          switch (e.type) {
             case "message_start":
               contentBlockIndex = -1;
               activeBlockType = null;
               toolCallMap.clear();
               // Capture input tokens and cache stats from the initial message
-              if (evt.message?.usage) {
-                inputTokens = evt.message.usage.input_tokens || 0;
-                cacheReadTokens = evt.message.usage.cache_read_input_tokens || 0;
-                cacheCreateTokens = evt.message.usage.cache_creation_input_tokens || 0;
+              if (e.message?.usage) {
+                inputTokens = e.message.usage.input_tokens || 0;
+                cacheReadTokens = e.message.usage.cache_read_input_tokens || 0;
+                cacheCreateTokens = e.message.usage.cache_creation_input_tokens || 0;
               }
               break;
 
             case "content_block_start": {
-              const block = evt.content_block;
-              contentBlockIndex = evt.index;
+              const block = e.content_block;
+              contentBlockIndex = e.index;
 
               if (block?.type === "text") {
                 activeBlockType = "text";
@@ -98,7 +99,7 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
             }
 
             case "content_block_delta": {
-              const delta = evt.delta;
+              const delta = e.delta;
               if (delta?.type === "text_delta") {
                 emitChunk({ content: delta.text || "" });
               } else if (delta?.type === "thinking_delta") {
@@ -124,15 +125,15 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
               break;
 
             case "message_delta": {
-              const stopReason = evt.delta?.stop_reason;
+              const stopReason = e.delta?.stop_reason;
               if (stopReason) {
                 lastFinishReason = stopReason;
                 const finishReason = stopReason === "tool_use" ? "tool_calls"
                                    : stopReason === "max_tokens" ? "length"
                                    : "stop";
                 // Capture output tokens from message_delta
-                if (evt.usage?.output_tokens) {
-                  outputTokens = evt.usage.output_tokens;
+                if (e.usage?.output_tokens) {
+                  outputTokens = e.usage.output_tokens;
                 }
                 // Emit chunk with both finish_reason and usage when available
                 const totalPromptTokens = inputTokens + cacheReadTokens + cacheCreateTokens;

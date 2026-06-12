@@ -3,7 +3,7 @@ import { formatAnthropicToOpenAI } from '../src/translate/request/anthropic-to-o
 
 describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
   it('converts a simple text message', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'claude-sonnet-4-20250514',
       messages: [{ role: 'user', content: 'Hello' }],
       max_tokens: 1024,
@@ -16,7 +16,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
   });
 
   it('converts messages with content arrays', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'claude-sonnet-4-20250514',
       messages: [
         { role: 'user', content: [{ type: 'text', text: 'What is 2+2?' }] },
@@ -31,7 +31,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
   });
 
   it('converts system messages', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'claude-sonnet-4-20250514',
       system: 'You are helpful.',
       messages: [{ role: 'user', content: 'Hi' }],
@@ -42,7 +42,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
   });
 
   it('converts array system messages', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'claude-sonnet-4-20250514',
       system: [
         { type: 'text', text: 'Rule 1' },
@@ -56,7 +56,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
   });
 
   it('converts tool_use to tool_calls', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'claude-sonnet-4-20250514',
       messages: [{
         role: 'assistant',
@@ -75,7 +75,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
   });
 
   it('converts thinking blocks to reasoning_content', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'deepseek-reasoner',
       messages: [{
         role: 'assistant',
@@ -91,7 +91,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
   });
 
   it('converts tool_result to tool messages', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'claude-sonnet-4-20250514',
       messages: [{
         role: 'user',
@@ -107,7 +107,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
   });
 
   it('puts tool_result messages before user text in mixed Anthropic user turns', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'deepseek-reasoner',
       messages: [
         {
@@ -136,7 +136,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
   });
 
   it('passes through optional parameters', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'claude-sonnet-4-20250514',
       messages: [{ role: 'user', content: 'Hi' }],
       max_tokens: 4096,
@@ -154,7 +154,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
   });
 
   it('requests usage in OpenAI-compatible streams', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'deepseek-v4-pro',
       messages: [{ role: 'user', content: 'Hi' }],
       max_tokens: 4096,
@@ -164,7 +164,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
   });
 
   it('omits undefined optional parameters', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'claude-sonnet-4-20250514',
       messages: [{ role: 'user', content: 'Hi' }],
       max_tokens: 1024,
@@ -175,7 +175,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
   });
 
   it('converts tools format', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'claude-sonnet-4-20250514',
       messages: [{ role: 'user', content: 'Weather?' }],
       max_tokens: 1024,
@@ -189,7 +189,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
   });
 
   it('converts base64 images from Anthropic to OpenAI image_url format', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'claude-sonnet-4-20250514',
       messages: [{
         role: 'user',
@@ -209,7 +209,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
   });
 
   it('converts URL images from Anthropic to OpenAI image_url format', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'claude-sonnet-4-20250514',
       messages: [{
         role: 'user',
@@ -225,7 +225,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
   });
 
   it('returns string content when user message has no images', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'claude-sonnet-4-20250514',
       messages: [{
         role: 'user',
@@ -239,7 +239,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
   });
 
   it('includes text alongside images in array content', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'claude-sonnet-4-20250514',
       messages: [{
         role: 'user',
@@ -258,7 +258,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
 
   // Regression: top_k passthrough — M5 from translation audit
   it('passes through top_k', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'deepseek-v4-pro',
       messages: [{ role: 'user', content: 'Hi' }],
       max_tokens: 1024,
@@ -268,7 +268,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
   });
 
   it('omits top_k when undefined', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'deepseek-v4-pro',
       messages: [{ role: 'user', content: 'Hi' }],
       max_tokens: 1024,
@@ -278,7 +278,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
 
   // Regression: tool_choice passthrough — M6 from translation audit
   it('maps tool_choice string "auto" unchanged', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'claude-sonnet-4-20250514',
       messages: [{ role: 'user', content: 'Hi' }],
       max_tokens: 1024,
@@ -288,7 +288,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
   });
 
   it('maps tool_choice string "any" to "required"', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'claude-sonnet-4-20250514',
       messages: [{ role: 'user', content: 'Hi' }],
       max_tokens: 1024,
@@ -298,7 +298,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
   });
 
   it('maps tool_choice string "none" unchanged', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'claude-sonnet-4-20250514',
       messages: [{ role: 'user', content: 'Hi' }],
       max_tokens: 1024,
@@ -308,7 +308,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
   });
 
   it('maps tool_choice object {type:"auto"} to "auto"', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'claude-sonnet-4-20250514',
       messages: [{ role: 'user', content: 'Hi' }],
       max_tokens: 1024,
@@ -318,7 +318,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
   });
 
   it('maps tool_choice object {type:"any"} to "required"', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'claude-sonnet-4-20250514',
       messages: [{ role: 'user', content: 'Hi' }],
       max_tokens: 1024,
@@ -328,7 +328,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
   });
 
   it('maps tool_choice object {type:"tool", name:"xxx"} to {type:"function", function:{name:"xxx"}}', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'claude-sonnet-4-20250514',
       messages: [{ role: 'user', content: 'Hi' }],
       max_tokens: 1024,
@@ -344,7 +344,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
   });
 
   it('omits tool_choice when undefined', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'claude-sonnet-4-20250514',
       messages: [{ role: 'user', content: 'Hi' }],
       max_tokens: 1024,
@@ -356,7 +356,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI request)', () => {
 // Cache-specific tests (Anthropic→OpenAI direction only, since cache injection is relevant here)
 describe('Anthropic→OpenAI prompt_cache_key injection', () => {
   it('injects prompt_cache_key when system prompt exists', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'claude-sonnet-4-20250514',
       system: 'You are a helpful assistant.',
       messages: [{ role: 'user', content: 'Hi' }],
@@ -366,7 +366,7 @@ describe('Anthropic→OpenAI prompt_cache_key injection', () => {
   });
 
   it('omits prompt_cache_key when no system prompt', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       model: 'claude-sonnet-4-20250514',
       messages: [{ role: 'user', content: 'Hi' }],
       max_tokens: 1024,

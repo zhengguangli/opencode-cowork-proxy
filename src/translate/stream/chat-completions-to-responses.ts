@@ -79,7 +79,7 @@ export function streamChatCompletionsToResponses(
           id: itemId,
           type: "message" as const,
           role: "assistant",
-          content: [],
+          content: [] as Record<string, unknown>[],
           status: "in_progress" as const,
         };
         outputItems.push(item);
@@ -147,7 +147,7 @@ export function streamChatCompletionsToResponses(
           const item = outputItems[outputItems.length - 1];
           if (item?.type === "message") {
             // Update content blocks with accumulated text
-            const textPart = item.content.find(
+            const textPart = (item.content as Record<string, unknown>[] | undefined)?.find(
               (c: Record<string, unknown>) => c.type === "output_text"
             );
             if (textPart) textPart.text = textAccum;
@@ -209,15 +209,16 @@ export function streamChatCompletionsToResponses(
       function processStreamChunk(parsed: Record<string, unknown>) {
         // Capture usage from final chunk
         if (parsed.usage) {
-          lastUsage = parsed.usage;
+          lastUsage = parsed.usage as Record<string, unknown>;
         }
 
         // Capture finish reason
-        if (parsed.choices?.[0]?.finish_reason) {
-          finishReason = parsed.choices[0].finish_reason;
+        const firstChoice = asRecordArray(parsed.choices)[0] as Record<string, unknown> | undefined;
+        if (firstChoice?.finish_reason) {
+          finishReason = (firstChoice as Record<string, unknown>).finish_reason as string;
         }
 
-        const delta = parsed.choices?.[0]?.delta;
+        const delta: any = firstChoice?.delta;
         if (!delta) return;
 
         // Stream debug logging is in the handler (handlers/responses.ts)

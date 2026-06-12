@@ -133,8 +133,8 @@ export function formatOpenAIToAnthropic(body: Record<string, unknown>): Record<s
           content.push({
             type: "tool_use",
             id: tc.id,
-            name: tc.function?.name,
-            input: parseToolArguments(tc.function?.arguments),
+            name: (tc.function as Record<string, unknown> | undefined)?.name as string | undefined,
+            input: parseToolArguments((tc.function as Record<string, unknown> | undefined)?.arguments as string | undefined),
           });
         }
       }

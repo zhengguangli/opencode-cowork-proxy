@@ -119,7 +119,8 @@ export function formatAnthropicToOpenAI(body: Record<string, unknown>): Record<s
   if (stop_sequences) data.stop = stop_sequences;
 
   // Map Anthropic metadata.user_id to OpenAI user field
-  if (metadata?.user_id) data.user = metadata.user_id;
+  const meta = metadata as Record<string, unknown> | undefined;
+  if (meta?.user_id) data.user = meta.user_id;
 
   // Passthrough thinking config (DeepSeek-specific)
   if (thinking !== undefined) data.thinking = thinking;
@@ -140,18 +141,21 @@ export function formatAnthropicToOpenAI(body: Record<string, unknown>): Record<s
     if (typeof tool_choice === "string") {
       // "auto" → "auto", "any" → "required", "none" → "none"
       data.tool_choice = tool_choice === "any" ? "required" : tool_choice;
-    } else if (tool_choice.type === "auto" || tool_choice.type === "any") {
-      data.tool_choice = tool_choice.type === "any" ? "required" : tool_choice.type;
-    } else if (tool_choice.type === "tool") {
-      // Anthropic {type: "tool", name: "xxx"} → OpenAI {type: "function", function: {name: "xxx"}}
-      data.tool_choice = { type: "function", function: { name: tool_choice.name } };
+    } else {
+      const tc = tool_choice as Record<string, unknown>;
+      if (tc.type === "auto" || tc.type === "any") {
+        data.tool_choice = tc.type === "any" ? "required" : tc.type;
+      } else if (tc.type === "tool") {
+        // Anthropic {type: "tool", name: "xxx"} → OpenAI {type: "function", function: {name: "xxx"}}
+        data.tool_choice = { type: "function", function: { name: tc.name as string } };
+      }
     }
   }
 
   // Inject prompt_cache_key from system prompt hash for OpenAI node affinity caching.
   // This ensures requests with the same system prompt are routed to the same backend
   // node, enabling automatic OpenAI-style prefix caching.
-  const cacheKey = hashSystemPrompt(system);
+  const cacheKey = hashSystemPrompt(system as string | Record<string, unknown>[] | undefined);
   if (cacheKey) {
     data.prompt_cache_key = cacheKey;
   }

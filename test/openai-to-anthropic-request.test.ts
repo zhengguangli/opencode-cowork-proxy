@@ -3,7 +3,7 @@ import { formatOpenAIToAnthropic } from '../src/translate/request/openai-to-anth
 
 describe('formatOpenAIToAnthropic (OpenAI → Anthropic request)', () => {
   it('converts a simple message', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       model: 'gpt-4',
       messages: [{ role: 'user', content: 'Hello' }],
     });
@@ -15,7 +15,7 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic request)', () => {
   });
 
   it('extracts system messages from messages array', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       model: 'gpt-4',
       messages: [
         { role: 'system', content: 'You are helpful.' },
@@ -28,7 +28,7 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic request)', () => {
   });
 
   it('handles multiple system messages', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       model: 'gpt-4',
       messages: [
         { role: 'system', content: 'Rule 1' },
@@ -41,7 +41,7 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic request)', () => {
   });
 
   it('converts tool_calls to tool_use blocks', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       model: 'gpt-4',
       messages: [
         { role: 'user', content: 'Weather?' },
@@ -62,7 +62,7 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic request)', () => {
   });
 
   it('does not throw on malformed tool call arguments', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       model: 'gpt-4',
       messages: [
         { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'broken', arguments: '{bad json' } }] },
@@ -72,7 +72,7 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic request)', () => {
   });
 
   it('extracts image media type from data URL, not detail', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       model: 'gpt-4',
       messages: [{
         role: 'user',
@@ -90,7 +90,7 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic request)', () => {
   });
 
   it('merges standalone tool messages into user tool_result blocks', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       model: 'gpt-4',
       messages: [
         { role: 'user', content: 'What is 2+2?' },
@@ -116,7 +116,7 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic request)', () => {
   });
 
   it('passes through optional parameters', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       model: 'gpt-4',
       messages: [{ role: 'user', content: 'Hi' }],
       temperature: 0.5,
@@ -129,7 +129,7 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic request)', () => {
   });
 
   it('handles multi-stop array', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       model: 'gpt-4',
       messages: [{ role: 'user', content: 'Hi' }],
       stop: ['\n', 'END'],
@@ -138,7 +138,7 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic request)', () => {
   });
 
   it('converts tools format', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       model: 'gpt-4',
       messages: [{ role: 'user', content: 'Hi' }],
       tools: [
@@ -153,7 +153,7 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic request)', () => {
   // Regression: CRITICAL bug 1 from QA report — tool_choice format mismatch (OpenAI→Anthropic).
   // OpenAI: {type:"function", function:{name:"xxx"}} → Anthropic: {type:"tool", name:"xxx"}
   it('maps tool_choice object format {type:"function", function:{name}} to {type:"tool", name}', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       model: 'gpt-4',
       messages: [{ role: 'user', content: 'Weather?' }],
       tool_choice: { type: 'function', function: { name: 'get_weather' } },
@@ -163,7 +163,7 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic request)', () => {
 
   // Regression: tool_choice string "required" → Anthropic "any"
   it('maps tool_choice string "required" to Anthropic "any"', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       model: 'gpt-4',
       messages: [{ role: 'user', content: 'Hi' }],
       tool_choice: 'required',
@@ -180,7 +180,7 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic request)', () => {
 
   // Regression: F2 review fix — defensive guard for missing function.name
   it('falls back to {type:"tool"} when tool_choice.function.name is missing', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       model: 'gpt-4',
       messages: [{ role: 'user', content: 'Hi' }],
       tool_choice: { type: 'function', function: {} },
@@ -191,7 +191,7 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic request)', () => {
 
   // Regression: passthrough additional fields
   it('passes through response_format and user (metadata.user_id)', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       model: 'gpt-4',
       messages: [{ role: 'user', content: 'Hi' }],
       response_format: { type: 'json_object' },

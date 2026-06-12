@@ -18,7 +18,7 @@ import { jsonResponse, formatUptime } from '../request';
  * Returns service name, version, status, uptime, upstream configuration,
  * and available API endpoints. No authentication required.
  */
-export function handleHealthCheck(upstream: string): Response {
+export async function handleHealthCheck(upstream: string): Promise<Response> {
   return jsonResponse(new Request('http://localhost/'), {
     name: "opencode-cowork-proxy",
     version: VERSION,

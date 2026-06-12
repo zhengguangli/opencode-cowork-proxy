@@ -34,7 +34,9 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
       const reader = openaiStream.getReader();
       let buffer = '';
 
-      function processStreamDelta(delta: Record<string, unknown>, parsed: Record<string, unknown>) {
+      function processStreamDelta(delta_: Record<string, unknown>, parsed_: Record<string, unknown>) {
+        const delta = delta_ as any;
+        const parsed = parsed_ as any;
         // Capture usage from any chunk that has it
         if (parsed.usage) {
           lastUsage = {

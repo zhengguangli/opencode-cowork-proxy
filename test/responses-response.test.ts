@@ -6,7 +6,7 @@ import { formatChatCompletionsToResponses } from '../src/translate/response/chat
 // ──────────────────────────────────────────
 describe('formatChatCompletionsToResponses (Chat Completions → Responses API response)', () => {
   it('converts a text response', () => {
-    const result = formatChatCompletionsToResponses({
+    const result: any = formatChatCompletionsToResponses({
       choices: [{ message: { role: 'assistant', content: 'Hello!' }, finish_reason: 'stop' }],
       usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
     }, 'deepseek-v4-flash');
@@ -25,7 +25,7 @@ describe('formatChatCompletionsToResponses (Chat Completions → Responses API r
   });
 
   it('converts reasoning_content to reasoning output item (DeepSeek)', () => {
-    const result = formatChatCompletionsToResponses({
+    const result: any = formatChatCompletionsToResponses({
       choices: [{
         message: { role: 'assistant', reasoning_content: 'internal reasoning', content: 'final answer' },
         finish_reason: 'stop',
@@ -39,7 +39,7 @@ describe('formatChatCompletionsToResponses (Chat Completions → Responses API r
   });
 
   it('converts tool calls to function_call output items', () => {
-    const result = formatChatCompletionsToResponses({
+    const result: any = formatChatCompletionsToResponses({
       choices: [{
         message: {
           role: 'assistant',
@@ -60,35 +60,35 @@ describe('formatChatCompletionsToResponses (Chat Completions → Responses API r
   });
 
   it('maps finish_reason "stop" to status "completed"', () => {
-    const result = formatChatCompletionsToResponses({
+    const result: any = formatChatCompletionsToResponses({
       choices: [{ message: { content: 'Hi' }, finish_reason: 'stop' }],
     }, 'test');
     expect(result.status).toBe('completed');
   });
 
   it('maps finish_reason "length" to status "incomplete"', () => {
-    const result = formatChatCompletionsToResponses({
+    const result: any = formatChatCompletionsToResponses({
       choices: [{ message: { content: 'truncated' }, finish_reason: 'length' }],
     }, 'test');
     expect(result.status).toBe('incomplete');
   });
 
   it('maps DeepSeek "insufficient_system_resource" to status "incomplete"', () => {
-    const result = formatChatCompletionsToResponses({
+    const result: any = formatChatCompletionsToResponses({
       choices: [{ message: { content: 'partial' }, finish_reason: 'insufficient_system_resource' }],
     }, 'deepseek-v4-flash');
     expect(result.status).toBe('incomplete');
   });
 
   it('handles missing usage gracefully', () => {
-    const result = formatChatCompletionsToResponses({
+    const result: any = formatChatCompletionsToResponses({
       choices: [{ message: { content: 'Hi' }, finish_reason: 'stop' }],
     }, 'test');
     expect(result.usage).toBeUndefined();
   });
 
   it('maps standard usage with cached_tokens', () => {
-    const result = formatChatCompletionsToResponses({
+    const result: any = formatChatCompletionsToResponses({
       choices: [{ message: { content: 'Hi' }, finish_reason: 'stop' }],
       usage: {
         prompt_tokens: 100,
@@ -106,7 +106,7 @@ describe('formatChatCompletionsToResponses (Chat Completions → Responses API r
   });
 
   it('maps DeepSeek cache usage (prompt_cache_hit_tokens)', () => {
-    const result = formatChatCompletionsToResponses({
+    const result: any = formatChatCompletionsToResponses({
       choices: [{ message: { content: 'Hi' }, finish_reason: 'stop' }],
       usage: {
         prompt_tokens: 1000,
@@ -125,7 +125,7 @@ describe('formatChatCompletionsToResponses (Chat Completions → Responses API r
   });
 
   it('maps reasoning tokens in usage', () => {
-    const result = formatChatCompletionsToResponses({
+    const result: any = formatChatCompletionsToResponses({
       choices: [{ message: { content: 'Hi', reasoning_content: 'thinking' }, finish_reason: 'stop' }],
       usage: {
         prompt_tokens: 10,

@@ -34,7 +34,7 @@ interface LogEntry {
 }
 
 function shouldLog(level: LogLevel): boolean {
-  if (level === 'DEBUG') return IS_DEBUG;
+  if (level === 'DEBUG') return !!IS_DEBUG;
   return LEVEL_PRIORITY[level] >= LEVEL_PRIORITY[MIN_LOG_LEVEL];
 }
 

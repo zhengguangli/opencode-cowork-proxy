@@ -11,7 +11,7 @@ describe('Responses API', () => {
   it('routes /v1/responses to upstream chat/completions', async () => {
     let capturedBody: Record<string, unknown> | null = null;
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async (_url: string, init: { body?: string }) => {
+      async (_url: unknown, init: any) => {
         capturedBody = JSON.parse(init.body ?? '{}');
         return new Response(JSON.stringify({
           id: 'chatcmpl-123',
@@ -84,7 +84,7 @@ describe('Responses API', () => {
   it('injects DeepSeek thinking for /v1/responses deepseek models', async () => {
     let capturedBody: Record<string, unknown> | null = null;
     vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async (_url: string, init: { body?: string }) => {
+      async (_url: unknown, init: any) => {
         capturedBody = JSON.parse(init.body ?? '{}');
         return new Response(JSON.stringify({
           choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
@@ -138,7 +138,7 @@ describe('Responses API', () => {
   it('overrides model to qwen3.6-plus when images present in /v1/responses', async () => {
     let capturedBody: Record<string, unknown> | null = null;
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async (_url: string, init: { body?: string }) => {
+      async (_url: unknown, init: any) => {
         capturedBody = JSON.parse(init.body ?? '{}');
         return new Response(JSON.stringify({
           choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
@@ -175,7 +175,7 @@ describe('Responses API', () => {
   it('overrides model to mimo-v2.5-free when images present in /zen/v1/responses', async () => {
     let capturedBody: Record<string, unknown> | null = null;
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async (_url: string, init: { body?: string }) => {
+      async (_url: unknown, init: any) => {
         capturedBody = JSON.parse(init.body ?? '{}');
         return new Response(JSON.stringify({
           choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
@@ -211,7 +211,7 @@ describe('Responses API', () => {
   // be qwen3.6-plus and the request body should NOT have a thinking parameter.
   it('applies vision override before thinking injection on /v1/responses', async () => {
     let capturedBody: Record<string, unknown> | null = null;
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: string, init: { body?: string }) => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: unknown, init: any) => {
       capturedBody = JSON.parse(init?.body ?? '{}');
       return new Response(JSON.stringify({
         id: 'resp_test', object: 'response', status: 'completed',

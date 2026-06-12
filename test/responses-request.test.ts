@@ -6,7 +6,7 @@ import { formatResponsesToChatCompletions } from '../src/translate/request/respo
 // ──────────────────────────────────────────
 describe('formatResponsesToChatCompletions (Responses API → Chat Completions request)', () => {
   it('converts a simple string input', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-flash',
       input: 'Hello',
     });
@@ -17,7 +17,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
   });
 
   it('converts instructions to system message', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-flash',
       input: 'Tell me a joke',
       instructions: 'Be funny',
@@ -27,7 +27,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
   });
 
   it('converts array input with user message', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-pro',
       input: [
         { type: 'message', role: 'user', content: [{ type: 'text', text: 'What is AI?' }] },
@@ -39,7 +39,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
   });
 
   it('converts array input with system message', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-pro',
       input: [
         { type: 'message', role: 'system', content: [{ type: 'text', text: 'You are helpful.' }] },
@@ -51,7 +51,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
   });
 
   it('merges instructions + array user message correctly', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-flash',
       input: [
         { type: 'message', role: 'user', content: [{ type: 'text', text: 'Hello' }] },
@@ -66,7 +66,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
 
   // ── DeepSeek: reasoning + assistant message merging ──
   it('merges reasoning + assistant messages (DeepSeek)', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-flash',
       input: [
         { type: 'message', role: 'user', content: [{ type: 'text', text: 'Solve this' }] },
@@ -85,7 +85,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
   });
 
   it('merges reasoning without following assistant message', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-flash',
       input: [
         { type: 'reasoning', reasoning_text: 'Some thinking' },
@@ -96,7 +96,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
   });
 
   it('handles reasoning + empty assistant content', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-flash',
       input: [
         { type: 'reasoning', reasoning_text: 'Thinking...' },
@@ -112,7 +112,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
 
   // ── Function call output → tool messages ──
   it('converts function_call_output to tool messages', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-pro',
       input: [
         { type: 'message', role: 'user', content: [{ type: 'text', text: 'Weather?' }] },
@@ -129,7 +129,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
   it('merges function_call item with preceding assistant message', () => {
     // When the proxy's own response translator outputs function_call items separately
     // from the message, they come back as input items. We must merge them.
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-flash-free',
       input: [
         { type: 'message', role: 'user', content: [{ type: 'text', text: 'Weather?' }] },
@@ -152,7 +152,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
   });
 
   it('creates assistant message from function_call when no preceding assistant exists', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-flash-free',
       input: [
         { type: 'function_call', id: 'fc_789', call_id: 'call_789', name: 'search', arguments: '{"q":"test"}' },
@@ -173,7 +173,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
   });
 
   it('merges function_call with assistant message even when following a user message', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-flash-free',
       input: [
         { type: 'message', role: 'user', content: [{ type: 'text', text: 'Weather?' }] },
@@ -193,7 +193,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
   });
 
   it('avoids duplicate tool_calls when both content tool_call and top-level function_call exist', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-flash-free',
       input: [
         { type: 'message', role: 'user', content: [{ type: 'text', text: 'Hi' }] },
@@ -218,7 +218,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
   // assistant messages. The plain assistant path used to silently drop tool_call content blocks;
   // only the DeepSeek merge path called extractToolCalls. Both paths must now emit tool_calls.
   it('extracts tool_call blocks from non-DeepSeek Responses API assistant messages', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'gpt-4-style',
       input: [
         { type: 'message', role: 'user', content: [{ type: 'text', text: 'What is the weather in Paris?' }] },
@@ -242,7 +242,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
   });
 
   it('returns assistant content as null when only tool_call blocks are present', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'gpt-4-style',
       input: [
         { type: 'message', role: 'user', content: [{ type: 'text', text: 'Search cats' }] },
@@ -262,7 +262,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
 
   // ── Parameters ──
   it('maps max_output_tokens to max_tokens', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-flash',
       input: 'Hi',
       max_output_tokens: 2048,
@@ -271,7 +271,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
   });
 
   it('passes through temperature, top_p, stream', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-flash',
       input: 'Hi',
       temperature: 0.7,
@@ -284,7 +284,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
   });
 
   it('passes through prompt_cache_key', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-flash',
       input: 'Hi',
       prompt_cache_key: 'cache-abc123',
@@ -293,7 +293,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
   });
 
   it('maps tools and tool_choice', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-pro',
       input: 'Weather?',
       tools: [
@@ -308,7 +308,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
   });
 
   it('omits undefined optional parameters', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-flash',
       input: 'Hi',
     });
@@ -321,7 +321,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
 
   // Regression: top_k passthrough — M5 from translation audit
   it('passes through top_k', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-flash',
       input: 'Hi',
       top_k: 50,
@@ -330,7 +330,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
   });
 
   it('omits top_k when undefined', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-flash',
       input: 'Hi',
     });
@@ -339,7 +339,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
 
   // Regression: store passthrough — M7 from translation audit
   it('passes through store=true', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-flash',
       input: 'Hi',
       store: true,
@@ -348,7 +348,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
   });
 
   it('passes through store=false', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-flash',
       input: 'Hi',
       store: false,
@@ -357,7 +357,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
   });
 
   it('omits store when undefined', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-flash',
       input: 'Hi',
     });
@@ -366,7 +366,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
 
   // ── Image handling ──
   it('handles input_image content blocks', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'qwen3.6-plus',
       input: [
         {
@@ -386,7 +386,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
   // Regression: MEDIUM bug 4 from QA report — Base64 input_image.source not handled.
   // The Responses API has a native source-based image format that was previously dropped.
   it('handles input_image with source.type="base64" (native Responses API format)', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'qwen3.6-plus',
       input: [
         {
@@ -406,7 +406,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
 
   // ── System message deduplication ──
   it('deduplicates system messages when both instructions and input system message exist', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-flash',
       input: [
         { type: 'message', role: 'system', content: [{ type: 'text', text: 'System instruction' }] },
@@ -420,7 +420,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
   });
 
   it('uses instructions when no input system message is present', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-flash',
       input: [
         { type: 'message', role: 'user', content: [{ type: 'text', text: 'Hi' }] },
@@ -432,7 +432,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
 
   // ── Developer role mapping ──
   it('maps developer role to system role for Chat Completions', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-flash',
       input: [
         { type: 'message', role: 'developer', content: [{ type: 'text', text: 'Developer instruction' }] },
@@ -444,7 +444,7 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
 
   // ── Tool choice fallback ──
   it('falls back to auto for unmapped tool_choice types', () => {
-    const result = formatResponsesToChatCompletions({
+    const result: any = formatResponsesToChatCompletions({
       model: 'deepseek-v4-pro',
       input: 'Weather?',
       tools: [{ name: 'get_weather', description: 'Get weather', parameters: {}, type: 'function' }],

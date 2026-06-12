@@ -4,7 +4,7 @@ import { formatAnthropicToOpenAI } from '../src/translate/response/anthropic-to-
 
 describe('formatOpenAIToAnthropic (OpenAI → Anthropic response)', () => {
   it('converts a text response', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       choices: [{ message: { role: 'assistant', content: 'Hello!' }, finish_reason: 'stop' }],
       usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
     }, 'claude-sonnet-4-20250514');
@@ -20,7 +20,7 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic response)', () => {
   });
 
   it('converts reasoning_content to an Anthropic thinking block', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       choices: [{ message: { role: 'assistant', reasoning_content: 'internal reasoning', content: 'final answer' }, finish_reason: 'stop' }],
     }, 'deepseek-reasoner');
     expect(result.content).toEqual([
@@ -30,7 +30,7 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic response)', () => {
   });
 
   it('converts a tool call response', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       choices: [{
         message: {
           role: 'assistant',
@@ -50,7 +50,7 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic response)', () => {
   });
 
   it('does not throw on malformed tool call arguments', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       choices: [{
         message: {
           role: 'assistant',
@@ -67,7 +67,7 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic response)', () => {
   });
 
   it('maps finish_reason "length" to "max_tokens"', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       choices: [{ message: { role: 'assistant', content: 'truncated...' }, finish_reason: 'length' }],
     }, 'claude-sonnet-4-20250514');
     expect(result.stop_reason).toBe('max_tokens');
@@ -76,35 +76,35 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic response)', () => {
   // Regression: LOW bug 8 from QA report — content_filter and insufficient_system_resource
   // used to fall through silently to end_turn; they now map to max_tokens (truncation signal).
   it('maps finish_reason "content_filter" to "max_tokens"', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       choices: [{ message: { role: 'assistant', content: '[filtered]' }, finish_reason: 'content_filter' }],
     }, 'claude-sonnet-4-20250514');
     expect(result.stop_reason).toBe('max_tokens');
   });
 
   it('maps finish_reason "insufficient_system_resource" to "max_tokens"', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       choices: [{ message: { role: 'assistant', content: '' }, finish_reason: 'insufficient_system_resource' }],
     }, 'claude-sonnet-4-20250514');
     expect(result.stop_reason).toBe('max_tokens');
   });
 
   it('maps finish_reason "stop" to "end_turn"', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       choices: [{ message: { role: 'assistant', content: 'done' }, finish_reason: 'stop' }],
     }, 'claude-sonnet-4-20250514');
     expect(result.stop_reason).toBe('end_turn');
   });
 
   it('handles missing usage gracefully', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       choices: [{ message: { role: 'assistant', content: 'Hi' }, finish_reason: 'stop' }],
     }, 'claude-sonnet-4-20250514');
     expect(result.usage).toBeUndefined();
   });
 
   it('includes cache_read_input_tokens from cached_tokens', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       choices: [{ message: { role: 'assistant', content: 'Hi' }, finish_reason: 'stop' }],
       usage: {
         prompt_tokens: 1000,
@@ -119,7 +119,7 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic response)', () => {
   });
 
   it('maps OpenAI-compatible input_tokens/output_tokens usage to Anthropic usage', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       choices: [{ message: { role: 'assistant', content: 'Hi' }, finish_reason: 'stop' }],
       usage: { input_tokens: 1000, output_tokens: 50, cache_read_input_tokens: 400 },
     }, 'deepseek-v4-pro');
@@ -132,7 +132,7 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic response)', () => {
   });
 
   it('sets cache_read_input_tokens to 0 when no cached_tokens', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       choices: [{ message: { role: 'assistant', content: 'Hi' }, finish_reason: 'stop' }],
       usage: { prompt_tokens: 200, completion_tokens: 30 },
     }, 'claude-sonnet-4-20250514');
@@ -140,7 +140,7 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic response)', () => {
   });
 
   it('handles content that is not string (e.g. null for tool calls)', () => {
-    const result = formatOpenAIToAnthropic({
+    const result: any = formatOpenAIToAnthropic({
       choices: [{ message: { role: 'assistant', content: null }, finish_reason: 'stop' }],
     }, 'claude-sonnet-4-20250514');
     expect(result.content).toEqual([]);
@@ -149,7 +149,7 @@ describe('formatOpenAIToAnthropic (OpenAI → Anthropic response)', () => {
 
 describe('formatAnthropicToOpenAI (Anthropic → OpenAI response)', () => {
   it('converts a text response', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       content: [{ type: 'text', text: 'Hello from Claude!' }],
       stop_reason: 'end_turn',
       usage: { input_tokens: 10, output_tokens: 5 },
@@ -162,7 +162,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI response)', () => {
   });
 
   it('maps prompt_tokens/completion_tokens usage when Anthropic upstream returns OpenAI-compatible usage', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       content: [{ type: 'text', text: 'Hello from Claude!' }],
       stop_reason: 'end_turn',
       usage: { prompt_tokens: 20, completion_tokens: 8 },
@@ -171,7 +171,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI response)', () => {
   });
 
   it('converts a tool_use response', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       content: [{ type: 'tool_use', id: 'tool_001', name: 'search', input: { query: 'cats' } }],
       stop_reason: 'tool_use',
     }, 'claude-sonnet-4-20250514');
@@ -184,7 +184,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI response)', () => {
   });
 
   it('maps stop_reason "max_tokens" to finish_reason "length"', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       content: [{ type: 'text', text: 'truncated' }],
       stop_reason: 'max_tokens',
     }, 'claude-sonnet-4-20250514');
@@ -192,7 +192,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI response)', () => {
   });
 
   it('handles missing usage', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       content: [{ type: 'text', text: 'Hi' }],
       stop_reason: 'end_turn',
     }, 'claude-sonnet-4-20250514');
@@ -204,7 +204,7 @@ describe('formatAnthropicToOpenAI (Anthropic → OpenAI response)', () => {
   // as prompt_tokens_details.cached_tokens, and prompt_tokens must include cached tokens
   // (OpenAI convention) so consumers do not under-count.
   it('preserves Anthropic cache_read_input_tokens as OpenAI prompt_tokens_details.cached_tokens', () => {
-    const result = formatAnthropicToOpenAI({
+    const result: any = formatAnthropicToOpenAI({
       content: [{ type: 'text', text: 'Hello from cache!' }],
       stop_reason: 'end_turn',
       usage: { input_tokens: 100, output_tokens: 5, cache_read_input_tokens: 400 },

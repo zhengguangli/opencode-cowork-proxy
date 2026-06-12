@@ -51,11 +51,11 @@ describe('hasImages', () => {
   });
 
   it('returns false for undefined body', () => {
-    expect(hasImages(undefined)).toBe(false);
+    expect(hasImages(undefined as unknown as Record<string, unknown>)).toBe(false);
   });
 
   it('returns false for null body', () => {
-    expect(hasImages(null)).toBe(false);
+    expect(hasImages(null as unknown as Record<string, unknown>)).toBe(false);
   });
 
   it('detects image in system content', () => {
@@ -174,7 +174,7 @@ describe('vision (integration)', () => {
   it('overrides model to qwen3.6-plus when image attachments are present on the go path', async () => {
     let capturedBody: Record<string, unknown> | null = null;
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async (_url: string, init: { body?: string }) => {
+      async (_url: any, init: any) => {
         capturedBody = JSON.parse(init.body ?? '{}');
         return new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }] }), {
           status: 200,
@@ -214,7 +214,7 @@ describe('vision (integration)', () => {
   it('overrides model to mimo-v2.5-free when image attachments are present on the zen path', async () => {
     let capturedBody: Record<string, unknown> | null = null;
     vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async (_url: string, init: { body?: string }) => {
+      async (_url: any, init: any) => {
         capturedBody = JSON.parse(init.body ?? '{}');
         return new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }] }), {
           status: 200,
@@ -247,7 +247,7 @@ describe('vision (integration)', () => {
   it('overrides model to qwen3.6-plus when image is in Anthropic system prompt', async () => {
     let capturedBody: Record<string, unknown> | null = null;
     vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async (_url: string, init: { body?: string }) => {
+      async (_url: any, init: any) => {
         capturedBody = JSON.parse(init.body ?? '{}');
         return new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }] }), {
           status: 200,
@@ -278,7 +278,7 @@ describe('vision (integration)', () => {
   it('overrides model to mimo-v2.5-free for OpenAI pass-through with images on /zen', async () => {
     let capturedBody: Record<string, unknown> | null = null;
     vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async (_url: string, init: { body?: string }) => {
+      async (_url: any, init: any) => {
         capturedBody = JSON.parse(init.body ?? '{}');
         return new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }] }), {
           status: 200,
@@ -309,7 +309,7 @@ describe('vision (integration)', () => {
   it('keeps vision-capable model claude-sonnet-4-6 when image is in /v1/messages on /go', async () => {
     let capturedBody: Record<string, unknown> | null = null;
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async (_url: string, init: { body?: string }) => {
+      async (_url: any, init: any) => {
         capturedBody = JSON.parse(init.body ?? '{}');
         return new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }] }), {
           status: 200,
@@ -343,7 +343,7 @@ describe('vision (integration)', () => {
   it('keeps vision-capable model qwen3.6-plus when image is in /zen/v1/chat/completions', async () => {
     let capturedBody: Record<string, unknown> | null = null;
     vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async (_url: string, init: { body?: string }) => {
+      async (_url: any, init: any) => {
         capturedBody = JSON.parse(init.body ?? '{}');
         return new Response(JSON.stringify({ choices: [{ message: 'ok', finish_reason: 'stop' }] }), {
           status: 200,
@@ -375,7 +375,7 @@ describe('vision (integration)', () => {
   it('URL path override with vision-capable model is kept on /go', async () => {
     let capturedBody: Record<string, unknown> | null = null;
     vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async (_url: string, init: { body?: string }) => {
+      async (_url: any, init: any) => {
         capturedBody = JSON.parse(init.body ?? '{}');
         return new Response(JSON.stringify({ choices: [{ message: 'ok', finish_reason: 'stop' }] }), {
           status: 200,
@@ -407,7 +407,7 @@ describe('vision (integration)', () => {
   it('URL path override with non-vision model falls back to default vision model on /go', async () => {
     let capturedBody: Record<string, unknown> | null = null;
     vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async (_url: string, init: { body?: string }) => {
+      async (_url: any, init: any) => {
         capturedBody = JSON.parse(init.body ?? '{}');
         return new Response(JSON.stringify({ choices: [{ message: 'ok', finish_reason: 'stop' }] }), {
           status: 200,
@@ -439,7 +439,7 @@ describe('vision (integration)', () => {
   it('unknown model in body falls back to default vision model on /go', async () => {
     let capturedBody: Record<string, unknown> | null = null;
     vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async (_url: string, init: { body?: string }) => {
+      async (_url: any, init: any) => {
         capturedBody = JSON.parse(init.body ?? '{}');
         return new Response(JSON.stringify({ choices: [{ message: 'ok', finish_reason: 'stop' }] }), {
           status: 200,
