@@ -6,7 +6,7 @@
 
 ### 1.1 Layer Isolation
 
-All layer boundaries enforced by `test/architecture.spec.ts` (Vitest-based, run via `vitest run`):
+All layer boundaries enforced by `test/architecture.test.ts` (run via `bun test`):
 
 | Rule | Files Checked | Status | Enforcement |
 |------|---------------|--------|-------------|
@@ -77,7 +77,7 @@ Rules enforced by `.claude/skills/architecture-guard/scripts/check-type-safety.m
 | `stream.test.ts` | 299 | SSE stream translation | Unit |
 | `responses-api.test.ts` | 244 | Responses API full pipeline | Integration |
 | `index.test.ts` | 10 | Full request/response pipeline | Integration |
-| **Total** | **3988** | **19 test files** | |
+| **Total** | **3988** | **28 test files** | |
 
 ### 2.2 Coverage Gaps
 
@@ -90,9 +90,9 @@ Rules enforced by `.claude/skills/architecture-guard/scripts/check-type-safety.m
 
 ### 2.3 Test Framework
 
-- **Runner**: Vitest (v3.2.4)
-- **Run command**: `vitest run`
-- **Watch mode**: `vitest`
+- **Runner**: Bun Test (native, via `bun test`)
+- **Run command**: `bun test`
+- **Watch mode**: `bun test --watch`
 
 ## 3. Document Completeness
 

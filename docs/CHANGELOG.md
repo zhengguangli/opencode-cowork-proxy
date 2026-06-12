@@ -5,6 +5,24 @@ All notable changes to the opencode-cowork-proxy harness.
 ## [Unreleased]
 
 ### Added
+- Bun project standardization — `bunfig.toml`, `tsconfig.json` (Bun recommended), `@types/bun`
+- Build outputs moved to `./dist/` directory
+- Binary build with `--bytecode` for faster startup
+- JS bundle with `--minify` (73 KB)
+- `Bun.serve` params — `idleTimeout: 30`, `maxRequestBodySize: 1MB`, `error` handler
+- CHANGELOG.md moved to `docs/CHANGELOG.md`
+
+### Changed
+- `vitest` / `@types/node` replaced by `bun test` + `@types/bun`
+- Scripts shebangs to `#!/usr/bin/env bun`
+- CI workflow to pure bun commands
+- `README.md` test count 516→521
+- `docs/QUALITY_SCORE.md` Vitest→bun test references
+
+### Removed
+- `vitest.config.ts` (bun test is native runner)
+- `package-lock.json` reference (bun.lock only)
+
 - CI/CD pipeline — `.github/workflows/ci.yml` with test + audit dual jobs, architecture boundary enforcement, file size check
 - Prometheus metrics — `GET /metrics` endpoint exposing http_requests_total, http_request_duration_ms, upstream_requests_total, upstream_errors_total, active_streams, uptime_seconds
 - Upstream health probe — `GET /health/upstream?probe=true` lightweight upstream connectivity check

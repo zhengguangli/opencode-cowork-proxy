@@ -25,7 +25,7 @@ See `.agents/skills/hooks-framework/SKILL.md` for details.
 Before workflow starts, check existing outputs to determine execution mode:
 
 - `.harness-pliot/` exists + user requests partial modification → **Partial Re-execution** (only invoke relevant agents)
-- `.harness-pliot/` exists + user provides new input → **New Execution** (move `.harness-pliot/` to `.harness-pliot_prev/`)
+- `.harness-pliot/` exists + user provides new input → **New Execution** (write outputs directly into `.harness-pliot/`, overwriting existing files)
 - `.harness-pliot/` does not exist → **Initial Execution**
 
 ## Phase 1: Project Discovery & Requirements Analysis
