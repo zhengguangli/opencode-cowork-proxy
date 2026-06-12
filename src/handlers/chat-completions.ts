@@ -30,6 +30,8 @@ import {
 } from '../request';
 import { RouteInfo } from './shared';
 
+import { compressibleStream } from '../compress';
+
 /**
  * Handle POST /v1/chat/completions — OpenAI client → upstream.
  *
@@ -74,7 +76,9 @@ export async function handleOpenAIChatCompletions(
         "Connection": "keep-alive",
       });
       forwardUpstreamHeaders(streamHeaders, res);
-      return new Response(streamAnthropicToOpenAI(res.body as ReadableStream, originalModel || ""), {
+      const compressedResult = compressibleStream(streamAnthropicToOpenAI(res.body as ReadableStream, originalModel || ""), request);
+      if (compressedResult.contentEncoding) streamHeaders.set("Content-Encoding", compressedResult.contentEncoding);
+      return new Response(compressedResult.stream, {
         headers: streamHeaders,
       });
     }

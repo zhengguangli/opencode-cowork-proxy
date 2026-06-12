@@ -35,6 +35,8 @@ import { asRecord, asRecordArray, asRecordOptional } from '../translate/type-gua
 import { RouteInfo } from './shared';
 import { log } from '../logger';
 
+import { compressibleStream } from '../compress';
+
 /**
  * Handle POST /v1/responses — OpenAI Responses API client → Chat Completions upstream.
  *
@@ -119,7 +121,9 @@ export async function handleResponsesAPI(
       "Connection": "keep-alive",
     });
     forwardUpstreamHeaders(streamHeaders, upstreamRes);
-    return new Response(streamChatCompletionsToResponses(upstreamRes.body as ReadableStream, originalModel as string), {
+    const compressedResult = compressibleStream(streamChatCompletionsToResponses(upstreamRes.body as ReadableStream, originalModel as string), request);
+    if (compressedResult.contentEncoding) streamHeaders.set("Content-Encoding", compressedResult.contentEncoding);
+    return new Response(compressedResult.stream, {
       headers: streamHeaders,
     });
   }

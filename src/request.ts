@@ -25,6 +25,7 @@
 import { extractApiKey, validateApiKey, authErrorResponse } from './auth';
 import { UPSTREAM_FORWARD_HEADERS, MAX_BODY_SIZE, MAX_RETRIES, RETRY_BASE_DELAY, STREAM_TIMEOUT } from './config';
 import { log } from './logger';
+import { trackRateLimits } from './rate-limit';
 
 export function anthropicHeaders(request: Request, key: string): Record<string, string> {
   const headers: Record<string, string> = {
@@ -122,6 +123,9 @@ export async function safeUpstreamFetch(url: string, init: RequestInit): Promise
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const res = await fetch(url, init);
+
+      // Track rate-limit headers from upstream
+      trackRateLimits(url, res);
 
       // Not retryable — return immediately
       if (res.status < 500) {

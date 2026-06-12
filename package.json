@@ -18,6 +18,7 @@
   "license": "MIT",
   "description": "Bidirectional AI API translation gateway for Cloudflare Workers. Anthropic↔OpenAI format bridge.",
   "dependencies": {
-    "hono": "^4.12.17"
+    "hono": "^4.12.17",
+    "zod": "^4.4.3"
   }
 }

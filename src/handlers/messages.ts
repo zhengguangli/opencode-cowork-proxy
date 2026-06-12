@@ -31,6 +31,8 @@ import {
 import { asRecord } from '../translate/type-guards';
 import { RouteInfo } from './shared';
 
+import { compressibleStream } from '../compress';
+
 /**
  * Handle POST /v1/messages — Anthropic client → upstream.
  *
@@ -77,7 +79,9 @@ export async function handleAnthropicToOpenAI(
         "Connection": "keep-alive",
       });
       forwardUpstreamHeaders(streamHeaders, res);
-      return new Response(streamOpenAIToAnthropic(res.body as ReadableStream, originalModel ?? 'unknown'), {
+      const compressedResult = compressibleStream(streamOpenAIToAnthropic(res.body as ReadableStream, originalModel ?? 'unknown'), request);
+      if (compressedResult.contentEncoding) streamHeaders.set("Content-Encoding", compressedResult.contentEncoding);
+      return new Response(compressedResult.stream, {
         headers: streamHeaders,
       });
     }

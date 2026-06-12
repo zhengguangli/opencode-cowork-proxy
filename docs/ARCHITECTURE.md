@@ -407,6 +407,55 @@ Build: bun build --compile --outfile opencode-cowork-proxy scripts/build-entry.t
 
 ---
 
+
+### ADR-9: API key format validation (base64url check)
+
+**Context**: Initial validation only checked key length (>= 32 chars), accepting any string including those with special characters that might indicate injection attempts.
+
+**Decision**: Added base64url character validation (`/^[A-Za-z0-9_-]{32,}$/`) and key type identification (`sk-*`, `pk-*`, `sk-ant-*` prefixes). Invalid characters now return a 401 with a descriptive message. This rejects keys with whitespace, control characters, or injection payloads.
+
+**Consequences**: Slightly stricter client onboarding (keys must be properly formatted). Security improvement against malformed key injection.
+
+### ADR-10: Structured audit logging with in-memory ring buffer
+
+**Context**: Zero visibility into security events (auth failures, upstream switches, model overrides). Debugging required manual log inspection with no event categorization.
+
+**Decision**: Added `src/audit.ts` with typed audit events (auth, upstream, model, error, stream, proxy). Events are both JSON-per-line to stdout AND buffered in a 1000-entry ring buffer for the `/audit/log` endpoint. Audit is always-on (not DEBUG-gated).
+
+**Consequences**: 1000-event memory overhead (~100KB). Enables security monitoring without external log aggregation. The ring buffer auto-evicts oldest entries.
+
+### ADR-11: In-memory response cache for deterministic endpoints
+
+**Context**: Only `/v1/models` had Cloudflare Cache API caching. Repeated identical requests (same body, same upstream) incurred full round-trip latency.
+
+**Decision**: Added `src/response-cache.ts` with an in-memory Map cache keyed by `upstream|path|bodyHash`. TTL is endpoint-specific (default 60s). Cache is limited to 50 entries with LRU-like eviction. Only 2xx non-streaming responses are cached.
+
+**Consequences**: Sub-ms cache hits for repeated requests. No cache coordination across CF Workers isolates (each isolate has its own cache). The `X-Cache: hit/miss` header indicates cache status.
+
+### ADR-12: WebSocket upgrade return 426 with SSE fallback
+
+**Context**: Client asked for WebSocket streaming support. Full WebSocket proxy requires persistent connections that are complex in CF Workers (Durable Objects or WebSocket proxy).
+
+**Decision**: WebSocket handler accepts `/ws/*` paths and returns HTTP 426 (Upgrade Required) with a JSON body explaining how to use SSE streaming instead. This provides a clear upgrade path without implementing persistent WebSocket proxying.
+
+**Consequences**: Clients know immediately that SSE is the supported streaming mechanism. Future WebSocket support can be added without breaking the 426 contract.
+
+### ADR-13: OpenAPI spec generation as a build script
+
+**Context**: API documentation was hand-written in README.md, prone to drift from implementation.
+
+**Decision**: Added `scripts/generate-openapi.mjs` which generates an OpenAPI 3.1.0 spec from package.json metadata and hardcoded endpoint definitions. The spec is written to `docs/openapi.json` for CI/CD publishing.
+
+**Consequences**: Spec is regeneratable but still manually maintained (not auto-derived from code). Future integration with Zod schemas could automate request/response schema generation.
+
+### ADR-14: Startup profiling for cold-start observability
+
+**Context**: Zero visibility into startup latency (module loading, registry init). Difficult to optimize cold-start performance without baseline data.
+
+**Decision**: Added startup timing in `src/index.ts` that measures module initialization time (plugin registries) and emits a structured audit event + log line. The `startupStart` timestamp is captured before any imports resolve.
+
+**Consequences**: ~0.01ms overhead. Baseline data for CF Workers cold-start optimization. Startup audit event appears in `/audit/log`.
+
 ## 6. Constraint Rules
 
 ### C1: File size (M3)
