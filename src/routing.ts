@@ -18,10 +18,33 @@ function stripPrefix(path: string, prefix: string): string | null {
   return null;
 }
 
+// Reserved path prefixes that should never be consumed as model overrides.
+// These are well-known proxy endpoints, not model names.
+const RESERVED_NON_MODEL = new Set(['ws', 'health', 'audit', 'metrics']);
+
 function extractModelSegment(path: string): { path: string; model: string | null } {
   const segments = path.replace(/^\/+/, '').split('/');
   if (segments.length > 0 && segments[0] && !API_VERSION_PATTERN.test(segments[0])) {
-    return { path: '/' + segments.slice(1).join('/'), model: segments[0] };
+    // Reserved non-model paths: /ws/v1/messages, /health/upstream, /audit/log, /metrics
+    if (RESERVED_NON_MODEL.has(segments[0])) {
+      return { path, model: null };
+    }
+    // Treat first segment as model override when followed by v\d+ API path
+    // e.g. /claude-sonnet-4/v1/messages → model=claude-sonnet-4, path=/v1/messages
+    if (segments.length >= 2 && API_VERSION_PATTERN.test(segments[1])) {
+      return { path: '/' + segments.slice(1).join('/'), model: segments[0] };
+    }
+    // Standalone model with trailing slash: /deepseek-v4/ → model=deepseek-v4, path=/
+    if (segments.length === 2 && segments[1] === '' && segments[0].includes('-')) {
+      return { path: '/', model: segments[0] };
+    }
+    // Standalone model with no trailing slash but looks like a model name
+    if (segments.length === 1 && (
+      segments[0].includes('-') ||
+      /^(gpt|deepseek|qwen|mimo|gemini|claude)/.test(segments[0])
+    )) {
+      return { path: '/', model: segments[0] };
+    }
   }
   return { path, model: null };
 }

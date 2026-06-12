@@ -68,6 +68,42 @@ describe('routeConfig', () => {
     const r = routeConfig(req);
     expect(r.path).toBe('/v1/models');
   });
+
+  // Edge cases: non-API paths should NOT be treated as model overrides
+  it('does not extract model from /metrics path', () => {
+    const req = new Request('http://localhost/metrics');
+    const r = routeConfig(req);
+    expect(r.path).toBe('/metrics');
+    expect(r.modelOverride).toBeNull();
+  });
+
+  it('does not extract model from /health/upstream path', () => {
+    const req = new Request('http://localhost/health/upstream');
+    const r = routeConfig(req);
+    expect(r.path).toBe('/health/upstream');
+    expect(r.modelOverride).toBeNull();
+  });
+
+  it('does not extract model from /audit/log path', () => {
+    const req = new Request('http://localhost/audit/log');
+    const r = routeConfig(req);
+    expect(r.path).toBe('/audit/log');
+    expect(r.modelOverride).toBeNull();
+  });
+
+  it('does not extract model from /ws/v1/messages path', () => {
+    const req = new Request('http://localhost/ws/v1/messages');
+    const r = routeConfig(req);
+    expect(r.path).toBe('/ws/v1/messages');
+    expect(r.modelOverride).toBeNull();
+  });
+
+  it('still extracts model from /<model>/v1/messages', () => {
+    const req = new Request('http://localhost/claude-sonnet-4/v1/messages');
+    const r = routeConfig(req);
+    expect(r.path).toBe('/v1/messages');
+    expect(r.modelOverride).toBe('claude-sonnet-4');
+  });
 });
 
 describe('getUpstream', () => {
