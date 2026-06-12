@@ -104,7 +104,7 @@ Invoke `qa` agent:
 
 ### Phase 8: Register CLAUDE.md
 
-Generate CLAUDE.md at project root, register harness pointer. Do NOT include change history — use CHANGELOG.md instead (loaded on demand to save context tokens).
+Generate CLAUDE.md at project root, register harness pointer. Do NOT include change history — use docs/CHANGELOG.md instead (loaded on demand to save context tokens).
 
 ```markdown
 ## Harness: {Project Name}
@@ -113,7 +113,7 @@ Generate CLAUDE.md at project root, register harness pointer. Do NOT include cha
 
 **Trigger:** When work requests involve {domains}, use corresponding skills. Answer simple questions directly.
 
-Change history → @ref:CHANGELOG.md
+Change history → @ref:docs/CHANGELOG.md
 ```
 
 ## Output Checklist

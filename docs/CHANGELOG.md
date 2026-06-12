@@ -15,7 +15,7 @@ All notable changes to the opencode-cowork-proxy harness.
 - Upstream provider abstraction — `src/providers.ts` with `ProviderRegistry` (go/zen/anthropic), `resolveByPrefix()` for URL-based routing
 - Load testing script — `scripts/load-test.mjs` supporting concurrency, duration, custom paths, p50/p90/p99 latency reporting
 - OpenAPI spec generation — `scripts/generate-openapi.mjs` → `docs/openapi.json` covering all 10 endpoints
-- Dependency audit — `scripts/audit-deps.mjs` with lockfile validation, version pinning check, npm audit integration
+- Dependency audit — `scripts/audit-deps.mjs` with lockfile validation, version pinning check, bun audit integration
 - In-memory response cache — `src/response-cache.ts` LRU cache (50 entries, TTL-based, keyed by upstream|path|bodyHash)
 - Enhanced API key validation — base64url format check, key type identification (sk-/pk-/sk-ant- prefix detection)
 - Structured audit logging — `src/audit.ts` with 6 event types (auth, upstream, model, error, stream, proxy), `GET /audit/log` endpoint

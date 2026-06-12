@@ -53,8 +53,8 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Dependency audit
-        run: node scripts/audit-deps.mjs --ci
+        run: bun run scripts/audit-deps.mjs --ci
 
       - name: Check license
         run: |
-          echo "License: $(node -e "console.log(require('./package.json').license)")"
+          echo "License: $(bun -e "console.log(require('./package.json').license)")"

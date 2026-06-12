@@ -1,0 +1,13 @@
+# Bun configuration for opencode-cowork-proxy
+# See https://bun.sh/docs/runtime/bunfig
+
+# Disable telemetry
+telemetry = false
+
+# HTTP server defaults (overridable by CLI/env)
+[serve]
+port = 8787
+
+# Test runner configuration
+[test]
+timeout = 10000

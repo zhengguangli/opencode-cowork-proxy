@@ -1,21 +1,24 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
+    // Environment setup & latest features
+    "lib": ["ESNext"],
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleDetection": "force",
+    "allowJs": true,
+
+    // Bundler mode
     "moduleResolution": "bundler",
-    "lib": [
-      "ES2022"
-    ],
-    "strict": true,
+    "allowImportingTsExtensions": true,
     "noEmit": true,
-    "esModuleInterop": true,
+
+    // Best practices
+    "strict": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "types": [
-      "@cloudflare/workers-types"
-    ]
+    "noFallthroughCasesInSwitch": true,
+
+    // Type definitions
+    "types": ["bun", "@cloudflare/workers-types"]
   },
   "include": [
     "src/**/*.ts",

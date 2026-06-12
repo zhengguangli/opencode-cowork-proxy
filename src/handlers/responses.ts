@@ -128,7 +128,7 @@ export async function handleResponsesAPI(
     });
   }
 
-  const data: Record<string, unknown> = await upstreamRes.json();
+  const data = await upstreamRes.json() as Record<string, unknown>;
   log.debug('RESPONSES', `Upstream response keys=${Object.keys(data).join(',')}`);
   const firstChoice = asRecordOptional(asRecordArray(data.choices)[0]);
   const firstMsg = asRecordOptional(firstChoice?.message);

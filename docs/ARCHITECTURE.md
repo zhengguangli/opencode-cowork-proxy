@@ -316,7 +316,7 @@ Worker Config (wrangler.toml):
 |                   Port 8787 (default)                |
 +-----------------------------------------------+
 
-Build: bun build --compile --outfile opencode-cowork-proxy scripts/build-entry.ts
+Build: bun build --compile --outfile ./dist/opencode-cowork-proxy scripts/build-entry.ts
 ```
 
 ### Tertiary: Vercel Serverless

@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Lightweight load testing script for opencode-cowork-proxy.
  *

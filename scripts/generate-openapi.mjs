@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * OpenAPI 3.1.0 spec generator for opencode-cowork-proxy.
  *

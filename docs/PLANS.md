@@ -12,7 +12,7 @@
 - ~~**SSE streaming gzip compression** -- Automatic CompressionStream-based compression for all streaming paths.~~
 - ~~**Plugin translator architecture** -- `TranslatorRegistry` + `FormatPair` interfaces for extensible translation registration.~~
 - ~~**Upstream provider abstraction** -- `ProviderRegistry` with go/zen/anthropic providers, `resolveByPrefix()` routing.~~
-- ~~**Dependency audit** -- `scripts/audit-deps.mjs` with lockfile validation, npm audit, version pinning.~~
+- ~~**Dependency audit** -- `scripts/audit-deps.mjs` with lockfile validation, bun audit, version pinning.~~
 - ~~**Load testing** -- `scripts/load-test.mjs` with concurrency, duration, p50/p90/p99, status distribution.~~
 - ~~**OpenAPI spec** -- `scripts/generate-openapi.mjs` → `docs/openapi.json` covering all 10 endpoints.~~
 - ~~**In-memory response cache** -- LRU cache (50 entries, TTL-based) for deterministic endpoints.~~

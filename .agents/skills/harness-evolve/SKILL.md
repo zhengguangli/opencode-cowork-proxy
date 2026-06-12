@@ -43,11 +43,11 @@ After each harness execution, ask the user:
 2. Read existing content
 3. Make minimal modification
 4. Verify the modification is effective
-5. Update CHANGELOG.md change history
+5. Update docs/CHANGELOG.md change history
 
 ### Step 4: Change History
 
-Record in the CHANGELOG.md change history table:
+Record in the docs/CHANGELOG.md change history table:
 
 ```markdown
 **Change History:**
@@ -95,7 +95,7 @@ Perform systematic checks, modifications, and synchronization on existing harnes
 
 1. **Status Audit**: Compare agent/skill files against orchestrator definitions for consistency
 2. **Incremental Modification**: Add, remove, or change per user requests; synchronize immediately after each modification
-3. **Update History**: Record changes in CHANGELOG.md
+3. **Update History**: Record changes in docs/CHANGELOG.md
 4. **Change Verification**: Structural check + trigger verification (if triggers are affected)
 
 ### Step 8: Trace Self-Analysis
@@ -184,7 +184,7 @@ Perform systematic checks, modifications, and synchronization on existing harnes
 
 **Output:**
 - Modified agent/skill files
-- Updated CHANGELOG.md change history
+- Updated docs/CHANGELOG.md change history
 - Evolution report
 
 ## Quality Standards

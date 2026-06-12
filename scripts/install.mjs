@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Harness Installer — one-click setup for opencode-cowork-proxy
  * Usage: node scripts/install.mjs [--help]

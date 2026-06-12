@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Dependency vulnerability scanner for opencode-cowork-proxy.
  *

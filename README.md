@@ -29,7 +29,7 @@ This produces a standalone `opencode-cowork-proxy` binary (no runtime dependenci
 
 ```bash
 # Copy to Homebrew-managed path
-cp opencode-cowork-proxy /usr/local/opt/opencode-cowork-proxy/bin/
+cp ./dist/opencode-cowork-proxy /usr/local/opt/opencode-cowork-proxy/bin/
 
 # Start as a background service
 brew services restart opencode-cowork-proxy

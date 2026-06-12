@@ -52,7 +52,7 @@
 - Hooks config? Read `.agents/skills/hooks-framework/SKILL.md`
 - Web search? Read `.agents/skills/web-search/SKILL.md`
 - MCP integration? Read `.agents/skills/mcp-connector/SKILL.md`
-- Install? Read `README.md` or run `node scripts/install.mjs --help`
+- Install? Read `README.md` or run `bun run scripts/install.mjs --help`
 - Sandbox config? Read `docs/SANDBOX.md` or run `.agents/skills/sandbox-exec/scripts/sandbox/run-in-sandbox.sh`
 - API endpoints & features? Read `README.md` for the full endpoint reference
 - Plugin architecture? Read `src/translate/plugin.ts` — `TranslatorRegistry`, `FormatPair` interfaces
@@ -62,9 +62,9 @@
 - Request validation? Read `src/validate.ts` — Zod v4 schemas for 3 API formats
 - Rate-limit tracking? Read `src/rate-limit.ts` — upstream RateLimit-* header tracking
 - Response caching? Read `src/response-cache.ts` — in-memory LRU cache
-- Load testing? Run `node scripts/load-test.mjs --help`
-- Dependency audit? Run `node scripts/audit-deps.mjs --ci`
-- OpenAPI spec? Run `node scripts/generate-openapi.mjs --save`
+- Load testing? Run `bun run scripts/load-test.mjs --help`
+- Dependency audit? Run `bun run scripts/audit-deps.mjs --ci`
+- OpenAPI spec? Run `bun run scripts/generate-openapi.mjs --save`
 - CI/CD? Read `.github/workflows/ci.yml` — test + audit dual jobs
 
 <!-- HARNESS-PILOT:END -->

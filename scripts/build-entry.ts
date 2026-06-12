@@ -15,24 +15,23 @@ const port = parseInt(process.env.PORT || "8787");
 
 Bun.serve({
   port,
+  hostname: "0.0.0.0",
+  idleTimeout: 30,
+  maxRequestBodySize: 1024 * 1024, // 1MB
+  error: (error) => {
+    log.error('HTTP', `Unhandled error: ${error.message}`, { error: error.message });
+    return new Response("Internal Server Error", { status: 500 });
+  },
   fetch: async (req) => {
     const url = new URL(req.url);
     const method = req.method;
     const path = url.pathname;
     const start = performance.now();
-    try {
-      const res = await app.fetch(req);
-      const ms = Math.round(performance.now() - start);
-      log.access(method, path, res.status, ms);
-      return res;
-    } catch (err: unknown) {
-      const ms = Math.round(performance.now() - start);
-      log.error('HTTP', `${method} ${path} 500 ${ms}ms`, {
-        method, path, status: 500, durationMs: ms,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      return new Response("Internal Server Error", { status: 500 });
-    }
+
+    const res = await app.fetch(req);
+    const ms = Math.round(performance.now() - start);
+    log.access(method, path, res.status, ms);
+    return res;
   },
 });
 
