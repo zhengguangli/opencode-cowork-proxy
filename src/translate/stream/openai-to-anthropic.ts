@@ -276,7 +276,7 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
           await applyBackpressure(controller);
         }
       } catch (err) {
-        log.debug('STREAM', 'streamOpenAIToAnthropic error', { error: err });
+        log.error('STREAM', 'streamOpenAIToAnthropic error', { error: err });
         // Close active content block
         if (isToolUse || hasStartedTextBlock || hasStartedThinkingBlock) {
           enqueueSSE(controller, "content_block_stop", {

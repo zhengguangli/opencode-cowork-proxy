@@ -7,7 +7,10 @@
  * plain console.log() scattered across handlers.
  *
  * FORMAT (all levels):
- *   {"level":"INFO","ts":"2026-06-12T07:56:17.346Z","pfx":"STARTUP","msg":"Plugin init in 0ms","details":{...}}
+ *   {"level":"INFO","ts":"...","pfx":"STARTUP","msg":"...","req":"a1b2c3d4","details":{...}}
+ *
+ * The `req` field is populated automatically when the request is wrapped with
+ * `withRequestId()`. It correlates all logs from the same request.
  *
  * LEVELS:
  *   DEBUG — gated by IS_DEBUG (config.ts), silent in production
@@ -17,7 +20,7 @@
  *   AUDIT — security/audit events (always on, same priority as INFO)
  *
  * PREFIX CONVENTION:
- *   HTTP      — HTTP access logs (from build-entry.ts)
+ *   HTTP      — HTTP access logs
  *   STARTUP   — startup initialization
  *   AUTH      — authentication events
  *   MODELS    — model list operations
@@ -30,6 +33,7 @@
  * Pure module — no I/O beyond console.*, safe for all deployment targets.
  */
 import { IS_DEBUG } from './config';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'AUDIT';
 
@@ -42,6 +46,9 @@ const LEVEL_PRIORITY: Record<LogLevel, number> = {
 };
 
 const MIN_LOG_LEVEL: LogLevel = 'INFO';
+
+/** Per-request context — populated by withRequestId() */
+export const requestIdStorage = new AsyncLocalStorage<string>();
 
 export interface LogEntry {
   level: LogLevel;
@@ -57,12 +64,16 @@ function shouldLog(level: LogLevel): boolean {
 }
 
 function write(entry: LogEntry): void {
+  const requestId = requestIdStorage.getStore();
   const payload: Record<string, unknown> = {
     level: entry.level,
     ts: entry.ts,
     pfx: entry.pfx,
     msg: entry.msg,
   };
+  if (requestId) {
+    payload.req = requestId;
+  }
   if (entry.details && Object.keys(entry.details).length > 0) {
     payload.details = entry.details;
   }
@@ -83,6 +94,16 @@ function write(entry: LogEntry): void {
 
 function ts(): string {
   return new Date().toISOString();
+}
+
+/** Generate a short unique request ID */
+export function generateId(): string {
+  return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+}
+
+/** Wrap an async operation with a request_id in the logging context */
+export async function withRequestId<T>(requestId: string, fn: () => Promise<T>): Promise<T> {
+  return requestIdStorage.run(requestId, fn);
 }
 
 export const log = {
@@ -106,7 +127,7 @@ export const log = {
     write({ level: 'ERROR', ts: ts(), pfx, msg, details });
   },
 
-  /** Audit events — always on, not gated by DEBUG. Shorthand for info level with AUDIT semantic. */
+  /** Audit events — always on, not gated by DEBUG. */
   audit(pfx: string, msg: string, details?: Record<string, unknown>): void {
     if (!shouldLog('AUDIT')) return;
     write({ level: 'AUDIT', ts: ts(), pfx, msg, details });

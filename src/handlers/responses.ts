@@ -58,7 +58,7 @@ export async function handleResponsesAPI(
   const req = parsed.data;
 
   const originalModel = req.model;
-  log.debug('RESPONSES', `Incoming model=${req.model}, originalModel=${originalModel}, route.modelOverride=${route.modelOverride}`);
+  log.info('RESPONSES', `Model routing: ${req.model} → ${route.modelOverride || '(default)'}`, { model: req.model, originalModel, modelOverride: route.modelOverride });
   log.debug('RESPONSES', `Input type=${typeof req.input}, has thinking=${!!req.thinking}`);
 
   if (Array.isArray(req.input)) {
@@ -68,17 +68,12 @@ export async function handleResponsesAPI(
         const contentPreview = Array.isArray(item.content)
           ? asRecordArray(item.content).map((p) => p.type).join(',')
           : typeof item.content;
-        log.debug('RESPONSES', `  input[${ii}] type=${item.type} role=${item.role} content_types=[${contentPreview}]`);
       } else if (item.type === 'reasoning') {
-        log.debug('RESPONSES', `  input[${ii}] type=${item.type} reasoning_len=${String(item.reasoning_text || '').length}`);
       } else {
-        log.debug('RESPONSES', `  input[${ii}] type=${item.type}`);
       }
     }
   } else if (typeof req.input === 'string') {
-    log.debug('RESPONSES', `  input string len=${req.input.length}`);
   } else {
-    log.debug('RESPONSES', `  input other type=${typeof req.input}`);
   }
 
   if (route.modelOverride) req.model = route.modelOverride;
@@ -101,7 +96,6 @@ export async function handleResponsesAPI(
     const preview = m.role === 'user' ? `"${String(m.content || '').slice(0, 120)}"`
       : m.role === 'assistant' ? `len=${String(m.content || '').length} reasoning=${!!m.reasoning_content} tool_calls=${((m.tool_calls || []) as unknown[]).length}`
       : `"${String(m.content || '').slice(0, 80)}"`;
-    log.debug('RESPONSES', `  msg[${mi}] role=${m.role} content=${preview}`);
   }
 
   const upstreamSignal = chatReq.stream ? createStreamSignal(request) : AbortSignal.timeout(DEFAULT_TIMEOUT);
@@ -129,12 +123,10 @@ export async function handleResponsesAPI(
   }
 
   const data = await upstreamRes.json() as Record<string, unknown>;
-  log.debug('RESPONSES', `Upstream response keys=${Object.keys(data).join(',')}`);
+  log.info('RESPONSES', `Upstream response keys=${Object.keys(data).join(',')}`, { keys: Object.keys(data) });
   const firstChoice = asRecordOptional(asRecordArray(data.choices)[0]);
   const firstMsg = asRecordOptional(firstChoice?.message);
-  log.debug('RESPONSES', `Upstream reasoning_content=${!!firstMsg?.reasoning_content}`);
   const upstreamContent = String(firstMsg?.content || '');
-  log.debug('RESPONSES', `Upstream content preview=${upstreamContent.slice(0, 200)}`);
   if (upstreamContent.includes('<think>')) {
     log.warn('RESPONSES', '⚠️  FOUND <think> tags in upstream content!');
   }

@@ -11,6 +11,10 @@
  *   3. ensureProvidersRegistered() — provider registry init
  *   4. Hono app construction — middleware stack setup
  *   5. First request — cold start (CF Workers: isolate warm-up)
+ *
+ * LOGGING: Every request gets a unique `req` (request_id). All log lines for
+ * the same request share this ID, automatically injected by logger.ts via
+ * AsyncLocalStorage. Use `withRequestId(generateId(), ...)` to wrap handlers.
  */
 import { Hono } from 'hono';
 import { routeConfig, getUpstream, upstreamFormat } from './routing';
@@ -30,19 +34,17 @@ import { recordRequest } from './handlers/metrics';
 import { ensureTranslatorsRegistered } from './translate/registry';
 import { ensureProvidersRegistered } from './providers';
 import { recordAudit } from './audit';
-import { log } from './logger';
+import { log, withRequestId, generateId, requestIdStorage } from './logger';
 
 // ---- Startup profiling ----
 
 const startupStart = Date.now();
-let startupComplete = false;
 
 // Initialize plugin registries at module load time
 ensureTranslatorsRegistered();
 ensureProvidersRegistered();
 
 const startupMs = Date.now() - startupStart;
-startupComplete = true;
 log.info('STARTUP', `Plugin registries initialized in ${startupMs}ms`, { startupMs, registries: ['translators', 'providers'] });
 recordAudit('proxy', 'startup', { startupMs, registries: ['translators', 'providers'] });
 
@@ -58,6 +60,7 @@ async function handleRequest(request: Request): Promise<Response> {
       const wsResp = await handleWebSocketUpgrade(request);
       if (wsResp) {
         recordRequest('WS', url.pathname, wsResp.status, performance.now() - startTime);
+        log.access('WS', url.pathname, wsResp.status, performance.now() - startTime);
         return wsResp;
       }
     }
@@ -71,6 +74,7 @@ async function handleRequest(request: Request): Promise<Response> {
       const sizeResp = await checkBodySize(request);
       if (sizeResp) {
         recordRequest(request.method, url.pathname, 413, performance.now() - startTime);
+        log.access(request.method, url.pathname, 413, performance.now() - startTime);
         return sizeResp;
       }
     }
@@ -79,6 +83,7 @@ async function handleRequest(request: Request): Promise<Response> {
     if (route.path === '/metrics' && request.method === 'GET') {
       const resp = await handleMetrics(request, { path: route.path, modelOverride: route.modelOverride, upstream });
       recordRequest(request.method, url.pathname, resp.status, performance.now() - startTime);
+      log.access(request.method, url.pathname, resp.status, performance.now() - startTime);
       return resp;
     }
 
@@ -86,6 +91,7 @@ async function handleRequest(request: Request): Promise<Response> {
     if (route.path === '/health/upstream' && request.method === 'GET') {
       const resp = await handleUpstreamHealth(request, { path: route.path, modelOverride: route.modelOverride, upstream });
       recordRequest(request.method, url.pathname, resp.status, performance.now() - startTime);
+      log.access(request.method, url.pathname, resp.status, performance.now() - startTime);
       return resp;
     }
 
@@ -93,6 +99,7 @@ async function handleRequest(request: Request): Promise<Response> {
     if (route.path === '/audit/log' && request.method === 'GET') {
       const resp = await handleAuditLog(request, { path: route.path, modelOverride: route.modelOverride, upstream });
       recordRequest(request.method, url.pathname, resp.status, performance.now() - startTime);
+      log.access(request.method, url.pathname, resp.status, performance.now() - startTime);
       return resp;
     }
 
@@ -100,6 +107,7 @@ async function handleRequest(request: Request): Promise<Response> {
     if (route.path === '/v1/messages' && request.method === 'POST') {
       const resp = await handleAnthropicToOpenAI(request, { path: route.path, modelOverride: route.modelOverride, upstream }, fmt);
       recordRequest(request.method, url.pathname, resp.status, performance.now() - startTime);
+      log.access(request.method, url.pathname, resp.status, performance.now() - startTime);
       return resp;
     }
 
@@ -107,6 +115,7 @@ async function handleRequest(request: Request): Promise<Response> {
     if (route.path === '/v1/chat/completions' && request.method === 'POST') {
       const resp = await handleOpenAIChatCompletions(request, { path: route.path, modelOverride: route.modelOverride, upstream }, fmt);
       recordRequest(request.method, url.pathname, resp.status, performance.now() - startTime);
+      log.access(request.method, url.pathname, resp.status, performance.now() - startTime);
       return resp;
     }
 
@@ -114,6 +123,7 @@ async function handleRequest(request: Request): Promise<Response> {
     if (route.path === '/v1/responses' && request.method === 'POST') {
       const resp = await handleResponsesAPI(request, { path: route.path, modelOverride: route.modelOverride, upstream });
       recordRequest(request.method, url.pathname, resp.status, performance.now() - startTime);
+      log.access(request.method, url.pathname, resp.status, performance.now() - startTime);
       return resp;
     }
 
@@ -121,6 +131,7 @@ async function handleRequest(request: Request): Promise<Response> {
     if (route.path === '/v1/models' && request.method === 'GET') {
       const resp = await handleModelList(request, { path: route.path, modelOverride: route.modelOverride, upstream }, fmt);
       recordRequest(request.method, url.pathname, resp.status, performance.now() - startTime);
+      log.access(request.method, url.pathname, resp.status, performance.now() - startTime);
       return resp;
     }
 
@@ -128,17 +139,25 @@ async function handleRequest(request: Request): Promise<Response> {
     if (route.path === '/' && request.method === 'GET') {
       const resp = await handleHealthCheck(upstream);
       recordRequest(request.method, url.pathname, resp.status, performance.now() - startTime);
+      log.access(request.method, url.pathname, resp.status, performance.now() - startTime);
       return resp;
     }
 
     // 404 for unknown paths
     recordRequest(request.method, url.pathname, 404, performance.now() - startTime);
+    log.access(request.method, url.pathname, 404, performance.now() - startTime);
     return new Response(JSON.stringify({ error: "Not found" }), {
       status: 404,
       headers: { "Content-Type": "application/json" },
     });
   } catch (err) {
-    recordRequest(request.method, url.pathname, 500, performance.now() - startTime);
+    const durationMs = performance.now() - startTime;
+    recordRequest(request.method, url.pathname, 500, durationMs);
+    log.access(request.method, url.pathname, 500, durationMs);
+    log.error('APP', `Unhandled exception: ${url.pathname}`, {
+      path: url.pathname,
+      error: err instanceof Error ? err.message : String(err),
+    });
     recordAudit('error', 'unhandled_exception', {
       path: url.pathname,
       error: err instanceof Error ? err.message : String(err),
@@ -149,6 +168,8 @@ async function handleRequest(request: Request): Promise<Response> {
     });
   }
 }
+
+// ---- Hono App ----
 
 const app = new Hono();
 
@@ -161,6 +182,14 @@ app.use('*', async (c, next) => {
   await next();
 });
 
-app.all('*', (c) => handleRequest(c.req.raw));
+// Wrap every request with a unique request_id for log correlation.
+// If build-entry.ts already set one (via AsyncLocalStorage), reuse it.
+app.all('*', (c) => {
+  const existingId = requestIdStorage.getStore();
+  if (existingId) {
+    return handleRequest(c.req.raw);
+  }
+  return withRequestId(generateId(), () => handleRequest(c.req.raw));
+});
 
 export default app;
