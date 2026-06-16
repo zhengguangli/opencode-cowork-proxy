@@ -32,7 +32,7 @@ export async function handleModelList(
 
   // Compute cache key from upstream + format (auth-independent, URL-only)
   const cacheRequest = new Request(`${upstream}/v1/models?fmt=${fmt}`, { method: "GET" });
-  const modelCache = typeof caches !== "undefined" ? caches.default : null;
+  const modelCache = typeof caches !== "undefined" ? (caches as unknown as Record<string, Cache>).default : null;
   const cached = modelCache ? await modelCache.match(cacheRequest) : null;
   if (cached) return cached;
 
