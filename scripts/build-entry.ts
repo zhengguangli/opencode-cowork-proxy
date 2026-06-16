@@ -2,15 +2,15 @@
  * Bun standalone HTTP server entry point.
  *
  * WHY READ THIS FILE: This is the local development / production entry point
- * for running the proxy as a standalone Bun binary. All HTTP access logging
- * goes through the unified logger.ts for consistent JSON output.
+ * for running the proxy as a standalone Bun binary.
  *
- * LOG FORMAT:
- *   {"level":"INFO","ts":"...","pfx":"HTTP","msg":"POST /v1/messages 200 1384ms","req":"a1b2c3d4","details":{"method":"POST","path":"/v1/messages","status":200,"durationMs":1384}}
+ * LOGGING: All HTTP access logging is handled by src/index.ts which calls
+ * log.access() for every route. The `req` field (request correlation ID) is
+ * set here via withRequestId() and propagated through AsyncLocalStorage to
+ * all log calls inside app.fetch().
  *
- * The `req` field is a per-request ID generated here and propagated via
- * AsyncLocalStorage in logger.ts. src/index.ts detects the existing context
- * and reuses the same ID for all internal log calls.
+ * LOG FORMAT (from src/index.ts):
+ *   {"level":"INFO","ts":"...","pfx":"HTTP","msg":"POST /v1/messages 200 1384ms","req":"a1b2c3d4","details":{...}}
  */
 import app from "../src/index";
 import { log, generateId, withRequestId } from "../src/logger";
@@ -27,17 +27,9 @@ Bun.serve({
     return new Response("Internal Server Error", { status: 500 });
   },
   fetch: async (req) => {
+    // Set request_id context so all log calls inside app.fetch() share the same req
     const reqId = generateId();
-    return withRequestId(reqId, async () => {
-      const url = new URL(req.url);
-      const method = req.method;
-      const path = url.pathname;
-      const start = performance.now();
-      const res = await app.fetch(req);
-      const ms = Math.round(performance.now() - start);
-      log.access(method, path, res.status, ms);
-      return res;
-    });
+    return withRequestId(reqId, () => app.fetch(req));
   },
 });
 

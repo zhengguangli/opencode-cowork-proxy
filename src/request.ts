@@ -136,7 +136,7 @@ export async function safeUpstreamFetch(url: string, init: RequestInit): Promise
       // 5xx Server Error — retryable (exponential backoff with full jitter)
       if (attempt < MAX_RETRIES) {
         const delay = Math.min(RETRY_BASE_DELAY * Math.pow(2, attempt) + Math.random() * 200, 10_000);
-        log.debug("RETRY", `Attempt ${attempt + 1}/${MAX_RETRIES} got ${res.status}, retrying in ${delay}ms`);
+        log.warn('RETRY', `Attempt ${attempt + 1}/${MAX_RETRIES} got ${res.status}, retrying in ${delay}ms`);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
@@ -154,7 +154,7 @@ export async function safeUpstreamFetch(url: string, init: RequestInit): Promise
       // Network error — retry if attempts remain
       if (attempt < MAX_RETRIES && !isStreaming) {
         const delay = Math.min(RETRY_BASE_DELAY * Math.pow(2, attempt) + Math.random() * 200, 10_000);
-        log.debug("RETRY", `Network error on attempt ${attempt + 1}/${MAX_RETRIES}, retrying in ${delay}ms`);
+        log.warn('RETRY', `Network error on attempt ${attempt + 1}/${MAX_RETRIES}, retrying in ${delay}ms`);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
