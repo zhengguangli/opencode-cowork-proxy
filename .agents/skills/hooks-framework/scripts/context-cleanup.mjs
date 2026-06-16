@@ -1,27 +1,14 @@
 #!/usr/bin/env node
-/**
- * context-cleanup.mjs — File Reference Tracking & Auto Offload
- * Tracks file references and identifies offloadable files
- */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync, statSync } from 'fs'
 import { join, dirname } from 'path'
+import { findProjectRoot, parseStdin } from './lib/harness-utils.mjs'
 
-const DEFAULT_TTL_MS = 300000 // 5 minutes
-
-function findProjectRoot(startDir) {
-  let dir = startDir
-  while (dir !== dirname(dir)) {
-    if (existsSync(join(dir, 'AGENTS.md')) || existsSync(join(dir, '.codex', 'hooks.json'))) {
-      return dir
-    }
-    dir = dirname(dir)
-  }
-  return startDir
-}
+const DEFAULT_TTL_MS = 300000
+const OFFLOAD_MAX_AGE_MS = 3600000
 
 export function contextCleanup(projectDir, filePath, ttlMs = DEFAULT_TTL_MS) {
-  const harnessDir = join(projectDir, '.harness-pliot')
+  const harnessDir = join(projectDir, '.harness-pilot')
   if (!existsSync(harnessDir)) {
     mkdirSync(harnessDir, { recursive: true })
   }
@@ -35,7 +22,6 @@ export function contextCleanup(projectDir, filePath, ttlMs = DEFAULT_TTL_MS) {
     } catch {}
   }
 
-  // Update reference
   if (filePath) {
     refs[filePath] = {
       lastAccessed: Date.now(),
@@ -43,18 +29,35 @@ export function contextCleanup(projectDir, filePath, ttlMs = DEFAULT_TTL_MS) {
     }
   }
 
-  // Find offloadable files (unreferenced for > TTL)
   const now = Date.now()
   const offloadable = Object.entries(refs)
     .filter(([_, ref]) => now - ref.lastAccessed > ttlMs)
     .map(([path]) => path)
 
-  // Save updated refs
+  for (const path of offloadable) {
+    delete refs[path]
+  }
+
   writeFileSync(refsFile, JSON.stringify(refs, null, 2), 'utf-8')
 
-  // Save offloadable list
   const unloadableFile = join(harnessDir, 'unloadable-files.json')
   writeFileSync(unloadableFile, JSON.stringify(offloadable, null, 2), 'utf-8')
+
+  const offloadDir = join(harnessDir, 'offloaded')
+  if (existsSync(offloadDir)) {
+    try {
+      const entries = readdirSync(offloadDir)
+      for (const entry of entries) {
+        const fullPath = join(offloadDir, entry)
+        try {
+          const fileStat = statSync(fullPath)
+          if (now - fileStat.mtimeMs > OFFLOAD_MAX_AGE_MS) {
+            unlinkSync(fullPath)
+          }
+        } catch {}
+      }
+    } catch {}
+  }
 
   return {
     success: true,
@@ -66,11 +69,9 @@ export function contextCleanup(projectDir, filePath, ttlMs = DEFAULT_TTL_MS) {
   }
 }
 
-// CLI mode
 if (process.argv[1]?.endsWith('context-cleanup.mjs')) {
   const args = process.argv.slice(2)
 
-  // --seed: scan project for key files on SessionStart
   if (args.includes('--seed')) {
     const projectDir = args.find(a => a !== '--seed' && !a.startsWith('--')) || process.cwd()
     const seedPaths = [
@@ -86,12 +87,7 @@ if (process.argv[1]?.endsWith('context-cleanup.mjs')) {
     process.exit(0)
   }
 
-  let input = {}
-  try {
-    const raw = readFileSync(0, 'utf-8')
-    if (raw.trim()) input = JSON.parse(raw)
-  } catch {}
-  // Extract filePath from various hook stdin formats
+  const input = await parseStdin()
   const filePath = input.filePath
     || input.input?.filePath
     || input.tool_input?.filePath
@@ -104,6 +100,5 @@ if (process.argv[1]?.endsWith('context-cleanup.mjs')) {
     filePath,
     input.ttlMs
   )
-  // Silent on success; Codex treats exit 0 with no output as success
   process.exit(0)
 }

@@ -1,6 +1,7 @@
 ---
 name: agent-readability
 description: 'Optimize code/docs for agent readability. Help AI agents reason about business domains from repo. Triggers on explicit requests: "优化智能体可读性", "agent readability", "让智能体看懂代码", "优化可读性". Do NOT trigger when discussing general readability.'
+capabilities: ["readability", "documentation", "knowledge-encoding"]
 ---
 
 # Agent Readability — Agent Readability Optimization

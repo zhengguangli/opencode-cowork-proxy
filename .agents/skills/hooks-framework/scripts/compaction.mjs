@@ -1,19 +1,15 @@
 #!/usr/bin/env node
-/**
- * compaction.mjs — Context Compaction
- * Generates summary for context compaction with task state and metrics
- */
 
-import { writeFileSync, readFileSync, mkdirSync, existsSync, readdirSync, statSync } from 'fs'
+import { writeFileSync, readFileSync, mkdirSync, existsSync, readdirSync } from 'fs'
 import { join } from 'path'
+import { parseStdin } from './lib/harness-utils.mjs'
 
 export function compaction(projectDir) {
-  const harnessDir = join(projectDir, '.harness-pliot')
+  const harnessDir = join(projectDir, '.harness-pilot')
   if (!existsSync(harnessDir)) {
     mkdirSync(harnessDir, { recursive: true })
   }
 
-  // Read pending tasks from todo state
   let tasks = []
   const todoFile = join(harnessDir, 'todo-state.json')
   if (existsSync(todoFile)) {
@@ -23,7 +19,6 @@ export function compaction(projectDir) {
     } catch {}
   }
 
-  // Read recent trace logs
   let recentLogs = []
   const traceDir = join(harnessDir, 'trace')
   if (existsSync(traceDir)) {
@@ -38,7 +33,6 @@ export function compaction(projectDir) {
     } catch {}
   }
 
-  // Read quality metrics
   let metrics = null
   const metricsFile = join(harnessDir, 'metrics', 'quality.jsonl')
   if (existsSync(metricsFile)) {
@@ -49,10 +43,9 @@ export function compaction(projectDir) {
     } catch {}
   }
 
-  // Read workspace stats (native, avoids command injection)
   let workspaceStats = { fileCount: 0 }
   try {
-    const skip = new Set(['node_modules', '.git', '.harness-pliot', 'target', 'dist', 'build'])
+    const skip = new Set(['node_modules', '.git', '.harness-pilot', 'target', 'dist', 'build'])
     function countFiles(dir) {
       let count = 0
       let entries
@@ -68,19 +61,18 @@ export function compaction(projectDir) {
     workspaceStats.fileCount = countFiles(projectDir)
   } catch {}
 
-  // Build summary
-  const summary = `# 上下文摘要
+  const summary = `# Context Summary
 
-生成时间: ${new Date().toISOString()}
-workspace 文件数: ${workspaceStats.fileCount}
+Generated: ${new Date().toISOString()}
+Workspace file count: ${workspaceStats.fileCount}
 
-## 当前任务
+## Current Tasks
 
 ${tasks.length > 0 
   ? tasks.map(t => `- [${t.status === 'in_progress' ? '→' : ' '}] ${t.content}`).join('\n')
-  : '无任务记录'}
+  : 'No tasks recorded'}
 
-## 最近执行记录
+## Recent Execution Logs
 
 ${recentLogs.length > 0
   ? recentLogs.map(log => {
@@ -91,13 +83,13 @@ ${recentLogs.length > 0
       const detailStr = typeof detail === 'string' ? detail.substring(0, 120) : JSON.stringify(detail)
       return `${time} [${log.level || 'INFO'}] ${action}: ${detailStr}`
     }).join('\n')
-  : '无执行记录'}
+  : 'No execution logs'}
 
-## 质量指标
+## Quality Metrics
 
 ${metrics 
   ? JSON.stringify(metrics, null, 2)
-  : '无质量指标'}
+  : 'No quality metrics'}
 `
 
   const summaryPath = join(harnessDir, 'context_summary.md')
@@ -115,17 +107,10 @@ ${metrics
   }
 }
 
-// CLI mode
 if (process.argv[1]?.endsWith('compaction.mjs')) {
   let projectDir = process.argv[2] || process.cwd()
-  // Try reading stdin for Claude Code hook context
-  try {
-    const raw = readFileSync(0, 'utf-8')
-    if (raw.trim()) {
-      const input = JSON.parse(raw)
-      projectDir = input.projectDir || input.cwd || projectDir
-    }
-  } catch {}
+  const input = await parseStdin()
+  projectDir = input.projectDir || input.cwd || projectDir
   compaction(projectDir)
   process.exit(0)
 }

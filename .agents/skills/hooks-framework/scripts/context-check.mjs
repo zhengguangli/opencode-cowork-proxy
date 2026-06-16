@@ -1,24 +1,10 @@
 #!/usr/bin/env node
-/**
- * context-check.mjs — AGENTS.md Freshness Check
- * Checks if AGENTS.md exists and is recent enough
- */
 
-import { statSync, existsSync, readFileSync } from 'fs'
-import { join, dirname } from 'path'
+import { statSync, existsSync } from 'fs'
+import { join } from 'path'
+import { findProjectRoot, parseStdin, getProjectDir } from './lib/harness-utils.mjs'
 
-const MAX_AGE_DAYS = 30
-
-function findProjectRoot(startDir) {
-  let dir = startDir
-  while (dir !== dirname(dir)) {
-    if (existsSync(join(dir, 'AGENTS.md')) || existsSync(join(dir, '.codex', 'hooks.json'))) {
-      return dir
-    }
-    dir = dirname(dir)
-  }
-  return startDir
-}
+const MAX_AGE_DAYS = parseInt(process.env.AGENTS_MAX_AGE_DAYS) || 30
 
 export function contextCheck(projectDir) {
   const agentsPath = join(projectDir, 'AGENTS.md')
@@ -40,21 +26,12 @@ export function contextCheck(projectDir) {
   return { valid: true, message: 'AGENTS.md is fresh' }
 }
 
-// CLI mode
 if (process.argv[1]?.endsWith('context-check.mjs')) {
   let projectDir = process.argv[2] || process.cwd()
-  // Try reading stdin for Claude Code / Codex hook context (has cwd field)
-  try {
-    const raw = readFileSync(0, 'utf-8')
-    if (raw.trim()) {
-      const input = JSON.parse(raw)
-      projectDir = input.cwd || input.projectDir || projectDir
-    }
-  } catch {}
-  // Find project root if not already there
+  const input = await parseStdin()
+  projectDir = input.cwd || input.projectDir || projectDir
   projectDir = findProjectRoot(projectDir)
   const result = contextCheck(projectDir)
-  // Only output on failure; success = silent (exit 0)
   if (!result.valid) {
     console.log(result.message)
   }

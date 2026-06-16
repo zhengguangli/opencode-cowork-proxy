@@ -1,6 +1,7 @@
 ---
 name: hooks-framework
 description: 'Hooks/middleware framework. Deterministic execution hooks: compaction, continuation, lint checks. Triggers on explicit requests: "配置 hooks", "设置中间件", "hooks framework", "执行钩子", "配置确定性检查". Do NOT trigger when discussing general hooks.'
+capabilities: ["hooks", "middleware", "deterministic-execution"]
 ---
 
 # Hooks Framework — Deterministic Execution Hooks
@@ -33,7 +34,7 @@ scripts/ (execution layer: .mjs scripts, universal across all three tools)
 
 **How it works:**
 1. Detect tool output size
-2. Exceeds threshold → write full content to `.harness-pliot/offloaded/`
+2. Exceeds threshold → write full content to `.harness-pilot/offloaded/`
 3. Return summary: first 20 lines + last 10 lines + file path reference
 4. Model can view full content via `cat` command
 
@@ -58,7 +59,7 @@ scripts/ (execution layer: .mjs scripts, universal across all three tools)
 ```bash
 # Environment variables
 REF_TTL_MS=300000                # Reference expiry time (default 5 minutes)
-HARNESS_WORKSPACE=.harness-pliot     # Workspace dir (default: {project}/.harness-pliot)
+HARNESS_WORKSPACE=.harness-pilot     # Workspace dir (default: {project}/.harness-pilot)
 ```
 
 **@ref Marking Mechanism:**
@@ -95,7 +96,7 @@ Architecture details → @ref:docs/ARCHITECTURE.md
 - `on_file_edit` hook automatically triggers `apply-patch.mjs` to validate patch format
 - Pre-application checks: file existence, line offset tolerance, conflict detection
 - On failure, returns specific error line numbers and suggested fixes
-- Supports generating `.harness-pliot/patches/` to record all patch history for rollback
+- Supports generating `.harness-pilot/patches/` to record all patch history for rollback
 
 **Best Practices (from OpenAI Codex Prompting Guide):**
 - Prefer apply_patch for single-file edits
@@ -135,13 +136,13 @@ Failure count   Wait time   Action
 Triggered when the same operation type fails >= 5 times within 5 minutes:
 1. Pause that operation type for 10 minutes
 2. Notify orchestrator to switch to alternative tool
-3. Record circuit breaker event to `.harness-pliot/metrics/circuit-breaker.log`
+3. Record circuit breaker event to `.harness-pilot/metrics/circuit-breaker.log`
 4. After 10 minutes, auto half-open probe; restore on success
 
 **Hooks Integration:**
 - `on_tool_output` hook detects error codes returned by tools
 - `retry-timeout.mjs` manages retry counters and timeout logic
-- Circuit breaker state persisted to `.harness-pliot/metrics/`, maintained across sessions
+- Circuit breaker state persisted to `.harness-pilot/metrics/`, maintained across sessions
 
 ### API-Native Compaction vs Script Compaction
 
@@ -258,13 +259,13 @@ node scripts/install.mjs --tool all      → Generate all three
 ## Input/Output
 
 **Output Directories:**
-- `.harness-pliot/trace/` — Execution logs
-- `.harness-pliot/metrics/` — Quality metrics
-- `.harness-pliot/context_summary.md` — Compaction summary
-- `.harness-pliot/continuation_prompt.md` — Continuation prompt
-- `.harness-pliot/offloaded/` — Offloaded tool outputs (head/tail references + full content)
-- `.harness-pliot/file-refs.json` — File reference tracking records
-- `.harness-pliot/unloadable-files.json` — List of offloadable files
+- `.harness-pilot/trace/` — Execution logs
+- `.harness-pilot/metrics/` — Quality metrics
+- `.harness-pilot/context_summary.md` — Compaction summary
+- `.harness-pilot/continuation_prompt.md` — Continuation prompt
+- `.harness-pilot/offloaded/` — Offloaded tool outputs (head/tail references + full content)
+- `.harness-pilot/file-refs.json` — File reference tracking records
+- `.harness-pilot/unloadable-files.json` — List of offloadable files
 
 ## Quality Standards
 

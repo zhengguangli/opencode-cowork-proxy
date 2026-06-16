@@ -3,8 +3,8 @@
  *
  * Priority:
  *   1. HARNESS_WORKSPACE env var (user override, absolute path)
- *   2. Tool-specific project dir env var + '.harness-pliot'
- *   3. process.cwd() + '.harness-pliot'
+ *   2. Tool-specific project dir env var + '.harness-pilot'
+ *   3. process.cwd() + '.harness-pilot'
  *
  * Supported env vars (by tool):
  *   - Claude Code: CLAUDE_PROJECT_DIR
@@ -33,7 +33,7 @@ export function getWorkspaceDir(projectDir) {
     || process.env.PROJECT_DIR
     || process.cwd();
 
-  return join(root, '.harness-pliot');
+  return join(root, '.harness-pilot');
 }
 
 export function ensureWorkspace(projectDir) {

@@ -1,18 +1,15 @@
 #!/usr/bin/env node
-/**
- * retry-timeout.mjs — Fault Tolerance
- * Handles retry logic, timeouts, and circuit breaker
- */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { join } from 'path'
+import { parseStdin } from './lib/harness-utils.mjs'
 
 const MAX_RETRIES = 3
 const CIRCUIT_BREAKER_THRESHOLD = 5
-const CIRCUIT_BREAKER_TIMEOUT = 600000 // 10 minutes
+const CIRCUIT_BREAKER_TIMEOUT = 600000
 
 export function retryTimeout(error, toolName, projectDir) {
-  const harnessDir = join(projectDir, '.harness-pliot', 'metrics')
+  const harnessDir = join(projectDir, '.harness-pilot', 'metrics')
   if (!existsSync(harnessDir)) {
     mkdirSync(harnessDir, { recursive: true })
   }
@@ -27,26 +24,59 @@ export function retryTimeout(error, toolName, projectDir) {
     } catch {}
   }
 
-  const toolState = state.tools[toolName] || { retries: 0, failures: 0, lastFailure: 0 }
-  toolState.retries++
-  toolState.failures++
-  toolState.lastFailure = Date.now()
-  state.tools[toolName] = toolState
-  state.lastError = { message: error, timestamp: Date.now() }
+  const now = Date.now()
+  const toolState = state.tools[toolName] || { retries: 0, failures: 0, successes: 0, lastFailure: 0, lastSuccess: 0, resetAt: 0 }
 
-  // Save state
-  writeFileSync(stateFile, JSON.stringify(state, null, 2), 'utf-8')
-
-  // Check per-tool circuit breaker first (cumulative failures across sessions)
-  if (toolState.failures >= CIRCUIT_BREAKER_THRESHOLD) {
+  if (!error) {
+    toolState.successes++
+    toolState.lastSuccess = now
+    if (toolState.successes > 0 && toolState.failures > 0) {
+      toolState.failures--
+    }
+    state.tools[toolName] = toolState
+    writeFileSync(stateFile, JSON.stringify(state, null, 2), 'utf-8')
     return {
-      action: 'circuit_open',
-      message: `Circuit breaker open for ${toolName}. Paused for 10 minutes.`,
-      retryAfter: CIRCUIT_BREAKER_TIMEOUT
+      action: 'success',
+      message: `${toolName} succeeded`,
+      successes: toolState.successes,
+      failures: toolState.failures
     }
   }
 
-  // Check per-tool max retries for this session
+  toolState.retries++
+  toolState.failures++
+  toolState.lastFailure = now
+  state.tools[toolName] = toolState
+  state.lastError = { message: error, timestamp: now }
+
+  if (toolState.failures >= CIRCUIT_BREAKER_THRESHOLD) {
+    if (!toolState.resetAt) {
+      toolState.resetAt = now + CIRCUIT_BREAKER_TIMEOUT
+      state.tools[toolName] = toolState
+      writeFileSync(stateFile, JSON.stringify(state, null, 2), 'utf-8')
+    }
+    if (now < toolState.resetAt) {
+      return {
+        action: 'circuit_open',
+        message: `Circuit breaker open for ${toolName}. Paused for 10 minutes.`,
+        retryAfter: toolState.resetAt - now
+      }
+    } else {
+      toolState.resetAt = 0
+      toolState.failures = CIRCUIT_BREAKER_THRESHOLD - 1
+      state.tools[toolName] = toolState
+      writeFileSync(stateFile, JSON.stringify(state, null, 2), 'utf-8')
+      return {
+        action: 'retry',
+        message: `Circuit breaker half-open for ${toolName}. Allowing retry.`,
+        retries: toolState.retries,
+        waitTime: 0
+      }
+    }
+  }
+
+  writeFileSync(stateFile, JSON.stringify(state, null, 2), 'utf-8')
+
   if (toolState.retries >= MAX_RETRIES) {
     return {
       action: 'give_up',
@@ -59,14 +89,12 @@ export function retryTimeout(error, toolName, projectDir) {
     action: 'retry',
     message: `Retry ${toolState.retries}/${MAX_RETRIES} for ${toolName}`,
     retries: toolState.retries,
-    waitTime: Math.pow(2, toolState.retries) * 1000 // Exponential backoff
+    waitTime: Math.pow(2, toolState.retries) * 1000
   }
 }
 
-// CLI mode
 if (process.argv[1]?.endsWith('retry-timeout.mjs')) {
-  let input = {}
-  try { const raw = readFileSync(0, 'utf-8'); if (raw.trim()) input = JSON.parse(raw) } catch {}
+  const input = await parseStdin()
   const result = retryTimeout(
     input.error || input.error_message || 'Unknown error',
     input.toolName || input.tool_name || 'unknown',

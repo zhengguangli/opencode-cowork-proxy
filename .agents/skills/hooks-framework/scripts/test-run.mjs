@@ -1,15 +1,18 @@
 #!/usr/bin/env node
-/**
- * test-run.mjs — Test Suite Execution
- * Runs project tests and reports results
- */
 
 import { execSync } from 'child_process'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
+import { parseStdin } from './lib/harness-utils.mjs'
 
 export function testRun(projectDir, testCommand) {
-  // Try to detect test command from package.json
+  if (!testCommand) {
+    try {
+      execSync('bun --version', { encoding: 'utf-8', stdio: 'pipe' })
+      testCommand = 'bun test'
+    } catch {}
+  }
+
   if (!testCommand) {
     const pkgPath = join(projectDir, 'package.json')
     if (existsSync(pkgPath)) {
@@ -21,11 +24,7 @@ export function testRun(projectDir, testCommand) {
   }
 
   if (!testCommand) {
-    return { 
-      success: false, 
-      message: 'No test command found',
-      suggestion: 'Add test script to package.json'
-    }
+    testCommand = 'npm test'
   }
 
   try {
@@ -38,7 +37,7 @@ export function testRun(projectDir, testCommand) {
     return { 
       success: true, 
       message: 'Tests passed',
-      output: output.slice(0, 500) // Truncate for context
+      output: output.slice(0, 500)
     }
   } catch (err) {
     return { 
@@ -49,10 +48,8 @@ export function testRun(projectDir, testCommand) {
   }
 }
 
-// CLI mode
 if (process.argv[1]?.endsWith('test-run.mjs')) {
-  let input = {}
-  try { const raw = readFileSync(0, 'utf-8'); if (raw.trim()) input = JSON.parse(raw) } catch {}
+  const input = await parseStdin()
   const result = testRun(input.projectDir || input.cwd || process.cwd(), input.testCommand)
   if (!result.success) console.log(result.error || result.message || 'Tests failed')
   process.exit(result.success ? 0 : 1)

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { execSync } from 'child_process'
-import { mkdirSync, writeFileSync, existsSync, statSync, readdirSync, readFileSync } from 'fs'
+import { mkdirSync, writeFileSync, existsSync, readdirSync, readFileSync } from 'fs'
 import { join, dirname, extname } from 'path'
+import { execSync } from 'child_process'
 
 function getWorkspaceDir(projectDir) {
   if (process.env.HARNESS_WORKSPACE) return process.env.HARNESS_WORKSPACE
@@ -12,23 +12,24 @@ function getWorkspaceDir(projectDir) {
     || process.env.OPENCODE_PROJECT_DIR
     || process.env.PROJECT_DIR
     || process.cwd()
-  return join(root, '.harness-pliot')
+  return join(root, '.harness-pilot')
 }
 
-function findFiles(dir, exts) {
+function findFiles(dir, exts, maxDepth = 20) {
   const results = []
-  const skip = new Set(['node_modules', '.git', 'target', 'dist', 'build'])
-  function walk(d) {
+  const skip = new Set(['node_modules', '.git', 'target', 'dist', 'build', '.next', '.workspace', '_workspace'])
+  function walk(d, depth) {
+    if (depth > maxDepth) return
     let entries
     try { entries = readdirSync(d, { withFileTypes: true }) } catch { return }
     for (const e of entries) {
       if (skip.has(e.name)) continue
       const full = join(d, e.name)
-      if (e.isDirectory()) walk(full)
+      if (e.isDirectory()) walk(full, depth + 1)
       else if (exts.has(extname(e.name))) results.push(full)
     }
   }
-  walk(dir)
+  walk(dir, 0)
   return results
 }
 
@@ -45,149 +46,222 @@ function getTimestamp() {
 
 mkdirSync(dirname(REPORT_FILE), { recursive: true })
 
-function collect() {
-  const srcPatterns = ['**/*.ts', '**/*.js', '**/*.py', '**/*.go', '**/*.rs']
-  const exts = new Set(['.ts', '.js', '.py', '.go', '.rs'])
-  let fileCount = 0
-  for (const ext of exts) {
-    fileCount += findFiles('.', new Set([ext])).length
+const srcExts = new Set(['.ts', '.js', '.mjs'])
+const srcFiles = findFiles('src', srcExts)
+const testFiles = findFiles('test', srcExts)
+const allFiles = findFiles('.', srcExts)
+
+let translateTestFiles = 0
+let streamTestFiles = 0
+let archTestPass = false
+
+for (const f of testFiles) {
+  if (f.includes('translate') || f.includes('anthropic') || f.includes('openai') || f.includes('response')) {
+    translateTestFiles++
   }
-
-  let todoCount = 0
-  try {
-    const rgResult = execSync('rg -c "TODO|FIXME" --type ts --type js --type py --type go --type rust -g \'!node_modules\' -g \'!.git\' . 2>/dev/null || true', { encoding: 'utf8' })
-    if (rgResult.trim()) {
-      todoCount = rgResult.trim().split('\n').reduce((sum, line) => {
-        const count = parseInt(line.split(':').pop()) || 0
-        return sum + count
-      }, 0)
-    }
-  } catch (e) {}
-
-  let largeFiles = 0
-  for (const ext of exts) {
-    for (const file of findFiles('.', new Set([ext]))) {
-      try {
-        const content = readFileSync(file, 'utf8')
-        const lines = content.split('\n').length
-        if (lines > 500) largeFiles++
-      } catch (e) {}
-    }
+  if (f.includes('stream') || f.includes('sse')) {
+    streamTestFiles++
   }
-
-  let testFiles = 0
-  const testExts = new Set(['.ts', '.js', '.py', '.go', '.rs'])
-  for (const ext of testExts) {
-    for (const file of findFiles('.', new Set([ext]))) {
-      if (/\.(test|spec)\./.test(file) || /_test\./.test(file)) testFiles++
-    }
-  }
-
-  let docFiles = 0
-  try {
-    for (const file of findFiles('docs', new Set(['.md']))) {
-      docFiles++
-    }
-  } catch (e) {}
-
-  let recentCommits = 0
-  try {
-    const gitLog = execSync('git log --oneline -30 2>/dev/null || true', { encoding: 'utf8' })
-    recentCommits = gitLog.trim() ? gitLog.trim().split('\n').length : 0
-  } catch (e) {}
-
-  return { fileCount, todoCount, largeFiles, testFiles, docFiles, recentCommits }
 }
 
-function scoreFileSize(largeFiles) {
-  if (largeFiles === 0) return 10
-  if (largeFiles <= 2) return 8
-  if (largeFiles <= 5) return 6
-  return 4
+if (existsSync('test/architecture.test.ts')) {
+  try {
+    const result = execSync('npx vitest run test/architecture.test.ts 2>&1', { encoding: 'utf8', stdio: 'pipe' })
+    archTestPass = !result.includes('failed') && !result.includes('FAIL')
+  } catch {
+    archTestPass = false
+  }
 }
 
-function scoreTodo(todoCount) {
-  if (todoCount === 0) return 10
-  if (todoCount <= 10) return 9
-  if (todoCount <= 20) return 7
-  if (todoCount <= 50) return 5
+let translationCoverage = 0
+let streamCoverage = 0
+const translateFiles = findFiles('src/translate', srcExts)
+for (const f of translateFiles) {
+  const baseName = f.split('/').pop()?.replace(/\.(ts|js|mjs)$/, '')
+  if (!baseName) continue
+  for (const tf of testFiles) {
+    const testBase = tf.split('/').pop()?.replace(/\.(test|spec)\.(ts|js|mjs)$/, '')
+    if (testBase && (baseName.includes(testBase) || testBase.includes(baseName))) {
+      translationCoverage++
+      break
+    }
+  }
+}
+translationCoverage = translateFiles.length > 0 ? Math.round((translationCoverage / translateFiles.length) * 100) : 0
+
+const streamFiles = findFiles('src/translate/stream', srcExts)
+let streamCovered = 0
+for (const f of streamFiles) {
+  const baseName = f.split('/').pop()?.replace(/\.(ts|js|mjs)$/, '')
+  if (!baseName) continue
+  for (const tf of testFiles) {
+    if (tf.includes('stream') || tf.includes('sse')) {
+      const testBase = tf.split('/').pop()?.replace(/\.(test|spec)\.(ts|js|mjs)$/, '')
+      if (testBase && (baseName.includes(testBase) || testBase.includes(baseName))) {
+        streamCovered++
+        break
+      }
+    }
+  }
+}
+streamCoverage = streamFiles.length > 0 ? Math.round((streamCovered / streamFiles.length) * 100) : 0
+
+let anyCount = 0
+let asAnyCount = 0
+let tsIgnoreCount = 0
+for (const file of allFiles) {
+  try {
+    const content = readFileSync(file, 'utf8')
+    const anyMatches = content.match(/\bany\b/g)
+    anyCount += anyMatches ? anyMatches.length : 0
+    const asAnyMatches = content.match(/as\s+any/g)
+    asAnyCount += asAnyMatches ? asAnyMatches.length : 0
+    const tsIgnoreMatches = content.match(/\/\/\s*@ts-ignore/g)
+    tsIgnoreCount += tsIgnoreMatches ? tsIgnoreMatches.length : 0
+  } catch {}
+}
+
+let docFileCount = 0
+const docExts = new Set(['.md'])
+if (existsSync('docs')) {
+  docFileCount = findFiles('docs', docExts).length
+}
+
+let todoCount = 0
+for (const file of allFiles) {
+  try {
+    const content = readFileSync(file, 'utf8')
+    const matches = content.match(/TODO|FIXME/g)
+    if (matches) todoCount += matches.length
+  } catch {}
+}
+
+let recentCommits = 0
+try {
+  const gitLog = execSync('git log --oneline -30 2>/dev/null || true', { encoding: 'utf8' })
+  recentCommits = gitLog.trim() ? gitLog.trim().split('\n').length : 0
+} catch {}
+
+function scoreTranslationCoverage(pct) {
+  if (pct >= 80) return 10
+  if (pct >= 60) return 8
+  if (pct >= 40) return 6
+  if (pct >= 20) return 4
+  return 2
+}
+
+function scoreStreamCoverage(pct) {
+  if (pct >= 80) return 10
+  if (pct >= 60) return 8
+  if (pct >= 40) return 6
+  if (pct >= 20) return 4
+  return 2
+}
+
+function scoreArchitecture(pass) {
+  return pass ? 10 : 3
+}
+
+function scoreDocs(count) {
+  if (count >= 10) return 10
+  if (count >= 5) return 8
+  if (count >= 3) return 6
+  if (count >= 1) return 4
+  return 2
+}
+
+function scoreTypeSafety(anyCount, asAnyCount, tsIgnoreCount) {
+  const total = anyCount + asAnyCount + tsIgnoreCount
+  if (total === 0) return 10
+  if (total <= 5) return 9
+  if (total <= 15) return 7
+  if (total <= 30) return 5
   return 3
 }
 
-function scoreTestCoverage(fileCount, testFiles) {
-  if (fileCount === 0) return 'N/A'
-  const ratio = (testFiles * 100) / fileCount
-  if (ratio >= 80) return 10
-  if (ratio >= 50) return 8
-  if (ratio >= 30) return 6
-  if (ratio >= 10) return 4
-  return 2
-}
-
-function scoreDocs(docFiles) {
-  if (docFiles >= 10) return 10
-  if (docFiles >= 5) return 8
-  if (docFiles >= 3) return 6
-  if (docFiles >= 1) return 4
-  return 2
-}
-
-function scoreArchitecture() {
-  return existsSync('docs/ARCHITECTURE.md') ? 8 : 3
-}
-
-const metrics = collect()
 const scores = {
-  fileSize: scoreFileSize(metrics.largeFiles),
-  todo: scoreTodo(metrics.todoCount),
-  testCoverage: scoreTestCoverage(metrics.fileCount, metrics.testFiles),
-  docs: scoreDocs(metrics.docFiles),
-  architecture: scoreArchitecture()
+  translationCoverage: scoreTranslationCoverage(translationCoverage),
+  streamCoverage: scoreStreamCoverage(streamCoverage),
+  architecture: scoreArchitecture(archTestPass),
+  docs: scoreDocs(docFileCount),
+  typeSafety: scoreTypeSafety(anyCount, asAnyCount, tsIgnoreCount),
 }
 
-let report = `# 质量评分报告
+const metrics = {
+  srcFiles: srcFiles.length,
+  translateFiles: translateFiles.length,
+  streamFiles: streamFiles.length,
+  testFiles: testFiles.length,
+  translateTestFiles,
+  streamTestFiles,
+  translationCoverage,
+  streamCoverage,
+  docFileCount,
+  anyCount,
+  asAnyCount,
+  tsIgnoreCount,
+  todoCount,
+  recentCommits,
+}
 
-**日期:** ${getTimestamp()}
+let report = `# Quality Score Report
 
-## 总览
+**Date:** ${getTimestamp()}
 
-| 指标 | 值 |
-|------|-----|
-| 源文件数 | ${metrics.fileCount} |
-| 测试文件数 | ${metrics.testFiles} |
-| 文档数 | ${metrics.docFiles} |
+## Overview
+
+| Metric | Value |
+|--------|-------|
+| Source files | ${metrics.srcFiles} |
+| Translate files | ${metrics.translateFiles} |
+| Stream files | ${metrics.streamFiles} |
+| Test files | ${metrics.testFiles} |
+| Translation tests | ${metrics.translateTestFiles} |
+| Stream tests | ${metrics.streamTestFiles} |
+| Documentation files | ${metrics.docFileCount} |
 | TODO/FIXME | ${metrics.todoCount} |
-| 大文件(>500行) | ${metrics.largeFiles} |
-| 近30天提交 | ${metrics.recentCommits} |
+| \`any\` uses | ${metrics.anyCount} |
+| \`as any\` uses | ${metrics.asAnyCount} |
+| \`@ts-ignore\` | ${metrics.tsIgnoreCount} |
+| Recent commits | ${metrics.recentCommits} |
 
-## 评分
+## Scores
 
-| 维度 | 评分 (0-10) | 说明 |
-|------|------------|------|
-| 文件大小 | ${scores.fileSize} | ${metrics.largeFiles} 个大文件 |
-| 技术债务 | ${scores.todo} | ${metrics.todoCount} 个 TODO/FIXME |
-| 测试覆盖 | ${scores.testCoverage} | ${metrics.testFiles} 个测试文件 / ${metrics.fileCount} 个源文件 |
-| 文档完整性 | ${scores.docs} | ${metrics.docFiles} 个文档 |
-| 架构定义 | ${scores.architecture} | ${existsSync('docs/ARCHITECTURE.md') ? '已定义' : '缺失'} |
+| Dimension | Score (0-10) | Detail |
+|-----------|-------------|--------|
+| Translation coverage | ${scores.translationCoverage} | ${metrics.translationCoverage}% (${metrics.translateTestFiles} test files) |
+| Streaming coverage | ${scores.streamCoverage} | ${metrics.streamCoverage}% (${metrics.streamTestFiles} test files) |
+| Architecture compliance | ${scores.architecture} | ${archTestPass ? 'architecture.test.ts passed' : 'architecture.test.ts failed or not found'} |
+| Documentation completeness | ${scores.docs} | ${metrics.docFileCount} doc files |
+| Type safety | ${scores.typeSafety} | ${metrics.anyCount} any, ${metrics.asAnyCount} as any, ${metrics.tsIgnoreCount} @ts-ignore |
 
-## 建议
+## Recommendations
 
 `
 
-if (metrics.largeFiles > 0) {
-  report += `- 拆分 ${metrics.largeFiles} 个大文件（>500 行）\n`
+if (metrics.translationCoverage < 60) {
+  report += `- Add more tests covering src/translate/ (current: ${metrics.translationCoverage}%)\n`
+}
+if (metrics.streamCoverage < 60) {
+  report += `- Add more tests covering src/translate/stream/ (current: ${metrics.streamCoverage}%)\n`
+}
+if (!archTestPass) {
+  report += '- Fix or create test/architecture.test.ts to validate architecture boundaries\n'
+}
+if (metrics.anyCount > 15) {
+  report += `- Reduce \`any\` usage (current: ${metrics.anyCount})\n`
+}
+if (metrics.asAnyCount > 10) {
+  report += `- Reduce \`as any\` casts (current: ${metrics.asAnyCount})\n`
+}
+if (metrics.docFileCount < 5) {
+  report += `- Add more documentation (current: ${metrics.docFileCount} files)\n`
 }
 if (metrics.todoCount > 20) {
-  report += `- 清理 ${metrics.todoCount} 个 TODO/FIXME\n`
-}
-if (!existsSync('docs/ARCHITECTURE.md')) {
-  report += '- 创建 docs/ARCHITECTURE.md 定义架构边界\n'
-}
-if (metrics.docFiles < 5) {
-  report += `- 补充文档（当前仅 ${metrics.docFiles} 个）\n`
+  report += `- Clean up TODO/FIXME (current: ${metrics.todoCount})\n`
 }
 
 report += '\n'
 
 writeFileSync(REPORT_FILE, report)
-console.log(`[quality-score] 报告已生成: ${REPORT_FILE}`)
+console.log(`[quality-score] report generated: ${REPORT_FILE}`)

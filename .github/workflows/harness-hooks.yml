@@ -35,5 +35,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: harness-trace
-          path: .harness-pliot/
+          path: .harness-pilot/
           retention-days: 7

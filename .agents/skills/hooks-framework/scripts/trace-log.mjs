@@ -1,20 +1,16 @@
 #!/usr/bin/env node
-/**
- * trace-log.mjs — Execution Logging
- * Logs execution traces and syncs todo state
- */
 
 import { mkdirSync, existsSync, appendFileSync, writeFileSync, readFileSync } from 'fs'
 import { join } from 'path'
+import { parseStdin } from './lib/harness-utils.mjs'
 
 export function traceLog(projectDir, logEntry = {}) {
-  const harnessDir = join(projectDir, '.harness-pliot')
+  const harnessDir = join(projectDir, '.harness-pilot')
   const traceDir = join(harnessDir, 'trace')
   if (!existsSync(traceDir)) {
     mkdirSync(traceDir, { recursive: true })
   }
 
-  // Log to execution trace — extract useful fields from various hook event schemas
   const hookAction = logEntry.hook_event_name
     || logEntry.action
     || logEntry.tool_name
@@ -33,14 +29,12 @@ export function traceLog(projectDir, logEntry = {}) {
     ...logEntry
   }
 
-  // Clean up — remove huge fields that bloat the trace log
   delete entry.last_assistant_message
   delete entry.transcript_path
 
   const logPath = join(traceDir, 'execution.jsonl')
   appendFileSync(logPath, JSON.stringify(entry) + '\n', 'utf-8')
 
-  // Sync todo state if provided
   if (logEntry.todos) {
     const todoPath = join(harnessDir, 'todo-state.json')
     writeFileSync(todoPath, JSON.stringify({ 
@@ -49,6 +43,62 @@ export function traceLog(projectDir, logEntry = {}) {
     }, null, 2), 'utf-8')
   }
 
+  const alertDir = join(harnessDir, 'alerts')
+  if (!existsSync(alertDir)) {
+    mkdirSync(alertDir, { recursive: true })
+  }
+
+  try {
+    const lines = readFileSync(logPath, 'utf-8').trim().split('\n').slice(-50)
+    const recentEntries = lines.filter(l => l.trim()).map(l => {
+      try { return JSON.parse(l) } catch { return null }
+    }).filter(Boolean)
+
+    const errorCounts = {}
+    for (const e of recentEntries) {
+      if (e.level === 'error' && e.action) {
+        if (!errorCounts[e.action]) {
+          errorCounts[e.action] = { count: 0, timestamps: [] }
+        }
+        errorCounts[e.action].count++
+        errorCounts[e.action].timestamps.push(e.timestamp)
+      }
+    }
+
+    for (const [action, data] of Object.entries(errorCounts)) {
+      if (data.count >= 3) {
+        const routingMap = {
+          'hook': 'hooks-framework',
+          'tool': 'hooks-framework',
+          'phase': 'harness-orchestrator',
+          'context': 'context-setup',
+          'prompt': 'agent definitions',
+        }
+        let suggestedRouting = 'general review'
+        for (const [keyword, route] of Object.entries(routingMap)) {
+          if (action.toLowerCase().includes(keyword)) {
+            suggestedRouting = route
+            break
+          }
+        }
+
+        const alertContent = [
+          `# Error Pattern Alert`,
+          ``,
+          `**Pattern:** ${action}`,
+          `**Occurrences:** ${data.count}`,
+          `**Timestamps:**`,
+          ...data.timestamps.map(t => `- ${t}`),
+          ``,
+          `**Suggested routing:** ${suggestedRouting}`,
+        ].join('\n')
+
+        const alertPath = join(alertDir, `pattern-alert-${Date.now()}.md`)
+        writeFileSync(alertPath, alertContent, 'utf-8')
+      }
+    }
+  } catch {}
+
   return { 
     success: true, 
     message: 'Trace logged',
@@ -56,7 +106,6 @@ export function traceLog(projectDir, logEntry = {}) {
   }
 }
 
-// CLI mode
 if (process.argv[1]?.endsWith('trace-log.mjs')) {
   let projectDir = process.argv[2] || process.cwd()
   let input = {}

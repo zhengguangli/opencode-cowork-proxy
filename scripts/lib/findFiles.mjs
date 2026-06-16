@@ -3,7 +3,7 @@ import { join, extname } from 'path'
 
 const DEFAULT_SKIP = new Set([
   'node_modules', '.git', 'target', 'dist', 'build',
-  '.next', '.workspace', '_workspace', '.harness-pliot'
+  '.next', '.workspace', '_workspace', '.harness-pilot'
 ])
 
 export function findFiles(dir, exts, { maxDepth = 10, skipDirs = [] } = {}) {

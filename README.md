@@ -72,7 +72,7 @@ launchctl load ~/Library/LaunchAgents/ai.opencode.proxy.plist
 
 ```bash
 curl http://localhost:18787/
-# {"name":"opencode-cowork-proxy","version":"2.1.1","status":"ok","uptime":"1m 23s",...}
+# {"name":"opencode-cowork-proxy","version":"2.1.5","status":"ok","uptime":"1m 23s",...}
 ```
 
 ## Free Models
@@ -149,7 +149,7 @@ It adds support for:
 
 ## Configuration
 
-Requests are sent by default to OpenCode Go at `https://opencode.ai/zen/go`v1. See [Configuration section](#configuration) for header-based overrides.
+Requests are sent by default to OpenCode Go at `https://opencode.ai/zen/go/v1`. See [Configuration section](#configuration) for header-based overrides.
 
 ### Routing
 
@@ -157,7 +157,7 @@ Prefix routes:
 
 | Path prefix | Upstream base URL |
 |-------------|-------------------|
-| `/go` | `https://opencode.ai/zen/go`v1 |
+| `/go` | `https://opencode.ai/zen/go/v1` |
 | `/zen` | `https://opencode.ai/zen/v1` |
 
 ### Headers

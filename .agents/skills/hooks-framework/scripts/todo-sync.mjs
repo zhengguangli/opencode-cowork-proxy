@@ -1,21 +1,17 @@
 #!/usr/bin/env node
-/**
- * todo-sync.mjs — Todo State Synchronization
- * Syncs todowrite state to filesystem for compaction
- */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
+import { parseStdin } from './lib/harness-utils.mjs'
 
 export function todoSync(projectDir, todoData) {
-  const harnessDir = join(projectDir, '.harness-pliot')
+  const harnessDir = join(projectDir, '.harness-pilot')
   if (!existsSync(harnessDir)) {
     mkdirSync(harnessDir, { recursive: true })
   }
 
   const todoPath = join(harnessDir, 'todo-state.json')
   
-  // If todoData provided, save it
   if (todoData) {
     writeFileSync(todoPath, JSON.stringify({
       todos: todoData.todos || todoData,
@@ -30,7 +26,6 @@ export function todoSync(projectDir, todoData) {
     }
   }
 
-  // Otherwise, read existing state
   if (existsSync(todoPath)) {
     try {
       const state = JSON.parse(readFileSync(todoPath, 'utf-8'))
@@ -48,18 +43,12 @@ export function todoSync(projectDir, todoData) {
   return { success: true, message: 'No todo state found', todos: [] }
 }
 
-// CLI mode
 if (process.argv[1]?.endsWith('todo-sync.mjs')) {
   let projectDir = process.argv[2] || process.cwd()
   let todoData = null
-  try {
-    const raw = readFileSync(0, 'utf-8')
-    if (raw.trim()) {
-      const input = JSON.parse(raw)
-      projectDir = input.projectDir || input.cwd || projectDir
-      todoData = input.todoData
-    }
-  } catch {}
+  const input = await parseStdin()
+  projectDir = input.projectDir || input.cwd || projectDir
+  todoData = input.todoData
   todoSync(projectDir, todoData)
   process.exit(0)
 }

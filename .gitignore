@@ -16,14 +16,14 @@ MEMORY.md
 
 # HARNESS-PILOT:START
 # AI working memory — transient artifacts
-.harness-pliot/docs/generated/
-.harness-pliot/metrics/
+.harness-pilot/docs/generated/
+.harness-pilot/metrics/
 # HARNESS-PILOT:END
 
 
 # Session artifacts
 claude-logs.txt
-.harness-pliot/
+.harness-pilot/
 
 # Sandbox worktrees (isolated task execution)
 .worktrees/

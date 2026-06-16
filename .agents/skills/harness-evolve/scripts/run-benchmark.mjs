@@ -10,7 +10,7 @@ function getWorkspaceDir(projectDir) {
     || process.env.OPENCODE_PROJECT_DIR
     || process.env.PROJECT_DIR
     || process.cwd()
-  return join(root, '.harness-pliot')
+  return join(root, '.harness-pilot')
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -20,39 +20,39 @@ const HISTORY_FILE = join(WORKSPACE, 'history.json')
 
 const DEFAULT_TASKS = [
   {
-    id: 'ts-interface-gen',
-    name: 'TypeScript 接口生成',
-    description: '根据需求描述生成完整的 TypeScript 接口和类型定义',
+    id: 'add-format-pair',
+    name: 'Add a new FormatPair',
+    description: 'Adding a new format pair to the translation registry (implement FormatPair interface, register in registry.ts, wire into handler)',
     category: 'code-gen',
-    metrics: ['type-safety', 'completeness', 'convention-compliance']
+    metrics: ['interface-compliance', 'registration-correctness', 'handler-wiring', 'test-coverage']
   },
   {
-    id: 'error-handling',
-    name: '错误处理覆盖',
-    description: '为现有模块添加全面的错误处理逻辑',
-    category: 'robustness',
-    metrics: ['catch-coverage', 'error-propagation', 'user-feedback']
+    id: 'fix-stream-edge-case',
+    name: 'Fix streaming translation edge case',
+    description: 'Fix a boundary condition in SSE stream translation (chunk boundaries, finish reason mapping, tool_calls in streams)',
+    category: 'debugging',
+    metrics: ['boundary-handling', 'format-correctness', 'stream-integrity', 'regression-prevention']
+  },
+  {
+    id: 'add-provider',
+    name: 'Add a new upstream provider',
+    description: 'Adding a new UpstreamProvider (implement interface, register, add vision model set, add route prefix)',
+    category: 'code-gen',
+    metrics: ['interface-compliance', 'vision-routing', 'auth-headers', 'integration-test']
+  },
+  {
+    id: 'extend-validation',
+    name: 'Extend request validation schema',
+    description: 'Adding or modifying a Zod v4 validation schema for a new request format or field',
+    category: 'architecture',
+    metrics: ['schema-correctness', 'parse-dont-validate', 'error-messages', 'boundary-enforcement']
   },
   {
     id: 'refactor-boundary',
-    name: '边界重构',
-    description: '重构跨层依赖，确保架构边界不被违反',
+    name: 'Refactor architecture boundary violation',
+    description: 'Fix a cross-boundary import that violates the translate(pure) → handlers → providers → routing → config layer structure',
     category: 'architecture',
-    metrics: ['boundary-compliance', 'import-direction', 'interface-stability']
-  },
-  {
-    id: 'api-doc-gen',
-    name: 'API 文档生成',
-    description: '从代码自动生成 API 文档，包含请求/响应示例',
-    category: 'documentation',
-    metrics: ['accuracy', 'completeness', 'readability']
-  },
-  {
-    id: 'context-aware-merge',
-    name: '上下文感知合并',
-    description: '在多个冲突的文件变更中正确合并代码',
-    category: 'integration',
-    metrics: ['conflict-resolution', 'semantic-correctness', 'side-effect-awareness']
+    metrics: ['boundary-compliance', 'import-direction', 'pure-function-invariant', 'test-preservation']
   }
 ]
 

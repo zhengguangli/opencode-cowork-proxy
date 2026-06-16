@@ -16,12 +16,48 @@ Ensure harness configuration is correct, skill triggers are accurate, and delive
 - **Self-verification loop**: Run tests → observe results → fix → re-run
 - **Evidence over assertion**: All verification conclusions must be accompanied by evidence
 
+## Project-Specific Verification
+
+### Test Suite
+
+| Metric | Value |
+|--------|-------|
+| Test files | 28 |
+| Total tests | 521 |
+| Architecture boundary checks | 127 (test/architecture.test.ts) |
+| Runtime | Bun (`bun test`) |
+| Type checker | `bun run typecheck` (tsc --noEmit) |
+
+### Architecture Boundary Tests (test/architecture.test.ts)
+
+Key invariant checks:
+- **L1**: Translate modules must NOT import from request.ts or index.ts
+- **L2**: request.ts must NOT import from translate modules
+- **L3**: Utility files (routing, auth, vision, backpressure, think-tag-stripper) must NOT import from translate/request/index
+- **L5**: Entry points must ONLY import src/index.ts (plus utility exceptions)
+- **Barrel**: translate/index.ts must be pure re-export (no imports)
+- **M3**: All source files ≤ 500 lines
+- **M4**: All source files ≤ 10 imports
+- **D1**: Translate functions must be pure — no fetch or I/O
+
+### Self-Verification Loop
+
+```
+Run bun test → Observe failures → Fix code → Re-run → Repeat until green
+```
+
+- Max 3 fix rounds before escalating
+- After round 1: fix compilation/type errors
+- After round 2: fix logic/test errors
+- After round 3: if still failing, report to orchestrator for human intervention
+
 ## Verification Dimensions
 
 ### 1. Structural Verification
-- Agent file location and format correctness
-- Skill frontmatter completeness (name, description)
+- Agent file location and format correctness (6 agents with valid YAML frontmatter)
+- Skill frontmatter completeness (name, description, capabilities)
 - Reference consistency check (all links resolve to existing files)
+- Script files referenced in SKILL.md exist on disk
 
 ### 2. Trigger Verification
 - **Positive trigger queries** (8-10): Various natural expressions
@@ -33,19 +69,7 @@ Ensure harness configuration is correct, skill triggers are accurate, and delive
 - With-skill vs Without-skill comparison
 - Output quality qualitative + quantitative assessment
 
-### 4. Screen Recording & Video Evidence
-
-Provide visual evidence for key verifications, attached to PRs:
-
-| Scenario | Recording Content | Purpose |
-|------|----------|------|
-| Bug reproduction | Record failure demo | PR evidence |
-| Fix verification | Record post-fix behavior | Regression baseline |
-| UI flow | Record user journey | Acceptance evidence |
-
-Use Chrome DevTools or equivalent tools for automated recording, save to `.harness-pliot/evidence/`.
-
-### 5. Dry-Run Verification
+### 4. Dry-Run Verification
 - Orchestrator phase sequence logic
 - Data transfer paths have no dead links
 - Agent input/output matching
@@ -57,26 +81,29 @@ Use Chrome DevTools or equivalent tools for automated recording, save to `.harne
 
 | Check | Pass Condition | Fail Condition |
 |-------|---------------|----------------|
-| Agent files | All 7 agent `.md` files present with valid YAML frontmatter | Missing file or invalid frontmatter |
-| Skill files | All expected skills have `SKILL.md` with `name:` + `description:` | Missing SKILL.md or broken frontmatter |
+| Agent files | All 6 agent `.md` files present with valid YAML frontmatter | Missing file or invalid frontmatter |
+| Skill files | All expected skills have `SKILL.md` with `name:` + `description:` + `capabilities:` | Missing SKILL.md or broken frontmatter |
 | Cross-references | Every file reference in AGENTS.md → docs/ resolves to existing file | 404 link |
 | Script files | Every script referenced in SKILL.md exists on disk | Missing script |
-
-### Trigger Verification
-
-| Check | Pass Condition | Fail Condition |
-|-------|---------------|----------------|
-| Positive triggers | ≥8/10 positive queries correctly trigger the skill | <8 match rate |
-| Negative triggers | ≥8/10 negative queries correctly DO NOT trigger | False positive >2 |
-| Trigger conflicts | No two skills share the same trigger phrase | Overlapping triggers |
 
 ### Execution Verification
 
 | Check | Pass Condition | Fail Condition |
 |-------|---------------|----------------|
-| Test pass rate | 100% of project tests pass | Any test failure |
-| Lint pass | Zero lint/type errors | Any error |
+| Test pass rate | 100% of project tests pass (`bun test`) | Any test failure |
+| Type check | Zero errors (`bun run typecheck`) | Any error |
+| Architecture tests | All 127 boundary checks pass (`bun test test/architecture.test.ts`) | Any violation |
 | Self-verification | Agent can fix its own errors within 3 rounds | Fails to fix after 3 attempts |
+
+## Test Runner Integration
+
+| Test Type | Command | When to Run |
+|-----------|---------|-------------|
+| Full test suite | `bun test` | After every code change |
+| Single test file | `bun test test/foo.test.ts` | During focused debugging |
+| Type check | `bun run typecheck` | Before submitting PR |
+| Architecture tests | `bun test test/architecture.test.ts` | After refactoring layers |
+| Audit deps | `bun run scripts/audit-deps.mjs --ci` | Before merge to main |
 
 ## Verification Report Template
 
@@ -89,8 +116,8 @@ Use Chrome DevTools or equivalent tools for automated recording, save to `.harne
 
 | Check | Result | Evidence |
 |-------|--------|----------|
-| Agent files (7) | ✅ / ❌ | {file count} present |
-| Skill files (14) | ✅ / ❌ | {file count} present |
+| Agent files (6) | ✅ / ❌ | {file count} present |
+| Skill files (12) | ✅ / ❌ | {file count} present |
 | Cross-references | ✅ / ❌ | {broken refs} broken |
 | Script files | ✅ / ❌ | {missing count} missing |
 
@@ -105,34 +132,14 @@ Use Chrome DevTools or equivalent tools for automated recording, save to `.harne
 ## 3. Execution Verification
 
 - Test suite: ✅ / ❌ ({pass/fail count})
-- Lint check: ✅ / ❌
+- Type check: ✅ / ❌
+- Architecture tests: ✅ / ❌ ({violations})
 - Self-verification: ✅ / ❌ ({rounds} rounds)
 
 ## 4. Verdict
 
 **PASS / FAIL** — {summary of any issues found}
 ```
-
-## Test Runner Integration
-
-| Test Type | Command | When to Run |
-|-----------|---------|-------------|
-| Full test suite | `bun test` | After every code change |
-| Single test file | `bun test test/foo.test.ts` | During focused debugging |
-| Type check | `bun run typecheck` (tsc --noEmit) | Before submitting PR |
-| Architecture tests | `bun test test/architecture.test.ts` | After refactoring layers |
-| Audit deps | `bun run scripts/audit-deps.mjs --ci` | Before merge to main |
-
-### Self-Verification Loop
-
-```
-Run tests → Observe failures → Fix code → Re-run tests → Repeat until green
-```
-
-- Max 3 fix rounds before escalating
-- After round 1: fix compilation/type errors
-- After round 2: fix logic/test errors
-- After round 3: if still failing, report to orchestrator for human intervention
 
 ## Input/Output Protocol
 
@@ -147,6 +154,7 @@ Run tests → Observe failures → Fix code → Re-run tests → Repeat until gr
 - Fix recommendations (with specific instructions)
 
 ## Collaboration Protocol
+
 - Receive reviewer-approved code for verification
 - Report issues requiring fixes to builder
 - Report verification status to orchestrator

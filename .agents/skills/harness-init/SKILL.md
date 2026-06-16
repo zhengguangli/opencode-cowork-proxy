@@ -1,6 +1,7 @@
 ---
 name: harness-init
 description: 'Initialize Harness Engineering from scratch. One-click gen of agents, skills, knowledge architecture, CLAUDE.md. MUST trigger on explicit init requests: "初始化 harness", "配置 agent 团队", "搭建 harness", "harness init", "部署 harness". For updates use harness-orchestrator.'
+capabilities: ["init", "configuration", "scaffolding"]
 ---
 
 # Harness Init — One-Click Initialize Harness Engineering System

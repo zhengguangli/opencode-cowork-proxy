@@ -1,0 +1,78 @@
+name: Entropy GC
+on:
+  schedule:
+    - cron: '0 8 * * *'
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+    inputs:
+      scan_type:
+        description: 'Scan type'
+        required: true
+        default: 'quick'
+        type: choice
+        options:
+          - quick
+          - full
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Determine scan type
+        id: scan
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "mode=--${{ github.event.inputs.scan_type }}" >> $GITHUB_OUTPUT
+          elif [[ "$(date +%u)" == "1" ]]; then
+            echo "mode=--full" >> $GITHUB_OUTPUT
+          else
+            echo "mode=--quick" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Drift scan
+        run: |
+          bun .agents/skills/entropy-gc/scripts/drift-scan.mjs ${{ steps.scan.outputs.mode }}
+
+      - name: Quality score
+        if: steps.scan.outputs.mode == '--full'
+        run: |
+          bun .agents/skills/entropy-gc/scripts/quality-score.mjs
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: entropy-reports
+          path: .harness-pilot/drift-scan-*.md
+          retention-days: 30
+
+      - name: Create issue on drift
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const reportFile = '${{ steps.scan.outputs.mode == '--full' && 'drift-scan-full' || 'drift-scan-quick' }}';
+            const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
+            const reportPath = `.harness-pilot/${reportFile}-${date}.md`;
+            let body = 'No report file found.';
+            if (fs.existsSync(reportPath)) {
+              body = fs.readFileSync(reportPath, 'utf8');
+            }
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[entropy-gc] Drift Detection Report ${new Date().toISOString().split('T')[0]}`,
+              body: body,
+              labels: ['entropy', 'tech-debt']
+            });

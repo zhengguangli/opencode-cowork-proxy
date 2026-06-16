@@ -59,7 +59,7 @@ capabilities:
 
 ### Step 5: Result Caching
 
-- Cache search results to `.harness-pliot/search_cache/` (TTL: 1 hour)
+- Cache search results to `.harness-pilot/search_cache/` (TTL: 1 hour)
 - Do not repeat requests for the same query within TTL
 - Cache files named by query hash: `{query_hash}.json`
 

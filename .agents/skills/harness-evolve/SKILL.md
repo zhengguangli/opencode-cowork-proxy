@@ -1,6 +1,7 @@
 ---
 name: harness-evolve
 description: 'Feedback-driven Harness evolution. Collect feedback, improve agents/skills/knowledge. Triggers on explicit requests: "改进 harness", "演进 harness", "harness evolve", "收集反馈", "优化 agent 团队". Do NOT trigger when discussing general improvements.'
+capabilities: ["evolution", "feedback", "benchmarking"]
 ---
 
 # Harness Evolve — Feedback-Driven Evolution
@@ -103,7 +104,7 @@ Perform systematic checks, modifications, and synchronization on existing harnes
 **Purpose:** Analyze agent execution traces to identify and fix harness-level failure patterns.
 
 **Analysis Process:**
-1. Load the most recent N execution logs from `.harness-pliot/trace/`
+1. Load the most recent N execution logs from `.harness-pilot/trace/`
 2. Scan for failure patterns:
    - Same error type appearing repeatedly
    - Certain tool calls consistently timing out → may need timeout adjustment or alternative tool
@@ -166,7 +167,7 @@ Perform systematic checks, modifications, and synchronization on existing harnes
    | Execution Time | Wall clock time |
    | Error Recovery Count | Extracted from trace |
    | User Correction Count | Extracted from feedback |
-4. Generate comparison report (`.harness-pliot/benchmark/comparison.html`)
+4. Generate comparison report (`.harness-pilot/benchmark/comparison.html`)
 5. Variant B outperforms A → Suggest merge; underperforms A → Analyze cause
 
 **Configurable Variant Dimensions (independently A/B testable):**

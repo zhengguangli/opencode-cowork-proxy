@@ -1,11 +1,8 @@
 #!/usr/bin/env node
-/**
- * lint-check.mjs — Architecture Boundary Check
- * Validates file edits against architecture rules
- */
 
 import { readFileSync, existsSync } from 'fs'
 import { extname } from 'path'
+import { parseStdin } from './lib/harness-utils.mjs'
 
 const FORBIDDEN_PATTERNS = [
   { pattern: /import.*from\s+['"]\.\.\/\.\.\/\.\.\//, message: 'Too deep relative import' },
@@ -32,6 +29,30 @@ export function lintCheck(filePath, projectDir) {
       }
     }
 
+    if (filePath.includes('/translate/') || filePath.includes('\\translate\\')) {
+      const translateForbidden = [
+        { pattern: /import.*from\s+['"].*\/handlers\//, message: 'translate/ must not import from handlers/' },
+        { pattern: /import.*from\s+['"].*\/providers/, message: 'translate/ must not import from providers' },
+        { pattern: /import.*from\s+['"].*\/routing/, message: 'translate/ must not import from routing' },
+        { pattern: /import.*from\s+['"].*\/request/, message: 'translate/ must not import from request' },
+        { pattern: /fetch\(/, message: 'translate/ must not use fetch (purity violation)' },
+        { pattern: /fs\./, message: 'translate/ must not use fs (purity violation)' },
+      ]
+      for (const { pattern, message } of translateForbidden) {
+        if (pattern.test(content)) {
+          violations.push(message)
+        }
+      }
+    }
+
+    if (filePath.includes('/handlers/') || filePath.includes('\\handlers\\')) {
+      if (/import.*from\s+['"].*format.*translation|import.*from\s+['"].*format-translation/.test(content)) {
+        if (!/import.*from\s+['"].*\/translate\//.test(content)) {
+          violations.push('handlers/ must use translate/ for format conversion')
+        }
+      }
+    }
+
     return {
       valid: violations.length === 0,
       message: violations.length === 0 
@@ -44,17 +65,14 @@ export function lintCheck(filePath, projectDir) {
   }
 }
 
-// CLI mode
 if (process.argv[1]?.endsWith('lint-check.mjs')) {
-  let input = {}
-  try { const raw = readFileSync(0, 'utf-8'); if (raw.trim()) input = JSON.parse(raw) } catch {}
+  const input = await parseStdin()
   const filePath = input.filePath
     || input.tool_input?.file_path
     || input.file_path
     || input.path
     || ''
   const result = lintCheck(filePath, input.projectDir || input.cwd || process.cwd())
-  // Only output on failure with violations; success = silent (exit 0)
   if (!result.valid && result.violations && result.violations.length > 0) {
     console.log(result.message)
   }
