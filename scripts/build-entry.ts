@@ -21,7 +21,7 @@ Bun.serve({
   port,
   hostname: "0.0.0.0",
   idleTimeout: 30,
-  maxRequestBodySize: 1024 * 1024, // 1MB
+  maxRequestBodySize: 10 * 1024 * 1024, // 10MB — matches config.ts MAX_BODY_SIZE
   error: (error) => {
     log.error('HTTP', `Unhandled error: ${error.message}`, { error: error.message });
     return new Response("Internal Server Error", { status: 500 });

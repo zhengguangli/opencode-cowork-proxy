@@ -35,7 +35,11 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
       let buffer = '';
 
       function processStreamDelta(delta_: Record<string, unknown>, parsed_: Record<string, unknown>) {
+        // SSE delta/parsed shapes are known by OpenAI streaming protocol but too
+        // dynamic for static typing — using `as any` avoids excessive type-guard verbosity.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const delta = delta_ as any;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const parsed = parsed_ as any;
         // Capture usage from any chunk that has it
         if (parsed.usage) {

@@ -10,7 +10,7 @@
 
 import { VERSION } from '../version';
 import { START_TIME, GO_UPSTREAM, ZEN_UPSTREAM } from '../config';
-import { jsonResponse, formatUptime } from '../request';
+import { formatUptime } from '../request';
 
 /**
  * Handle GET / — health check endpoint.
@@ -19,7 +19,7 @@ import { jsonResponse, formatUptime } from '../request';
  * and available API endpoints. No authentication required.
  */
 export async function handleHealthCheck(upstream: string): Promise<Response> {
-  return jsonResponse(new Request('http://localhost/'), {
+  const body = JSON.stringify({
     name: "opencode-cowork-proxy",
     version: VERSION,
     status: "ok",
@@ -35,5 +35,8 @@ export async function handleHealthCheck(upstream: string): Promise<Response> {
       "/v1/responses": "OpenAI Responses API — translated to Chat Completions",
       "/v1/models": "Model list — proxied from upstream with 5min cache",
     },
+  });
+  return new Response(body, {
+    headers: { "Content-Type": "application/json" },
   });
 }

@@ -115,6 +115,12 @@ export async function handleAnthropicToOpenAI(
       signal: anthUpstreamSignal,
     });
     if (!anthPassRes.ok) return upstreamErrorResponse(anthPassRes, await anthPassRes.text());
+    if (anthIsStreaming) {
+      const ptHeaders = new Headers(anthPassRes.headers);
+      const compressed = compressibleStream(anthPassRes.body as ReadableStream, request);
+      if (compressed.contentEncoding) ptHeaders.set("Content-Encoding", compressed.contentEncoding);
+      return new Response(compressed.stream, { headers: ptHeaders });
+    }
     return anthPassRes;
   }
 
@@ -135,5 +141,11 @@ export async function handleAnthropicToOpenAI(
     signal: anthUpstreamSignal,
   });
   if (!anthPassRes.ok) return upstreamErrorResponse(anthPassRes, await anthPassRes.text());
+  if (anthIsStreaming) {
+    const ptHeaders = new Headers(anthPassRes.headers);
+    const compressed = compressibleStream(anthPassRes.body as ReadableStream, request);
+    if (compressed.contentEncoding) ptHeaders.set("Content-Encoding", compressed.contentEncoding);
+    return new Response(compressed.stream, { headers: ptHeaders });
+  }
   return anthPassRes;
 }

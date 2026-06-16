@@ -26,7 +26,7 @@ function translateImageBlock(part: Record<string, unknown>): Record<string, unkn
 }
 
 export function formatAnthropicToOpenAI(body: Record<string, unknown>): Record<string, unknown> {
-  const { model, messages, system, temperature, max_tokens, top_p, top_k, tool_choice, stop_sequences, tools, stream, metadata, thinking } = body;
+  const { model, messages, system, temperature, max_tokens, top_p, top_k, tool_choice, stop_sequences, tools, stream, metadata, thinking, response_format } = body;
 
   const openAIMessages = Array.isArray(messages)
     ? messages.flatMap((msg: Record<string, unknown>) => {
@@ -124,6 +124,9 @@ export function formatAnthropicToOpenAI(body: Record<string, unknown>): Record<s
 
   // Passthrough thinking config (DeepSeek-specific)
   if (thinking !== undefined) data.thinking = thinking;
+
+  // Passthrough response_format (e.g., json_object for structured output)
+  if (response_format !== undefined) data.response_format = response_format;
 
   if (tools) {
     data.tools = asRecordArray(tools).map((item) => ({

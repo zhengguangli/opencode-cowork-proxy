@@ -112,6 +112,12 @@ export async function handleOpenAIChatCompletions(
       signal: oaiUpstreamSignal,
     });
     if (!oaiPassRes.ok) return upstreamErrorResponse(oaiPassRes, await oaiPassRes.text());
+    if (oaiIsStreaming) {
+      const ptHeaders = new Headers(oaiPassRes.headers);
+      const compressed = compressibleStream(oaiPassRes.body as ReadableStream, request);
+      if (compressed.contentEncoding) ptHeaders.set("Content-Encoding", compressed.contentEncoding);
+      return new Response(compressed.stream, { headers: ptHeaders });
+    }
     return oaiPassRes;
   }
 
@@ -132,5 +138,11 @@ export async function handleOpenAIChatCompletions(
     signal: oaiUpstreamSignal,
   });
   if (!oaiPassRes.ok) return upstreamErrorResponse(oaiPassRes, await oaiPassRes.text());
+  if (oaiIsStreaming) {
+    const ptHeaders = new Headers(oaiPassRes.headers);
+    const compressed = compressibleStream(oaiPassRes.body as ReadableStream, request);
+    if (compressed.contentEncoding) ptHeaders.set("Content-Encoding", compressed.contentEncoding);
+    return new Response(compressed.stream, { headers: ptHeaders });
+  }
   return oaiPassRes;
 }

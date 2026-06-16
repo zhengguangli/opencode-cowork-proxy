@@ -30,20 +30,18 @@ export function isCompressionAccepted(request: Request): boolean {
  *
  * @param stream - The output ReadableStream<Uint8Array>
  * @param request - The incoming request (used to check Accept-Encoding)
- * @param thresholdBytes - Minimum stream size to bother compressing (default 512)
  * @returns { stream, contentEncoding } where contentEncoding is 'gzip' or null
  */
 export function compressibleStream(
   stream: ReadableStream,
   request: Request,
-  thresholdBytes = 512,
 ): { stream: ReadableStream; contentEncoding: string | null } {
   if (!isCompressionAccepted(request)) {
     return { stream, contentEncoding: null };
   }
 
-  // We don't know the final size yet (it's a stream), so we always attempt
-  // compression. The CompressionStream handles small payloads efficiently.
+  // CompressionStream operates on-the-fly — the stream size is unknown at
+  // this point, but small payloads compress efficiently regardless.
   try {
     const compressed = stream.pipeThrough(new CompressionStream('gzip'));
     return { stream: compressed, contentEncoding: 'gzip' };

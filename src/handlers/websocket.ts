@@ -4,10 +4,15 @@
  * WHEN TO READ THIS FILE: Adding WebSocket support for a new format pair,
  * debugging WebSocket connection issues, or changing stream behavior.
  *
+ * STATUS: Placeholder stub — currently returns 426 Upgrade Required with
+ * instructions to use SSE streaming instead. Full WebSocket support requires
+ * CF Workers WebSocket API (Durable Objects or WebSocket Hibernation).
+ * See https://developers.cloudflare.com/workers/runtime-apis/websockets/
+ *
  * Translates streaming API responses over WebSocket connections.
  * Currently supports: Anthropic Message SSE stream → WebSocket messages.
  *
- * Protocol:
+ * Protocol (planned):
  *   Client connects to /ws/v1/messages?model=...&upstream=...
  *   Server streams Anthropic SSE events as WebSocket text messages,
  *   one JSON message per SSE event.

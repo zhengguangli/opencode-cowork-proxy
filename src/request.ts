@@ -117,8 +117,20 @@ export function authenticateRequest(request: Request, path: string): { key: stri
 }
 
 export async function safeUpstreamFetch(url: string, init: RequestInit): Promise<Response> {
-  // Don't retry streaming requests — can't replay SSE
-  const isStreaming = typeof init.body === "string" && init.body.includes('"stream":true');
+  // Don't retry streaming requests — can't replay SSE.
+  // Parse the JSON body to check the `stream` field reliably, avoiding
+  // false positives/negatives from string heuristics (e.g. "stream": true
+  // with a space, or the substring appearing in message content).
+  let isStreaming = false;
+  if (typeof init.body === "string") {
+    try {
+      const parsed = JSON.parse(init.body);
+      isStreaming = !!(parsed && typeof parsed === "object" && (parsed as Record<string, unknown>).stream);
+    } catch {
+      // Fall back to heuristic for non-JSON or malformed bodies
+      isStreaming = init.body.includes('"stream":true') || init.body.includes('"stream": true');
+    }
+  }
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {

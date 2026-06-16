@@ -39,6 +39,11 @@ export const VISION_CAPABLE_GO = new Set<string>([
   "hy3-preview",
 ]);
 
+// NOTE: VISION_CAPABLE_ZEN is intentionally a subset of VISION_CAPABLE_GO.
+// The Zen upstream has fewer models than Go. Models present in GO but absent
+// from ZEN (qwen3.7-max, qwen3.7-plus, mimo-v2-pro, mimo-v2-omni, mimo-v2.5-pro,
+// mimo-v2.5, hy3-preview) are not available on the Zen upstream.
+// Verify against upstream: curl -s https://opencode.ai/zen/v1/models
 export const VISION_CAPABLE_ZEN = new Set<string>([
   "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-opus-4-5", "claude-opus-4-1",
   "claude-sonnet-4-6", "claude-sonnet-4-5", "claude-sonnet-4",

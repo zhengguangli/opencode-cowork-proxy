@@ -218,6 +218,9 @@ export function streamChatCompletionsToResponses(
           finishReason = (firstChoice as Record<string, unknown>).finish_reason as string;
         }
 
+        // SSE delta shape is known by OpenAI streaming protocol but too dynamic
+        // for static typing — using `any` avoids excessive type-guard verbosity.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const delta: any = firstChoice?.delta;
         if (!delta) return;
 

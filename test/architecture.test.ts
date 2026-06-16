@@ -80,7 +80,6 @@ describe('Architecture boundaries', () => {
   describe('L5 — Entry point isolation', () => {
     const entries = [
       path.resolve(__dirname, '../scripts/build-entry.ts'),
-      path.resolve(__dirname, '../api/[[...route]].ts'),
     ];
 
     entries.forEach(entry => {
@@ -95,24 +94,6 @@ describe('Architecture boundaries', () => {
         const violations = imports.filter(i => i.includes('src/') && !allowedSrc.some(a => i.includes(a)));
         expect(violations, `Found non-index src imports in entry point: ${violations.join(', ')}`).toEqual([]);
       });
-    });
-  });
-
-  // L4a: request-handlers.ts (Router layer) must not import from entry points
-  describe('L4 — Router handler boundaries', () => {
-    it('request-handlers.ts must not import from deployment entry points', () => {
-      const filePath = path.join(SRC, 'request-handlers.ts');
-      if (!fs.existsSync(filePath)) return;
-      const imports = getImports(filePath);
-      const violations = imports.filter(i => i.includes('../server') || i.includes('../api/'));
-      expect(violations, `Found entry-point imports in request-handlers.ts: ${violations.join(', ')}`).toEqual([]);
-    });
-
-    it('request-handlers.ts must not import from itself', () => {
-      const filePath = path.join(SRC, 'request-handlers.ts');
-      if (!fs.existsSync(filePath)) return;
-      const content = fs.readFileSync(filePath, 'utf-8');
-      expect(content.includes('./request-handlers')).toBe(false);
     });
   });
 

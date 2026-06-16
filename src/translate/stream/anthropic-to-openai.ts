@@ -57,6 +57,9 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
 
           let evt: Record<string, unknown>;
           try { evt = JSON.parse(raw); } catch { continue; }
+          // SSE event shape is known by Anthropic streaming protocol but too dynamic
+          // for static typing — using `as any` avoids excessive type-guard verbosity.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const e = evt as any;
 
           switch (e.type) {

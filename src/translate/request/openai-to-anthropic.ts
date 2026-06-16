@@ -36,7 +36,7 @@ function imageSourceFromUrl(url: string | undefined): Record<string, unknown> {
 }
 
 export function formatOpenAIToAnthropic(body: Record<string, unknown>): Record<string, unknown> {
-  const { model, messages, temperature, max_tokens, top_p, stop, tools, stream, tool_choice, response_format, user } = body;
+  const { model, messages, temperature, max_tokens, top_p, stop, tools, stream, tool_choice, response_format, user, parallel_tool_calls, stream_options } = body;
 
   // Separate system messages from conversation
   const systemMessages: string[] = [];
@@ -197,6 +197,8 @@ export function formatOpenAIToAnthropic(body: Record<string, unknown>): Record<s
     }
   }
   if (response_format !== undefined) anthropicRequest.response_format = response_format;
+  if (parallel_tool_calls !== undefined) anthropicRequest.parallel_tool_calls = parallel_tool_calls;
+  if (stream_options !== undefined) anthropicRequest.stream_options = stream_options;
   if (user !== undefined) anthropicRequest.metadata = { ...(anthropicRequest.metadata || {}), user_id: user };
 
   return anthropicRequest;
