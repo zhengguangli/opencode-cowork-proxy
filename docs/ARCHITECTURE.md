@@ -465,7 +465,7 @@ Source files:  max 500 lines
 Test files:    max 500 lines
 Config files:  max 400 lines
 
-Enforced by: test/architecture.spec.ts "M3 -- File size"
+Enforced by: test/architecture.test.ts "M3 -- File size"
 ```
 
 **Current largest files** (approximate):
@@ -481,7 +481,7 @@ Enforced by: test/architecture.spec.ts "M3 -- File size"
 ```
 Per file: max 10 import statements
 
-Enforced by: test/architecture.spec.ts "M4 -- Import count"
+Enforced by: test/architecture.test.ts "M4 -- Import count"
 ```
 
 ### C3: Translation purity (D1)
@@ -492,7 +492,7 @@ Translate modules must NOT contain:
   - fs.* calls
   - Any I/O operations
 
-Enforced by: test/architecture.spec.ts "D1 -- Pure translation functions"
+Enforced by: test/architecture.test.ts "D1 -- Pure translation functions"
 ```
 
 ### C4: Translate isolation (L1)
@@ -502,7 +502,7 @@ Translate modules must NOT import from:
   - src/request.ts
   - src/index.ts or src/handlers/
 
-Enforced by: test/architecture.spec.ts "L1 -- Translate modules isolation"
+Enforced by: test/architecture.test.ts "L1 -- Translate modules isolation"
 ```
 
 ### C5: Request utility isolation (L2)
@@ -511,7 +511,7 @@ Enforced by: test/architecture.spec.ts "L1 -- Translate modules isolation"
 src/request.ts must NOT import from:
   - Any translate/ module
 
-Enforced by: test/architecture.spec.ts "L2 -- request.ts isolation"
+Enforced by: test/architecture.test.ts "L2 -- request.ts isolation"
 ```
 
 ### C6: Utility isolation (L3)
@@ -521,7 +521,7 @@ Utility files (routing.ts, auth.ts, vision.ts, backpressure.ts,
                think-tag-stripper.ts) must NOT import from:
   - translate/, request/, or index.ts
 
-Enforced by: test/architecture.spec.ts "L3 -- Utilities isolation"
+Enforced by: test/architecture.test.ts "L3 -- Utilities isolation"
 ```
 
 ### C7: Entry point isolation (L5)
@@ -530,7 +530,7 @@ Enforced by: test/architecture.spec.ts "L3 -- Utilities isolation"
 Entry points (scripts/build-entry.ts) must ONLY import index.ts
 (no direct imports from handlers/, translate/, request/, etc.)
 
-Enforced by: test/architecture.spec.ts "L5 -- Entry point isolation"
+Enforced by: test/architecture.test.ts "L5 -- Entry point isolation"
 ```
 
 ### C8: Translation barrel integrity
@@ -538,7 +538,7 @@ Enforced by: test/architecture.spec.ts "L5 -- Entry point isolation"
 ```
 src/translate/index.ts must be a pure barrel file (no imports).
 
-Enforced by: test/architecture.spec.ts "Translation barrel integrity"
+Enforced by: test/architecture.test.ts "Translation barrel integrity"
 ```
 
 ### C9: Type safety
@@ -550,7 +550,7 @@ Rules:
   - No @ts-ignore / @ts-expect-error
   - Limit non-null assertions (!.) to 3 per file
 
-Enforced by: .claude/skills/architecture-guard/scripts/check-type-safety.mjs
+Enforced by: .agents/skills/quality-gate/scripts/check-type-safety.mjs
 ```
 
 ### C10: Naming conventions
@@ -565,7 +565,7 @@ Code:
   - Types/interfaces: PascalCase
   - Functions/variables: camelCase
 
-Enforced by: .claude/skills/architecture-guard/scripts/check-naming.mjs
+Enforced by: .agents/skills/quality-gate/scripts/check-naming.mjs
 ```
 
 ### C11: Naming conventions (project-specific)
@@ -656,17 +656,17 @@ Enforced by: .claude/skills/architecture-guard/scripts/check-naming.mjs
 
 | File | Role |
 |------|------|
-| `test/architecture.spec.ts` | Vitest-based architecture boundary tests |
-| `.claude/skills/architecture-guard/scripts/check-layers.mjs` | Generic layer dependency check |
-| `.claude/skills/architecture-guard/scripts/check-naming.mjs` | Naming convention check |
-| `.claude/skills/architecture-guard/scripts/check-file-size.mjs` | File size threshold check |
-| `.claude/skills/architecture-guard/scripts/check-type-safety.mjs` | Type safety lint check |
+| `test/architecture.test.ts` | Vitest-based architecture boundary tests |
+| `.agents/skills/quality-gate/scripts/check-layers.mjs` | Generic layer dependency check |
+| `.agents/skills/quality-gate/scripts/check-naming.mjs` | Naming convention check |
+| `.agents/skills/quality-gate/scripts/check-file-size.mjs` | File size threshold check |
+| `.agents/skills/quality-gate/scripts/check-type-safety.mjs` | Type safety lint check |
 
 ---
 
 ## Architecture Guard Scripts Assessment
 
-The existing architecture-guard scripts in `.claude/skills/architecture-guard/scripts/` are **generic** -- they work across any project by scanning directory structure and applying broad rules (layer detection via folder names, generic naming patterns, file size thresholds, type safety checks).
+The existing architecture-guard scripts in `.agents/skills/quality-gate/scripts/` are **generic** -- they work across any project by scanning directory structure and applying broad rules (layer detection via folder names, generic naming patterns, file size thresholds, type safety checks).
 
 ### What they cover well for this project
 
@@ -676,9 +676,9 @@ The existing architecture-guard scripts in `.claude/skills/architecture-guard/sc
 
 ### What is missing specifically for this project
 
-The generic scripts do not validate the project-specific invariants captured in `test/architecture.spec.ts`:
+The generic scripts do not validate the project-specific invariants captured in `test/architecture.test.ts`:
 
-1. **Layer isolation rules** -- The `architecture-guard` scripts detect layers by folder names (`types/`, `config/`, `service/`, `ui/`, etc.) which do not match this project's directory structure. The actual layer enforcement is done by `test/architecture.spec.ts`.
+1. **Layer isolation rules** -- The `architecture-guard` scripts detect layers by folder names (`types/`, `config/`, `service/`, `ui/`, etc.) which do not match this project's directory structure. The actual layer enforcement is done by `test/architecture.test.ts`.
 2. **Translation purity** -- No check for `fetch()` in translate modules.
 3. **Barrel file integrity** -- No check that barrel re-export files are import-free.
 4. **Entry point isolation** -- No check that entry points only import index.ts.
@@ -687,7 +687,7 @@ The generic scripts do not validate the project-specific invariants captured in 
 
 ### Recommendation
 
-Keep `test/architecture.spec.ts` as the primary architecture enforcement mechanism -- it is specific to this project's structure and invariants. The generic `architecture-guard` scripts serve as a secondary safety net for cross-cutting concerns (type safety, file size, naming). If adding to the architecture-guard scripts, focus on project-specific rules:
+Keep `test/architecture.test.ts` as the primary architecture enforcement mechanism -- it is specific to this project's structure and invariants. The generic `architecture-guard` scripts serve as a secondary safety net for cross-cutting concerns (type safety, file size, naming). If adding to the architecture-guard scripts, focus on project-specific rules:
 
 - Add a check that translate modules contain no `fetch()` or `fs.` references
 - Add a check that barrel files (`translate/index.ts`, `handlers/index.ts`) contain no imports

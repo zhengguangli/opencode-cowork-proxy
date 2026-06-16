@@ -14,22 +14,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v1
         with:
-          node-version: '20'
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
 
       - name: Pre-execution hooks
         run: |
           if [ -f .agents/skills/hooks-framework/scripts/context-check.mjs ]; then
-            node .agents/skills/hooks-framework/scripts/context-check.mjs
+            bun .agents/skills/hooks-framework/scripts/context-check.mjs
           fi
 
-      - name: Post-execution hooks
-        run: |
-          if [ -f .agents/skills/hooks-framework/scripts/lint-check.mjs ]; then
-            node .agents/skills/hooks-framework/scripts/lint-check.mjs
-          fi
+      - name: Architecture boundary tests
+        run: bun test test/architecture.test.ts
 
       - name: Upload trace logs
         if: always()

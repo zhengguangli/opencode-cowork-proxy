@@ -6,15 +6,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/.agents/skills/hooks-framework/scripts/context-check.mjs\""
+            "command": "bun \"$(git rev-parse --show-toplevel)/.agents/skills/hooks-framework/scripts/context-check.mjs\""
           },
           {
             "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/.agents/skills/hooks-framework/scripts/env-verify.mjs\""
+            "command": "bun \"$(git rev-parse --show-toplevel)/.agents/skills/hooks-framework/scripts/env-verify.mjs\""
           },
           {
             "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/.agents/skills/hooks-framework/scripts/context-cleanup.mjs\" --seed"
+            "command": "bun \"$(git rev-parse --show-toplevel)/.agents/skills/hooks-framework/scripts/context-cleanup.mjs\" --seed"
           }
         ]
       }
@@ -25,11 +25,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/.agents/skills/hooks-framework/scripts/lint-check.mjs\""
+            "command": "bun \"$(git rev-parse --show-toplevel)/.agents/skills/hooks-framework/scripts/lint-check.mjs\""
           },
           {
             "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/.agents/skills/hooks-framework/scripts/context-cleanup.mjs\""
+            "command": "bun \"$(git rev-parse --show-toplevel)/.agents/skills/hooks-framework/scripts/context-cleanup.mjs\""
           }
         ]
       },
@@ -37,7 +37,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/.agents/skills/hooks-framework/scripts/tool-offload.mjs\""
+            "command": "bun \"$(git rev-parse --show-toplevel)/.agents/skills/hooks-framework/scripts/tool-offload.mjs\""
           }
         ]
       }
@@ -48,7 +48,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/.agents/skills/hooks-framework/scripts/compaction.mjs\""
+            "command": "bun \"$(git rev-parse --show-toplevel)/.agents/skills/hooks-framework/scripts/compaction.mjs\""
           }
         ]
       }
@@ -58,19 +58,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/.agents/skills/hooks-framework/scripts/continuation.mjs\""
+            "command": "bun \"$(git rev-parse --show-toplevel)/.agents/skills/hooks-framework/scripts/continuation.mjs\""
           },
           {
             "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/.agents/skills/hooks-framework/scripts/trace-log.mjs\""
+            "command": "bun \"$(git rev-parse --show-toplevel)/.agents/skills/hooks-framework/scripts/trace-log.mjs\""
           },
           {
             "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/.agents/skills/hooks-framework/scripts/todo-sync.mjs\""
+            "command": "bun \"$(git rev-parse --show-toplevel)/.agents/skills/hooks-framework/scripts/todo-sync.mjs\""
           },
           {
             "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/.agents/skills/hooks-framework/scripts/quality-metric.mjs\""
+            "command": "bun \"$(git rev-parse --show-toplevel)/.agents/skills/hooks-framework/scripts/quality-metric.mjs\""
           }
         ]
       }

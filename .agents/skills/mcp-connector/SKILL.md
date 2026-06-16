@@ -1,6 +1,9 @@
 ---
 name: mcp-connector
 description: 'MCP tool connector. Integrate MCP servers (Context7, GitHub API) for real-time knowledge. Triggers on explicit MCP requests: "配置 MCP", "连接 MCP 服务器", "使用 Context7", "MCP 集成". Do NOT trigger when discussing general tools.'
+capabilities:
+  - tool-integration
+  - config-gen
 ---
 
 # MCP Connector — External Tool Integration

@@ -1,6 +1,9 @@
 ---
 name: web-search
 description: 'Web search integration. Query latest docs, version info, real-time data beyond training cutoff. Triggers ONLY on explicit search requests: "帮我搜索", "查一下最新", "需要联网搜索", "上网查一下". Do NOT trigger when discussing skills, tools, or configuration.'
+capabilities:
+  - search
+  - retrieval
 ---
 
 # Web Search — Real-time Information Retrieval

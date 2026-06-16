@@ -20,5 +20,5 @@ hooks:
 project:
   name: opencode-cowork-proxy
   type: cloudflare-worker
-  test_command: vitest run
-  lint_command: bun tsc --noEmit
+  test_command: bun test
+  lint_command: bun run typecheck
