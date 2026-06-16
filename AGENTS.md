@@ -41,6 +41,7 @@
 | hooks-framework | Deterministic execution hooks |
 | web-search | Web search integration |
 | mcp-connector | MCP tool connector |
+| api-translation | API format translation (Anthropic↔OpenAI bridge) |
 | tool-search | Dynamic tool discovery |
 
 ## Navigation
@@ -54,6 +55,7 @@
 - MCP integration? Read `.agents/skills/mcp-connector/SKILL.md`
 - Install? Read `README.md` or run `bun run scripts/install.mjs --help`
 - Sandbox config? Read `docs/SANDBOX.md` or run `.agents/skills/sandbox-exec/scripts/sandbox/run-in-sandbox.sh`
+- Format translation logic? Read `.agents/skills/api-translation/SKILL.md` — format pairs, stream patterns, vision routing
 - API endpoints & features? Read `README.md` for the full endpoint reference
 - Plugin architecture? Read `src/translate/plugin.ts` — `TranslatorRegistry`, `FormatPair` interfaces
 - Provider routing? Read `src/providers.ts` — `ProviderRegistry`, `resolveByPrefix()`

@@ -22,7 +22,7 @@ Conduct quality reviews of builder's output, ensuring code complies with archite
 |------|----------|
 | Architecture Compliance | Dependency direction, layer boundaries, Provider interfaces |
 | Taste Invariants | Naming, log format, file size, type safety |
-| Security | Boundary validation, input sanitization, sensitive data leaks |
+| Security | Boundary validation, input sanitization, sensitive data leaks, auth flow integrity, upstream injection risks, key/secret handling |
 | Error Handling | No broad catch, no silent failures, correct error propagation |
 | Maintainability | DRY check, code clarity, documentation completeness, test coverage |
 | Git Safety | No destructive commands, no accidental amend, no revert of non-own changes |
@@ -58,10 +58,21 @@ Conduct quality reviews of builder's output, ensuring code complies with archite
 - Type safety completeness check
 - DRY principle adherence
 
+### Phase 3.5: Security Review (≤3 min)
+- **Auth flow integrity**: Verify authentication gates are in place for all POST endpoints; health/GET endpoints are correctly excluded
+- **Injection vectors**: Check upstream URL, header, and body forwarding for injection surfaces (e.g., `X-Upstream-Url` overwrite, header smuggling)
+- **Secret handling**: No hardcoded keys, tokens, or secrets. Confirm secrets are read from environment variables or secure storage only
+- **Input validation**: All external inputs validated at boundaries (body size gate, format checks, type coercion)
+- **Output safety**: No leaking of internal config, stack traces, or upstream secrets in error responses
+- **Dependency risk**: Flag any new dependency for known vulnerabilities (check `scripts/audit-deps.mjs` output)
+
+**Security review is mandatory for:** API gateway changes, auth/credential logic, upstream URL/header forwarding, and any code handling raw request bodies.
+
 ### Phase 4: Generate Report
 - Categorize issues by severity: Critical / Warning / Suggestion
 - Attach fix instructions to each issue (not vague suggestions)
 - Provide final verdict: Approve / Request Changes / Comment
+- Security-critical issues (auth bypass, secret leak, injection) must block merge regardless of other verdicts
 
 ## Quality Standards
 

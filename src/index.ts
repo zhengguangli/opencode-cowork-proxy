@@ -34,7 +34,7 @@ import { recordRequest } from './handlers/metrics';
 import { ensureTranslatorsRegistered } from './translate/registry';
 import { ensureProvidersRegistered } from './providers';
 import { recordAudit } from './audit';
-import { log, withRequestId, generateId, requestIdStorage } from './logger';
+import { log, withRequestId, generateId } from './logger';
 
 // ---- Startup profiling ----
 
@@ -183,12 +183,9 @@ app.use('*', async (c, next) => {
 });
 
 // Wrap every request with a unique request_id for log correlation.
-// If build-entry.ts already set one (via AsyncLocalStorage), reuse it.
+// Uses a module-level variable (CF Workers compatible) — each isolate
+// processes one request at a time, so no AsyncLocalStorage needed.
 app.all('*', (c) => {
-  const existingId = requestIdStorage.getStore();
-  if (existingId) {
-    return handleRequest(c.req.raw);
-  }
   return withRequestId(generateId(), () => handleRequest(c.req.raw));
 });
 
