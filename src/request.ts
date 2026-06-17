@@ -26,6 +26,7 @@ import { extractApiKey, validateApiKey, authErrorResponse } from './auth';
 import { UPSTREAM_FORWARD_HEADERS, MAX_BODY_SIZE, MAX_RETRIES, RETRY_BASE_DELAY, STREAM_TIMEOUT } from './config';
 import { log } from './logger';
 import { trackRateLimits } from './rate-limit';
+import { metricsRegistry } from './metrics';
 
 export function anthropicHeaders(request: Request, key: string): Record<string, string> {
   const headers: Record<string, string> = {
@@ -132,6 +133,11 @@ export async function safeUpstreamFetch(url: string, init: RequestInit): Promise
     }
   }
 
+  // Extract hostname for upstream metrics labeling
+  const upstreamLabel = (() => {
+    try { return new URL(url).hostname; } catch { return 'unknown'; }
+  })();
+
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const res = await fetch(url, init);
@@ -142,6 +148,7 @@ export async function safeUpstreamFetch(url: string, init: RequestInit): Promise
       // Not retryable — return immediately
       if (res.status < 500) {
         // 2xx, 3xx, 4xx (incl. 429) — no retry
+        metricsRegistry.recordUpstreamRequest(upstreamLabel);
         return res;
       }
 
@@ -153,10 +160,14 @@ export async function safeUpstreamFetch(url: string, init: RequestInit): Promise
         continue;
       }
 
-      // Last attempt — return whatever we got
+      // Last attempt — record and return whatever we got
+      metricsRegistry.recordUpstreamRequest(upstreamLabel);
+      metricsRegistry.recordUpstreamError(upstreamLabel, res.status);
       return res;
     } catch (err: unknown) {
       if ((err as Error)?.name === "AbortError") {
+        metricsRegistry.recordUpstreamRequest(upstreamLabel);
+        metricsRegistry.recordUpstreamError(upstreamLabel, 499);
         return new Response(
           JSON.stringify({ error: { type: "upstream_error", message: "Request aborted" } }),
           { status: 499, headers: { "Content-Type": "application/json" } },
@@ -171,6 +182,7 @@ export async function safeUpstreamFetch(url: string, init: RequestInit): Promise
         continue;
       }
 
+      metricsRegistry.recordUpstreamError(upstreamLabel, 502);
       return new Response(
         JSON.stringify({ error: { type: "upstream_error", message: "Upstream unreachable" } }),
         { status: 502, headers: { "Content-Type": "application/json" } },
@@ -178,6 +190,7 @@ export async function safeUpstreamFetch(url: string, init: RequestInit): Promise
     }
   }
   // Should not reach here, but satisfy TypeScript
+  metricsRegistry.recordUpstreamError(upstreamLabel, 502);
   return new Response(
     JSON.stringify({ error: { type: "upstream_error", message: "Exhausted retries" } }),
     { status: 502, headers: { "Content-Type": "application/json" } },

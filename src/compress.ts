@@ -10,6 +10,7 @@
  *   isCompressionAccepted() — checks Accept-Encoding header.
  */
 import { log } from './logger';
+import { metricsRegistry, trackActiveStream } from './metrics';
 
 /**
  * Check if the client accepts gzip compression via Accept-Encoding header.
@@ -37,16 +38,16 @@ export function compressibleStream(
   request: Request,
 ): { stream: ReadableStream; contentEncoding: string | null } {
   if (!isCompressionAccepted(request)) {
-    return { stream, contentEncoding: null };
+    return { stream: trackActiveStream(stream, metricsRegistry), contentEncoding: null };
   }
 
   // CompressionStream operates on-the-fly — the stream size is unknown at
   // this point, but small payloads compress efficiently regardless.
   try {
     const compressed = stream.pipeThrough(new CompressionStream('gzip'));
-    return { stream: compressed, contentEncoding: 'gzip' };
+    return { stream: trackActiveStream(compressed, metricsRegistry), contentEncoding: 'gzip' };
   } catch (err) {
     log.debug('COMPRESS', 'CompressionStream not available', { error: err });
-    return { stream, contentEncoding: null };
+    return { stream: trackActiveStream(stream, metricsRegistry), contentEncoding: null };
   }
 }
