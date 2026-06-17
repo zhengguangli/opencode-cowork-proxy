@@ -55,7 +55,7 @@ recordAudit('proxy', 'startup', { startupMs, registries: ['translators', 'provid
  */
 function recordMetrics(method: string, path: string, status: number, durationMs: number, model?: string | null): void {
   metricsRegistry.recordRequest(method, path, status, durationMs);
-  if (model) metricsRegistry.recordModelRequest(model, status, durationMs);
+  metricsRegistry.recordModelRequest(model || '(unknown)', status, durationMs);
   log.access(method, path, status, durationMs);
 }
 
