@@ -38,6 +38,7 @@ import { ensureTranslatorsRegistered } from './translate/registry';
 import { ensureProvidersRegistered } from './providers';
 import { recordAudit } from './audit';
 import { log, resolveContextIds, withContextIds } from './logger';
+import { startRequestSpan, startSpan, endSpan, recordError } from './tracing';
 
 // ---- Startup profiling ----
 
@@ -69,12 +70,16 @@ async function handleRequest(request: Request): Promise<Response> {
   const startTime = performance.now();
   const url = new URL(request.url);
 
+  // Create root span for this request — closed in all return paths
+  const rootSpan = startRequestSpan(url.pathname, request.method);
+
   try {
     // WebSocket upgrade check (before routing & auth for /ws/ paths)
     if (url.pathname.startsWith('/ws/')) {
       const wsResp = await handleWebSocketUpgrade(request);
       if (wsResp) {
         recordMetrics('WS', url.pathname, wsResp.status, performance.now() - startTime);
+        endSpan(rootSpan, { status: wsResp.status });
         return wsResp;
       }
     }
@@ -105,6 +110,7 @@ async function handleRequest(request: Request): Promise<Response> {
       const sizeResp = await checkBodySize(request);
       if (sizeResp) {
         recordMetrics(request.method, url.pathname, 413, performance.now() - startTime);
+        endSpan(rootSpan, { status: 413 });
         return sizeResp;
       }
     }
@@ -113,6 +119,7 @@ async function handleRequest(request: Request): Promise<Response> {
     if (routeInfo.path === '/metrics' && request.method === 'GET') {
       const resp = await handleMetrics(request, routeInfo);
       recordMetrics(request.method, url.pathname, resp.status, performance.now() - startTime);
+      endSpan(rootSpan, { status: resp.status });
       return resp;
     }
 
@@ -120,6 +127,7 @@ async function handleRequest(request: Request): Promise<Response> {
     if (routeInfo.path === '/health/upstream' && request.method === 'GET') {
       const resp = await handleUpstreamHealth(request, routeInfo);
       recordMetrics(request.method, url.pathname, resp.status, performance.now() - startTime);
+      endSpan(rootSpan, { status: resp.status });
       return resp;
     }
 
@@ -127,34 +135,49 @@ async function handleRequest(request: Request): Promise<Response> {
     if (routeInfo.path === '/audit/log' && request.method === 'GET') {
       const resp = await handleAuditLog(request, routeInfo);
       recordMetrics(request.method, url.pathname, resp.status, performance.now() - startTime);
+      endSpan(rootSpan, { status: resp.status });
       return resp;
     }
 
+    // ---- API handler dispatch (with child spans) ----
+
     // Anthropic → OpenAI (model-aware)
     if (routeInfo.path === '/v1/messages' && request.method === 'POST') {
+      const hSpan = startSpan('anthropic.messages', rootSpan);
       const resp = await handleAnthropicToOpenAI(request, routeInfo, fmt);
       recordMetrics(request.method, url.pathname, resp.status, performance.now() - startTime, routeInfo);
+      endSpan(hSpan, { status: resp.status, model: routeInfo.resolvedModel });
+      endSpan(rootSpan, { status: resp.status, model: routeInfo.resolvedModel });
       return resp;
     }
 
     // OpenAI → Anthropic (or pass-through) (model-aware)
     if (routeInfo.path === '/v1/chat/completions' && request.method === 'POST') {
+      const hSpan = startSpan('openai.chat', rootSpan);
       const resp = await handleOpenAIChatCompletions(request, routeInfo, fmt);
       recordMetrics(request.method, url.pathname, resp.status, performance.now() - startTime, routeInfo);
+      endSpan(hSpan, { status: resp.status, model: routeInfo.resolvedModel });
+      endSpan(rootSpan, { status: resp.status, model: routeInfo.resolvedModel });
       return resp;
     }
 
     // Responses API → Chat Completions (model-aware)
     if (routeInfo.path === '/v1/responses' && request.method === 'POST') {
+      const hSpan = startSpan('responses.api', rootSpan);
       const resp = await handleResponsesAPI(request, routeInfo);
       recordMetrics(request.method, url.pathname, resp.status, performance.now() - startTime, routeInfo);
+      endSpan(hSpan, { status: resp.status, model: routeInfo.resolvedModel });
+      endSpan(rootSpan, { status: resp.status, model: routeInfo.resolvedModel });
       return resp;
     }
 
     // Model discovery (with 300s cache) (model-aware)
     if (routeInfo.path === '/v1/models' && request.method === 'GET') {
+      const hSpan = startSpan('model.list', rootSpan);
       const resp = await handleModelList(request, routeInfo, fmt);
       recordMetrics(request.method, url.pathname, resp.status, performance.now() - startTime, routeInfo);
+      endSpan(hSpan, { status: resp.status });
+      endSpan(rootSpan, { status: resp.status });
       return resp;
     }
 
@@ -162,11 +185,13 @@ async function handleRequest(request: Request): Promise<Response> {
     if (routeInfo.path === '/' && request.method === 'GET') {
       const resp = await handleHealthCheck(upstream);
       recordMetrics(request.method, url.pathname, resp.status, performance.now() - startTime);
+      endSpan(rootSpan, { status: resp.status });
       return resp;
     }
 
     // 404 for unknown paths
     recordMetrics(request.method, url.pathname, 404, performance.now() - startTime);
+    endSpan(rootSpan, { status: 404 });
     return new Response(JSON.stringify({ error: "Not found" }), {
       status: 404,
       headers: { "Content-Type": "application/json" },
@@ -178,6 +203,10 @@ async function handleRequest(request: Request): Promise<Response> {
       path: url.pathname,
       error: err instanceof Error ? err.message : String(err),
     });
+    if (err instanceof Error) {
+      recordError(rootSpan, err);
+    }
+    endSpan(rootSpan, { status: 500, error: err instanceof Error ? err.message : String(err) });
     recordAudit('error', 'unhandled_exception', {
       path: url.pathname,
       error: err instanceof Error ? err.message : String(err),
