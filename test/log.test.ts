@@ -238,11 +238,10 @@ describe('resolveContextIds', () => {
     expect(ids.traceId).toBe('my-retry-001');
   });
 
-  it('falls back to auto-generated trace_id when no headers', () => {
+  it('is undefined when no client correlation header is sent', () => {
     const req = new Request('http://localhost');
     const ids = resolveContextIds(req);
-    expect(ids.traceId).toBeTypeOf('string');
-    expect(ids.traceId.length).toBe(8);
+    expect(ids.traceId).toBeUndefined();
   });
 
   it('traceparent takes priority over X-Trace-Id and X-Request-Id', () => {

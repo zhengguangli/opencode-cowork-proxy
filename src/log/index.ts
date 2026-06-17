@@ -5,7 +5,7 @@
  *   - log — Logger API (debug, info, warn, error, audit, access)
  *   - __capture — Test capture helper (swaps console methods)
  *   - LogLevel, LogEntry — Type definitions
- *   - generateId, withRequestId, getRequestId — Request ID context
+ *   - generateId, withContextIds, resolveContextIds, getRequestId, getTraceId — Context IDs
  *
  * WHEN TO READ THIS FILE: Adding a new log sub-module.
  *

@@ -75,13 +75,28 @@ export function parseTraceparent(header: string): string | undefined {
 export interface ContextIds {
   /** Unique per-request identifier. */
   req: string;
-  /** Stable session/trace identifier shared across related requests. */
-  traceId: string;
+  /**
+   * Stable session/trace identifier shared across related requests.
+   * Only present when the client sends a correlation header
+   * (traceparent, X-Trace-Id, X-Request-Id). Undefined means no
+   * client-provided session context — the server cannot infer one.
+   */
+  traceId?: string;
 }
 
 /**
  * Resolve trace_id and req from incoming request headers.
  * Used once per request in index.ts before handler dispatch.
+ *
+ * IMPORTANT: trace_id is ONLY set when a client-provided correlation header
+ * exists (traceparent, X-Trace-Id, or X-Request-Id). When no header is sent
+ * by the client, trace_id remains undefined and is absent from log entries.
+ * This is intentional — without client cooperation, the server cannot know
+ * which requests belong to the same logical session. Auto-generating a
+ * per-request ID that happens to be called "trace" would be misleading.
+ *
+ * trace_id resolution order: traceparent > X-Trace-Id > X-Request-Id > absent
+ * req resolution order: X-Request-Id > auto
  */
 export function resolveContextIds(request: Request): ContextIds {
   // --- trace_id resolution ---
@@ -104,9 +119,10 @@ export function resolveContextIds(request: Request): ContextIds {
     const xri = request.headers.get('X-Request-Id');
     if (xri) traceId = xri.trim().slice(0, 64);
   }
-
-  // 4. Auto-generated fallback
-  if (!traceId) traceId = generateId();
+  // No auto-generated fallback — trace_id is *client-provided only*.
+  // Without cooperation from the client (a header), the server has no
+  // way to know which requests belong to the same session. Leaving
+  // traceId as undefined is honest and avoids misleading metrics.
 
   // --- req resolution ---
   const clientReqId = request.headers.get('X-Request-Id');
