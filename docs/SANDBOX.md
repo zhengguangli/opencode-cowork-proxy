@@ -5,7 +5,7 @@
 
 ## 状态
 
-`sandbox-exec` 被列为可选 skill（见 `.claude/skills/harness-init/SKILL.md`），但尚未在 `.agents/skills/` 或 `.claude/skills/` 中创建。
+`sandbox-exec` 被列为可选 skill（见 `.claude/skills/harness-init/SKILL.md`），但尚未在 `.claude/skills/` 中创建。
 
 ## 规划的设计
 

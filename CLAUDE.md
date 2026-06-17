@@ -77,7 +77,6 @@ bun run build:binary # standalone macOS binary via bun build --compile
 
 ## Navigation
 
-- Full agent/skill listing → @ref:AGENTS.md
 - Change history → @ref:docs/CHANGELOG.md
 - Architecture deep-dive → @ref:docs/ARCHITECTURE.md
 - Testing → @ref:docs/TESTING.md

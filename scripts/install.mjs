@@ -36,7 +36,6 @@ Without arguments, runs a full check.
 
 function check() {
   const checks = [
-    ['AGENTS.md', existsSync(join(ROOT, 'AGENTS.md'))],
     ['package.json', existsSync(join(ROOT, 'package.json'))],
     ['tsconfig.json', existsSync(join(ROOT, 'tsconfig.json'))],
     ['.claude/agents/', existsSync(join(ROOT, '.claude/agents'))],
