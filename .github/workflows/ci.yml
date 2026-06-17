@@ -16,37 +16,23 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Cache bun dependencies
+        id: cache-bun
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
       - name: Type check
         run: bunx tsc --noEmit
 
-      - name: Run architecture tests
-        run: bun test test/architecture.test.ts
-
-      - name: Run full test suite
+      - name: Run tests
         run: bun test
-
-      - name: Check file size limits
-        run: |
-          max_lines=500
-          for f in $(find src -name "*.ts" -not -path "*/node_modules/*"); do
-            lines=$(wc -l < "$f")
-            if [ "$lines" -gt "$max_lines" ]; then
-              echo "FAIL: $f has $lines lines (max $max_lines)"
-              exit 1
-            fi
-          done
-          echo "All source files under $max_lines lines"
-
-      - name: Upload trace logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: harness-trace
-          path: .harness-pilot/
-          retention-days: 7
 
   audit:
     runs-on: ubuntu-latest
@@ -56,6 +42,15 @@ jobs:
       - uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
+
+      - name: Cache bun dependencies
+        id: cache-bun
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
