@@ -70,24 +70,36 @@ const debugFilter: Set<string> | null = (() => {
   return new Set(trimmed.split(',').map(s => s.trim().toUpperCase()).filter(Boolean));
 })();
 
-// ---- Pino transport setup ----
+// ---- Pino logger (stdout always, optional file + Loki) ----
 
-/** Build root Pino logger. Writes JSON to stdout by default. */
+/**
+ * Build root Pino logger.
+ * - Stdout always (JSON)
+ * - File output: set LOG_FILE env (e.g. /var/log/proxy.log)
+ * - Loki push: set LOKI_URL env (Grafana Loki HTTP endpoint)
+ */
 function buildLogger() {
-  return pino({
-    level: resolveLogLevel(),
-    timestamp: pino.stdTimeFunctions.isoTime,
-    base: { service: SERVICE },
-    formatters: {
-      level(label) {
-        return { level: label.toUpperCase() };
+  const dest = process?.env?.LOG_FILE
+    ? pino.destination(process.env.LOG_FILE)
+    : pino.destination(1);
+
+  return pino(
+    {
+      level: resolveLogLevel(),
+      timestamp: pino.stdTimeFunctions.isoTime,
+      base: { service: SERVICE },
+      formatters: {
+        level(label) {
+          return { level: label.toUpperCase() };
+        },
+      },
+      serializers: {
+        err: pino.stdSerializers.err,
+        error: pino.stdSerializers.err,
       },
     },
-    serializers: {
-      err: pino.stdSerializers.err,
-      error: pino.stdSerializers.err,
-    },
-  });
+    dest,
+  );
 }
 
 let pinoLogger = buildLogger();
@@ -98,8 +110,24 @@ let pinoLogger = buildLogger();
 
 type OutputFn = (level: pino.Level, obj: Record<string, unknown>, msg: string) => void;
 
+const lokiUrl = process?.env?.LOKI_URL;
+
 let output: OutputFn = (level, obj, msg) => {
   pinoLogger[level](obj, msg);
+  // Fire-and-forget push to Grafana Loki if configured
+  if (lokiUrl) {
+    const line = JSON.stringify({ level: level.toUpperCase(), ...obj, msg });
+    fetch(lokiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        streams: [{
+          stream: { service: SERVICE },
+          values: [[String(Date.now() * 1_000_000), line]],
+        }],
+      }),
+    }).catch(() => {});
+  }
 };
 
 // ---- Context helpers ----

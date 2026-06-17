@@ -28,6 +28,7 @@ import { log } from './logger';
 import { trackRateLimits } from './rate-limit';
 import { metricsRegistry } from './metrics';
 import { getRequestId } from './log/context';
+import { startSpan, endSpan, recordError } from './tracing';
 
 export function anthropicHeaders(request: Request, key: string): Record<string, string> {
   const headers: Record<string, string> = {
@@ -122,10 +123,9 @@ export function authenticateRequest(request: Request, path: string): { key: stri
 }
 
 export async function safeUpstreamFetch(url: string, init: RequestInit): Promise<Response> {
+  const fetchSpan = startSpan('upstream.fetch');
+
   // Don't retry streaming requests — can't replay SSE.
-  // Parse the JSON body to check the `stream` field reliably, avoiding
-  // false positives/negatives from string heuristics (e.g. "stream": true
-  // with a space, or the substring appearing in message content).
   let isStreaming = false;
   if (typeof init.body === "string") {
     try {
@@ -141,8 +141,10 @@ export async function safeUpstreamFetch(url: string, init: RequestInit): Promise
   const upstreamLabel = (() => {
     try { return new URL(url).hostname; } catch { return 'unknown'; }
   })();
+  fetchSpan.setAttribute('upstream', upstreamLabel);
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    fetchSpan.setAttribute('retry_attempt', attempt);
     try {
       const res = await fetch(url, init);
 
@@ -152,6 +154,7 @@ export async function safeUpstreamFetch(url: string, init: RequestInit): Promise
       // Not retryable — return immediately
       if (res.status < 500) {
         // 2xx, 3xx, 4xx (incl. 429) — no retry
+        endSpan(fetchSpan, { upstream_status: res.status, success: true });
         metricsRegistry.recordUpstreamRequest(upstreamLabel);
         return res;
       }
@@ -165,11 +168,13 @@ export async function safeUpstreamFetch(url: string, init: RequestInit): Promise
       }
 
       // Last attempt — record and return whatever we got
+      endSpan(fetchSpan, { upstream_status: res.status, error: `upstream ${res.status}` });
       metricsRegistry.recordUpstreamRequest(upstreamLabel);
       metricsRegistry.recordUpstreamError(upstreamLabel, res.status);
       return res;
     } catch (err: unknown) {
       if ((err as Error)?.name === "AbortError") {
+        endSpan(fetchSpan, { upstream_status: 499, error: 'aborted' });
         metricsRegistry.recordUpstreamRequest(upstreamLabel);
         metricsRegistry.recordUpstreamError(upstreamLabel, 499);
         return new Response(
@@ -186,6 +191,8 @@ export async function safeUpstreamFetch(url: string, init: RequestInit): Promise
         continue;
       }
 
+      if (err instanceof Error) recordError(fetchSpan, err);
+      endSpan(fetchSpan, { upstream_status: 502, error: 'unreachable' });
       metricsRegistry.recordUpstreamError(upstreamLabel, 502);
       return new Response(
         JSON.stringify({ error: { type: "upstream_error", message: "Upstream unreachable" } }),
@@ -194,6 +201,7 @@ export async function safeUpstreamFetch(url: string, init: RequestInit): Promise
     }
   }
   // Should not reach here, but satisfy TypeScript
+  endSpan(fetchSpan, { upstream_status: 502, error: 'exhausted' });
   metricsRegistry.recordUpstreamError(upstreamLabel, 502);
   return new Response(
     JSON.stringify({ error: { type: "upstream_error", message: "Exhausted retries" } }),

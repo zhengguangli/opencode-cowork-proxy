@@ -1,42 +1,75 @@
 /**
- * OpenTelemetry-based tracing for request pipeline.
+ * OpenTelemetry tracing — span creation, OTLP export, child span utilities.
  *
- * Creates root spans per request and child spans for key phases
- * (auth, translate, upstream fetch). Spans are emitted via Pino
- * for immediate visibility. Future: add OTLP exporter for
- * integration with Jaeger, Grafana Tempo, Datadog, etc.
+ * Spans are created for every request (root) and key phases. When
+ * OTEL_EXPORTER_OTLP_ENDPOINT is set, spans are exported via OTLP;
+ * otherwise they go to console for development debugging.
  *
- * WHEN TO READ THIS FILE: Adding new trace spans, modifying span
- * attributes, or setting up OTLP export.
+ * ENV CONFIGURATION:
+ *   OTEL_EXPORTER_OTLP_ENDPOINT — OTLP HTTP endpoint (e.g. http://jaeger:4318/v1/traces)
+ *   OTEL_SERVICE_NAME           — Service name in traces (default: opencode-cowork-proxy)
+ *
+ * WHEN TO READ THIS FILE: Adding new trace spans, configuring OTLP export.
  */
-import { trace, context, Span, SpanStatusCode } from '@opentelemetry/api';
+import { trace, context, Span, SpanStatusCode, Tracer } from '@opentelemetry/api';
+import { BasicTracerProvider, BatchSpanProcessor, SimpleSpanProcessor, ConsoleSpanExporter } from '@opentelemetry/sdk-trace-base';
+import { resourceFromAttributes } from '@opentelemetry/resources';
+import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 
-const TRACER = trace.getTracer('opencode-cowork-proxy', '2.1.5');
+const SERVICE_NAME = process?.env?.OTEL_SERVICE_NAME ?? 'opencode-cowork-proxy';
+const SERVICE_VERSION = '2.1.5';
+const otelEndpoint = process?.env?.OTEL_EXPORTER_OTLP_ENDPOINT;
 
-/**
- * Start a root span for an incoming request.
- * Returns the span for later endSpan().
- */
-export function startRequestSpan(path: string, method: string): Span {
-  return TRACER.startSpan(`request ${method} ${path}`, {
-    attributes: { 'http.method': method, 'http.path': path },
-  });
+const provider = new BasicTracerProvider({
+  resource: resourceFromAttributes({
+    [ATTR_SERVICE_NAME]: SERVICE_NAME,
+    'service.version': SERVICE_VERSION,
+  }),
+  spanProcessors: otelEndpoint
+    ? [new BatchSpanProcessor(new (require('@opentelemetry/exporter-trace-otlp-proto').OTLPTraceExporter)({ url: otelEndpoint }))]
+    : [new SimpleSpanProcessor(new ConsoleSpanExporter())],
+});
+
+// Register as global tracer provider so trace.getTracer() returns our tracer
+trace.setGlobalTracerProvider(provider);
+
+const TRACER: Tracer = trace.getTracer(SERVICE_NAME, SERVICE_VERSION);
+
+// ---- Module-level span tracking for utility functions ----
+
+/** @internal Current root span for this request (read by safeUpstreamFetch, etc.). */
+export let currentSpan: Span | undefined;
+
+/** @internal Set the current span (used by index.ts before handler dispatch). */
+export function setCurrentSpan(span: Span | undefined): void {
+  currentSpan = span;
 }
 
 /**
- * Start a child span under the given parent or using the current OTel context.
+ * Start a root span for an incoming request. Also sets it as the current span
+ * so utility functions can create child spans.
+ */
+export function startRequestSpan(path: string, method: string): Span {
+  const span = TRACER.startSpan(`request ${method} ${path}`, {
+    attributes: { 'http.method': method, 'http.path': path },
+  });
+  setCurrentSpan(span);
+  return span;
+}
+
+/**
+ * Start a child span under the given parent or the module-level current span.
  */
 export function startSpan(name: string, parent?: Span): Span {
+  const p = parent ?? currentSpan;
   let ctx = context.active();
-  if (parent) {
-    ctx = trace.setSpan(ctx, parent);
-  }
+  if (p) ctx = trace.setSpan(ctx, p);
   return TRACER.startSpan(name, undefined, ctx);
 }
 
 /**
  * Complete a span with optional attributes.
- * If attrs contains 'error' key with a truthy value, span is marked as error.
+ * If attrs contains an 'error' key with a truthy value, the span is ERROR.
  */
 export function endSpan(span: Span, attrs?: Record<string, string | number | boolean | undefined>): void {
   if (attrs) {
@@ -50,6 +83,7 @@ export function endSpan(span: Span, attrs?: Record<string, string | number | boo
     }
   }
   span.end();
+  if (currentSpan === span) setCurrentSpan(undefined);
 }
 
 /**
