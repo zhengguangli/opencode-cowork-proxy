@@ -97,6 +97,13 @@ AGENTS.md is a content directory, not an encyclopedia.
 
 **Forbidden:** Exceeding 100 lines, including implementation details, including filesystem-obtainable info, change history (use docs/CHANGELOG.md)
 
+### Related Skills
+
+When designing architecture changes, consult:
+- `testing` skill (`.agents/skills/testing/`) — for test architecture and boundary test patterns
+- `deployment` skill (`.agents/skills/deployment/`) — for deployment architecture decisions
+- `security-review` skill (`.agents/skills/security-review/`) — for security architecture guidelines
+
 ### Progressive Disclosure Strategy
 
 ```

@@ -6,7 +6,7 @@
 - `src/audit.ts` — audit event logging
 - `src/rate-limit.ts` — upstream rate-limit header tracking
 - `src/response-cache.ts` — in-memory LRU response cache
-- `.agents/` — agent definitions and skills
+- `.claude/` — canonical agent definitions and skills (`.agents/` is legacy mirror)
 - `scripts/` — install, load-test, audit-deps, openapi generation
 
 ## Key Constraints
@@ -46,13 +46,16 @@
 | agent-readability | Agent readability optimization |
 | mcp-connector | MCP server integration (Context7, GitHub API, filesystem) |
 | web-search | Web search integration for real-time data beyond training cutoff |
+| testing | Testing patterns, 521 tests across 28 files, bun test |
+| deployment | Cloudflare Workers + standalone binary deployment |
+| security-review | API gateway security review: auth, injection, think-tags |
 
 ## Navigation
-- New format pair? Read `.agents/skills/format-translation/SKILL.md`
-- New provider? Read `.agents/skills/provider-routing/SKILL.md`
-- Streaming issue? Read `.agents/skills/streaming/SKILL.md`
-- Request flow? Read `.agents/skills/request-pipeline/SKILL.md`
-- Quality check? Read `.agents/skills/quality-gate/SKILL.md`
+- New format pair? Read `.claude/skills/format-translation/SKILL.md`
+- New provider? Read `.claude/skills/provider-routing/SKILL.md`
+- Streaming issue? Read `.claude/skills/streaming/SKILL.md`
+- Request flow? Read `.claude/skills/request-pipeline/SKILL.md`
+- Quality check? Read `.claude/skills/quality-gate/SKILL.md`
 - Translation logic? Read `src/translate/plugin.ts`
 - Provider routing? Read `src/providers.ts`
 - API endpoints? Read `README.md`
@@ -61,7 +64,12 @@
 - Request validation? Read `src/validate.ts`
 - Rate-limit tracking? Read `src/rate-limit.ts`
 - Response caching? Read `src/response-cache.ts`
-- Hooks config? Read `.agents/skills/hooks-framework/SKILL.md`
-- MCP integration? Read `.agents/skills/mcp-connector/SKILL.md`
-- Web search? Read `.agents/skills/web-search/SKILL.md`
+- Hooks config? Read `.claude/skills/hooks-framework/SKILL.md`
+- MCP integration? Read `.claude/skills/mcp-connector/SKILL.md`
+- Web search? Read `.claude/skills/web-search/SKILL.md`
 - Install? Run `bun run scripts/install.mjs --help`
+- Testing patterns? Read `.claude/skills/testing/SKILL.md`
+- Deploy? Read `.claude/skills/deployment/SKILL.md`
+- Security review? Read `.claude/skills/security-review/SKILL.md`
+
+> **Note:** `.agents/` remains available as a legacy mirror. `.claude/` is the canonical source.

@@ -62,6 +62,8 @@ Conduct quality reviews of builder's output, ensuring code complies with archite
 | Rate limit exposure | Medium | Upstream RateLimit-* headers tracked but not leaked to client |
 | Think tag stripping | Medium | `src/think-tag-stripper.ts` strips all `<think>...</think>` — verify no legitimate content loss |
 
+For a comprehensive security review, also invoke `.agents/skills/security-review/SKILL.md` which covers auth bypass, header injection, upstream URL injection, and audit integrity.
+
 ### Phase 4: Generate Report
 - Categorize issues by severity: Critical / Warning / Suggestion
 - Attach fix instructions to each issue (not vague suggestions)

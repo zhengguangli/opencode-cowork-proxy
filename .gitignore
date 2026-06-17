@@ -31,5 +31,5 @@ claude-logs.txt
 # Local macOS newsyslog configuration
 opencode-cowork-proxy.newsyslog.conf
 
-# Reasonix tool-specific skill store (duplicates .agents/skills/)
+# Reasonix tool-specific skill store (duplicates .claude/skills/)
 .reasonix/

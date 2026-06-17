@@ -36,7 +36,6 @@ Without arguments, runs a full check.
 
 function check() {
   const checks = [
-    # ['CLAUDE.md', ...] — removed, file no longer used
     ['AGENTS.md', existsSync(join(ROOT, 'AGENTS.md'))],
     ['package.json', existsSync(join(ROOT, 'package.json'))],
     ['tsconfig.json', existsSync(join(ROOT, 'tsconfig.json'))],

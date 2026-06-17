@@ -164,7 +164,7 @@ docs/
 - **Message Passing**: Coordinate via SendMessage (only when necessary)
 - **Status Files**: Each sub-agent writes status files (`.harness-pilot/subagent_*.json`)
 
-> **Implementation Details:** Sharding, git worktree isolation, batch merge, and progress aggregation for massively parallel scenarios (200+ tasks) are documented in the execution engine specification. See `.agents/engine/parallel-execution.md`.
+> **Implementation Details:** Sharding, git worktree isolation, batch merge, and progress aggregation for massively parallel scenarios (200+ tasks) are documented in the execution engine specification.
 
 ## Phase 4: Skill Generation
 
@@ -216,7 +216,6 @@ triggers: <trigger keywords>
 | No orphan templates | No placeholder text (e.g., "TODO", "FIXME") | Required |
 | Trigger coverage | triggers match at least one pattern in .agents/manifest.json | Required |
 | Cross-reference | All internal file references resolve to existing paths | Required |
-| Max length | ≤ 200 lines per skill file | Recommended |
 
 **Output:**
 - Skill files under `.agents/skills/<skill-name>/SKILL.md`
@@ -390,7 +389,7 @@ If metrics span tiers, use the **highest** tier (conservative resource allocatio
 | Very Large (50-200 tasks) | 7-15 members | 5-10 | 15 |
 | Massively Parallel (200+ tasks) | 15-50 members | 5-10 | 50 |
 
-> **Massively Parallel:** For 200+ task scenarios (sharding, worktree isolation, batch merge, progress aggregation), see execution engine spec — `.agents/engine/parallel-execution.md`.
+> **Massively Parallel:** For 200+ task scenarios (sharding, worktree isolation, batch merge, progress aggregation), see execution engine specification.
 
 ## Test Scenarios
 

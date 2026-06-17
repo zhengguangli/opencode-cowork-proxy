@@ -117,7 +117,7 @@ Run bun test → Observe failures → Fix code → Re-run → Repeat until green
 | Check | Result | Evidence |
 |-------|--------|----------|
 | Agent files (6) | ✅ / ❌ | {file count} present |
-| Skill files (12) | ✅ / ❌ | {file count} present |
+| Skill files (17) | ✅ / ❌ | {file count} present |
 | Cross-references | ✅ / ❌ | {broken refs} broken |
 | Script files | ✅ / ❌ | {missing count} missing |
 

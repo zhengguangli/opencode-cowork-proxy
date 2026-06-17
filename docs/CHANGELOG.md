@@ -6,6 +6,15 @@ All notable changes to the opencode-cowork-proxy harness.
 
 ### Added
 - Bun project standardization — `bunfig.toml`, `tsconfig.json` (Bun recommended), `@types/bun`
+
+### Fixed
+- Removed dead references to `parallel-execution.md` in orchestrator SKILL.md (`.claude/` + `.agents/`)
+- Fixed duplicate directory string in `harness-init/SKILL.md` (`.claude/", ".claude/"` → `.claude/", ".agents/"`)
+
+### Changed
+- Copied `.agents/agents/` and `.agents/skills/` into `.claude/` — `.claude/` now canonical path
+- Updated all path references from `.agents/skills/` to `.claude/skills/` across 27+ files
+- AGENTS.md, CLAUDE.md, .codex/hooks.json, .github/workflows/*.yml, docs/*.md, .gitignore
 - Build outputs moved to `./dist/` directory
 - Binary build with `--bytecode` for faster startup
 - JS bundle with `--minify` (73 KB)
