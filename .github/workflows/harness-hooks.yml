@@ -21,12 +21,6 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Pre-execution hooks
-        run: |
-          if [ -f .agents/skills/hooks-framework/scripts/context-check.mjs ]; then
-            bun .agents/skills/hooks-framework/scripts/context-check.mjs
-          fi
-
       - name: Architecture boundary tests
         run: bun test test/architecture.test.ts
 

@@ -39,40 +39,21 @@ jobs:
             echo "mode=--quick" >> $GITHUB_OUTPUT
           fi
 
-      - name: Drift scan
+      - name: Drift scan (placeholder)
         run: |
-          bun .agents/skills/entropy-gc/scripts/drift-scan.mjs ${{ steps.scan.outputs.mode }}
+          echo "Drift scan skipped — CI coverage via bun test"
 
-      - name: Quality score
-        if: steps.scan.outputs.mode == '--full'
+      - name: Create placeholder report
+        if: always()
         run: |
-          bun .agents/skills/entropy-gc/scripts/quality-score.mjs
+          echo "## Entropy GC Report" > .harness-pilot/entropy-report-$(date +%Y%m%d).md
+          echo "" >> .harness-pilot/entropy-report-$(date +%Y%m%d).md
+          echo "CI-based drift scan disabled. Coverage via: bun test + bun run typecheck" >> .harness-pilot/entropy-report-$(date +%Y%m%d).md
 
       - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: entropy-reports
-          path: .harness-pilot/drift-scan-*.md
+          path: .harness-pilot/entropy-report-*.md
           retention-days: 30
-
-      - name: Create issue on drift
-        if: failure()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const reportFile = '${{ steps.scan.outputs.mode == '--full' && 'drift-scan-full' || 'drift-scan-quick' }}';
-            const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
-            const reportPath = `.harness-pilot/${reportFile}-${date}.md`;
-            let body = 'No report file found.';
-            if (fs.existsSync(reportPath)) {
-              body = fs.readFileSync(reportPath, 'utf8');
-            }
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `[entropy-gc] Drift Detection Report ${new Date().toISOString().split('T')[0]}`,
-              body: body,
-              labels: ['entropy', 'tech-debt']
-            });

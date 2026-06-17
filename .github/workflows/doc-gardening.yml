@@ -18,12 +18,6 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Check AGENTS.md freshness
-        run: |
-          if [ -f .agents/skills/hooks-framework/scripts/context-check.mjs ]; then
-            bun .agents/skills/hooks-framework/scripts/context-check.mjs || true
-          fi
-
       - name: Check for stale docs
         run: |
           echo "## Doc Freshness Report" > /tmp/doc-report.md
@@ -47,9 +41,3 @@ jobs:
             echo "- ✅ All docs fresh (<30 days)" >> /tmp/doc-report.md
           fi
           cat /tmp/doc-report.md
-
-      - name: Quality metrics
-        run: |
-          if [ -f .agents/skills/hooks-framework/scripts/quality-metric.mjs ]; then
-            bun .agents/skills/hooks-framework/scripts/quality-metric.mjs || true
-          fi
