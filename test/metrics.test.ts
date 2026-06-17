@@ -199,6 +199,62 @@ describe('MetricsRegistry', () => {
     expect(registry.requestCountSnapshot.size).toBe(1);
     expect(Array.from(registry.requestCountSnapshot.values())[0]).toBe(100);
   });
+
+  // ===== Per-model metrics tests =====
+
+  describe('per-model metrics', () => {
+    it('records per-model request counts', () => {
+      registry.recordModelRequest('deepseek-v4', 200, 10);
+      registry.recordModelRequest('deepseek-v4', 200, 20);
+      registry.recordModelRequest('claude-sonnet-4', 200, 30);
+
+      const snapshot = registry.modelRequestCountSnapshot;
+      expect(snapshot.size).toBe(2);
+      const total = Array.from(snapshot.values()).reduce((a, b) => a + b, 0);
+      expect(total).toBe(3);
+    });
+
+    it('tracks exact duration sum per model', () => {
+      registry.recordModelRequest('deepseek-v4', 200, 10);
+      registry.recordModelRequest('deepseek-v4', 200, 20);
+      registry.recordModelRequest('claude-sonnet-4', 200, 100);
+
+      const buckets = registry.modelDurationBucketsSnapshot;
+      const totalSum = Array.from(buckets.values()).reduce((s, e) => s + e.sum, 0);
+      expect(totalSum).toBe(130);
+    });
+
+    it('records model errors for status >= 400', () => {
+      registry.recordModelRequest('deepseek-v4', 200, 10);
+      registry.recordModelRequest('deepseek-v4', 500, 100);
+      registry.recordModelRequest('deepseek-v4', 401, 5);
+      registry.recordModelRequest('claude-sonnet-4', 429, 50);
+
+      // model_errors_total only tracks errors (status >= 400)
+      expect(registry.modelErrorCountSnapshot.size).toBe(3);
+    });
+
+    it('does not record model errors for 2xx/3xx statuses', () => {
+      registry.recordModelRequest('deepseek-v4', 200, 10);
+      registry.recordModelRequest('deepseek-v4', 301, 5);
+      registry.recordModelRequest('deepseek-v4', 304, 5);
+
+      expect(registry.modelErrorCountSnapshot.size).toBe(0);
+    });
+
+    it('tracks per-model histogram with correct cumulative buckets', () => {
+      // Two requests to same model: one at 5ms, one at 100ms
+      registry.recordModelRequest('deepseek-v4', 200, 5);
+      registry.recordModelRequest('deepseek-v4', 200, 100);
+
+      const buckets = registry.modelDurationBucketsSnapshot;
+      // Should have entries for le="5" and le="100"
+      const totalSum = Array.from(buckets.values()).reduce((s, e) => s + e.sum, 0);
+      expect(totalSum).toBe(105);
+      const totalCount = Array.from(buckets.values()).reduce((s, e) => s + e.count, 0);
+      expect(totalCount).toBe(2);
+    });
+  });
 });
 
 // ===== Stream tracker tests =====
@@ -276,6 +332,17 @@ describe('handleMetrics', () => {
     const body = await response.text();
     expect(body).toContain('upstream_requests_total');
     expect(body).toContain('upstream_errors_total');
+  });
+
+  it('includes model-level metrics', async () => {
+    const response = await handleMetrics(
+      new Request('http://localhost/metrics'),
+      { path: '/metrics', modelOverride: null, upstream: 'https://test.example.com' },
+    );
+    const body = await response.text();
+    expect(body).toContain('model_requests_total');
+    expect(body).toContain('model_request_duration_ms');
+    expect(body).toContain('model_errors_total');
   });
 
   it('includes active_streams metric', async () => {

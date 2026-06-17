@@ -9,12 +9,15 @@
  * To change *how* they are formatted, see src/metrics/formatter.ts.
  *
  * Metrics exposed:
- *   - http_requests_total       — counter by method, path, status
- *   - http_request_duration_ms  — histogram (exact sum, 10 buckets)
- *   - upstream_requests_total   — counter by upstream
- *   - upstream_errors_total     — counter by upstream, status
- *   - active_streams            — gauge
- *   - uptime_seconds            — gauge (computed at render time)
+ *   - http_requests_total           — counter by method, path, status
+ *   - http_request_duration_ms      — histogram (exact sum, 10 buckets)
+ *   - model_requests_total          — counter by model, status
+ *   - model_request_duration_ms     — histogram by model, status
+ *   - model_errors_total            — counter by model, status (status >= 400)
+ *   - upstream_requests_total       — counter by upstream
+ *   - upstream_errors_total         — counter by upstream, status
+ *   - active_streams                — gauge
+ *   - uptime_seconds                — gauge (computed at render time)
  */
 import { metricsRegistry } from '../metrics';
 import { formatGauge, formatCounter, formatHistogram } from '../metrics';
@@ -37,6 +40,19 @@ export async function handleMetrics(_request: Request, _route: RouteInfo): Promi
 
   // Duration histogram (exact sum)
   body += formatHistogram('http_request_duration_ms', 'Request duration in milliseconds', metricsRegistry.durationBucketsSnapshot);
+
+  // ---- Per-model metrics ----
+
+  // Model request counters
+  body += formatCounter('model_requests_total', 'Total requests by model and status', metricsRegistry.modelRequestCountSnapshot);
+
+  // Model duration histogram
+  body += formatHistogram('model_request_duration_ms', 'Request duration in milliseconds by model', metricsRegistry.modelDurationBucketsSnapshot);
+
+  // Model error counters
+  body += formatCounter('model_errors_total', 'Request errors (status >= 400) by model and status', metricsRegistry.modelErrorCountSnapshot);
+
+  // ---- Upstream metrics ----
 
   // Upstream request counters
   body += formatCounter('upstream_requests_total', 'Total upstream requests by target', metricsRegistry.upstreamRequestCountSnapshot);
