@@ -82,6 +82,7 @@ export async function handleResponsesAPI(
   if (hasResponsesImages(req)) {
     req.model = getVisionModel(upstream, req.model as string | null);
   }
+  route.resolvedModel = req.model as string;
 
   // DeepSeek: auto-inject thinking for reasoning models
   if ((req.model as string)?.startsWith('deepseek-') && !(req as Record<string, unknown>).thinking) {

@@ -62,6 +62,7 @@ export async function handleAnthropicToOpenAI(
     if (hasImages(req)) {
       req.model = getVisionModel(upstream, req.model as string | null | undefined);
     }
+    route.resolvedModel = req.model as string;
     const openaiReq = formatAnthropicToOpenAI(req);
     const upstreamSignal = asRecord(openaiReq).stream ? createStreamSignal(request) : AbortSignal.timeout(DEFAULT_TIMEOUT);
     const res = await safeUpstreamFetch(`${upstream}/v1/chat/completions`, {
@@ -105,6 +106,7 @@ export async function handleAnthropicToOpenAI(
   }
 
   // Fast path: if no model override AND no image markers in raw string
+  route.resolvedModel = (parsedBody.model as string) || route.modelOverride || undefined;
   if (!route.modelOverride && !rawBodyMayHaveImages(anthRawBody)) {
     const anthIsStreaming = !!(parsedBody?.stream);
     const anthUpstreamSignal = anthIsStreaming ? createStreamSignal(request) : AbortSignal.timeout(DEFAULT_TIMEOUT);
@@ -131,6 +133,7 @@ export async function handleAnthropicToOpenAI(
     if (route.modelOverride) parsedBody.model = route.modelOverride;
     if (anthHasImages) parsedBody.model = getVisionModel(upstream, parsedBody.model as string | null | undefined);
   }
+  route.resolvedModel = parsedBody.model as string;
   const anthBody = needsAnthMod ? JSON.stringify(parsedBody) : anthRawBody;
   const anthIsStreaming = !!(parsedBody?.stream);
   const anthUpstreamSignal = anthIsStreaming ? createStreamSignal(request) : AbortSignal.timeout(DEFAULT_TIMEOUT);

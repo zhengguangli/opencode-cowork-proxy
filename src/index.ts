@@ -51,11 +51,14 @@ recordAudit('proxy', 'startup', { startupMs, registries: ['translators', 'provid
 // ---- Main Request Handler ----
 
 /**
- * Local helper: record request metrics and access log, including model-level metrics.
+ * Local helper: record request metrics and access log.
+ * For model-aware routes, uses the handler-resolved model (from RouteInfo.resolvedModel)
+ * which captures the true model after URL → vision → thinking override chain.
  */
-function recordMetrics(method: string, path: string, status: number, durationMs: number, model?: string | null): void {
+function recordMetrics(method: string, path: string, status: number, durationMs: number, routeInfo?: { modelOverride?: string | null; resolvedModel?: string }): void {
   metricsRegistry.recordRequest(method, path, status, durationMs);
-  metricsRegistry.recordModelRequest(model || '(unknown)', status, durationMs);
+  const model = routeInfo?.resolvedModel || routeInfo?.modelOverride || '(none)';
+  metricsRegistry.recordModelRequest(model, status, durationMs);
   log.access(method, path, status, durationMs);
 }
 
@@ -77,6 +80,23 @@ async function handleRequest(request: Request): Promise<Response> {
     const upstream = getUpstream(request, route.upstream);
     const fmt = upstreamFormat(request);
 
+    // Create a mutable RouteInfo that handlers can augment with resolvedModel.
+    // Handlers set routeInfo.resolvedModel after the full override chain;
+    // we read it here after the handler returns.
+    const routeInfo: {
+      path: string;
+      modelOverride?: string | null;
+      upstream: string;
+      resolvedModel?: string;
+    } = {
+      path: route.path,
+      modelOverride: route.modelOverride,
+      upstream,
+      // Seed with URL-level override so early exits (auth failure, etc.)
+      // still have a model. Handlers overwrite with body model later.
+      resolvedModel: route.modelOverride || undefined,
+    };
+
     // Body size gate — applies to all POST requests
     if (request.method === 'POST') {
       const sizeResp = await checkBodySize(request);
@@ -87,56 +107,56 @@ async function handleRequest(request: Request): Promise<Response> {
     }
 
     // Metrics endpoint (no auth required)
-    if (route.path === '/metrics' && request.method === 'GET') {
-      const resp = await handleMetrics(request, { path: route.path, modelOverride: route.modelOverride, upstream });
+    if (routeInfo.path === '/metrics' && request.method === 'GET') {
+      const resp = await handleMetrics(request, routeInfo);
       recordMetrics(request.method, url.pathname, resp.status, performance.now() - startTime);
       return resp;
     }
 
     // Upstream health probe (no auth required)
-    if (route.path === '/health/upstream' && request.method === 'GET') {
-      const resp = await handleUpstreamHealth(request, { path: route.path, modelOverride: route.modelOverride, upstream });
+    if (routeInfo.path === '/health/upstream' && request.method === 'GET') {
+      const resp = await handleUpstreamHealth(request, routeInfo);
       recordMetrics(request.method, url.pathname, resp.status, performance.now() - startTime);
       return resp;
     }
 
     // Audit log (no auth for local debugging)
-    if (route.path === '/audit/log' && request.method === 'GET') {
-      const resp = await handleAuditLog(request, { path: route.path, modelOverride: route.modelOverride, upstream });
+    if (routeInfo.path === '/audit/log' && request.method === 'GET') {
+      const resp = await handleAuditLog(request, routeInfo);
       recordMetrics(request.method, url.pathname, resp.status, performance.now() - startTime);
       return resp;
     }
 
     // Anthropic → OpenAI (model-aware)
-    if (route.path === '/v1/messages' && request.method === 'POST') {
-      const resp = await handleAnthropicToOpenAI(request, { path: route.path, modelOverride: route.modelOverride, upstream }, fmt);
-      recordMetrics(request.method, url.pathname, resp.status, performance.now() - startTime, route.modelOverride);
+    if (routeInfo.path === '/v1/messages' && request.method === 'POST') {
+      const resp = await handleAnthropicToOpenAI(request, routeInfo, fmt);
+      recordMetrics(request.method, url.pathname, resp.status, performance.now() - startTime, routeInfo);
       return resp;
     }
 
     // OpenAI → Anthropic (or pass-through) (model-aware)
-    if (route.path === '/v1/chat/completions' && request.method === 'POST') {
-      const resp = await handleOpenAIChatCompletions(request, { path: route.path, modelOverride: route.modelOverride, upstream }, fmt);
-      recordMetrics(request.method, url.pathname, resp.status, performance.now() - startTime, route.modelOverride);
+    if (routeInfo.path === '/v1/chat/completions' && request.method === 'POST') {
+      const resp = await handleOpenAIChatCompletions(request, routeInfo, fmt);
+      recordMetrics(request.method, url.pathname, resp.status, performance.now() - startTime, routeInfo);
       return resp;
     }
 
     // Responses API → Chat Completions (model-aware)
-    if (route.path === '/v1/responses' && request.method === 'POST') {
-      const resp = await handleResponsesAPI(request, { path: route.path, modelOverride: route.modelOverride, upstream });
-      recordMetrics(request.method, url.pathname, resp.status, performance.now() - startTime, route.modelOverride);
+    if (routeInfo.path === '/v1/responses' && request.method === 'POST') {
+      const resp = await handleResponsesAPI(request, routeInfo);
+      recordMetrics(request.method, url.pathname, resp.status, performance.now() - startTime, routeInfo);
       return resp;
     }
 
     // Model discovery (with 300s cache) (model-aware)
-    if (route.path === '/v1/models' && request.method === 'GET') {
-      const resp = await handleModelList(request, { path: route.path, modelOverride: route.modelOverride, upstream }, fmt);
-      recordMetrics(request.method, url.pathname, resp.status, performance.now() - startTime, route.modelOverride);
+    if (routeInfo.path === '/v1/models' && request.method === 'GET') {
+      const resp = await handleModelList(request, routeInfo, fmt);
+      recordMetrics(request.method, url.pathname, resp.status, performance.now() - startTime, routeInfo);
       return resp;
     }
 
     // Root health check (no auth required)
-    if (route.path === '/' && request.method === 'GET') {
+    if (routeInfo.path === '/' && request.method === 'GET') {
       const resp = await handleHealthCheck(upstream);
       recordMetrics(request.method, url.pathname, resp.status, performance.now() - startTime);
       return resp;

@@ -59,6 +59,7 @@ export async function handleOpenAIChatCompletions(
     const originalModel = req.model as string | undefined;
     if (route.modelOverride) req.model = route.modelOverride as string;
     if (hasOpenAIImages(req)) req.model = getVisionModel(upstream, req.model as string | null);
+    route.resolvedModel = req.model as string;
     const anthReq = formatOpenAIToAnthropic(req as Record<string, unknown>);
     const upstreamSignal = (anthReq as Record<string, unknown>).stream ? createStreamSignal(request) : AbortSignal.timeout(DEFAULT_TIMEOUT);
     const res = await safeUpstreamFetch(`${upstream}/v1/messages` as string, {
@@ -102,6 +103,7 @@ export async function handleOpenAIChatCompletions(
   }
 
   // Fast path: if no model override AND no image markers in raw string
+  route.resolvedModel = (parsedOaiBody.model as string) || route.modelOverride || undefined;
   if (!route.modelOverride && !rawBodyMayHaveImages(oaiRawBody)) {
     const oaiIsStreaming = !!(parsedOaiBody?.stream);
     const oaiUpstreamSignal = oaiIsStreaming ? createStreamSignal(request) : AbortSignal.timeout(DEFAULT_TIMEOUT);
@@ -128,6 +130,7 @@ export async function handleOpenAIChatCompletions(
     if (route.modelOverride) parsedOaiBody.model = route.modelOverride;
     if (oaiHasImages) parsedOaiBody.model = getVisionModel(upstream, parsedOaiBody.model as string | null | undefined);
   }
+  route.resolvedModel = parsedOaiBody.model as string;
   const oaiBody = needsOaiMod ? JSON.stringify(parsedOaiBody) : oaiRawBody;
   const oaiIsStreaming = !!(parsedOaiBody?.stream);
   const oaiUpstreamSignal = oaiIsStreaming ? createStreamSignal(request) : AbortSignal.timeout(DEFAULT_TIMEOUT);
