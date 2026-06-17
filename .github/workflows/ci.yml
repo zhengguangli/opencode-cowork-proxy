@@ -40,6 +40,14 @@ jobs:
           done
           echo "All source files under $max_lines lines"
 
+      - name: Upload trace logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-trace
+          path: .harness-pilot/
+          retention-days: 7
+
   audit:
     runs-on: ubuntu-latest
     steps:
