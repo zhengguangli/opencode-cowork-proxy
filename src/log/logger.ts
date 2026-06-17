@@ -21,7 +21,7 @@
  *
  * WHEN TO READ THIS FILE: Adding/modifying log behavior, debugging log filtering.
  */
-import { currentRequestId } from './context';
+import { currentRequestId, currentTraceId } from './context';
 
 // ---- Types ----
 
@@ -37,6 +37,7 @@ export interface LogEntry {
   pfx: string;
   msg: string;
   req?: string;
+  trace_id?: string;
   details: Record<string, unknown>;
 }
 
@@ -153,6 +154,9 @@ function write(level: LogLevel, pfx: string, msg: string, details?: Record<strin
 
   const reqId = currentRequestId;
   if (reqId) payload.req = reqId;
+
+  const traceId = currentTraceId;
+  if (traceId) payload.trace_id = traceId;
 
   const line = JSON.stringify(payload);
 

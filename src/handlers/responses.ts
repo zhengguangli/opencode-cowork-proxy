@@ -34,6 +34,7 @@ import {
 import { asRecord, asRecordArray, asRecordOptional } from '../translate/type-guards';
 import { RouteInfo } from './shared';
 import { log } from '../logger';
+import { getRequestId } from '../log/context';
 
 import { compressibleStream } from '../compress';
 
@@ -102,7 +103,7 @@ export async function handleResponsesAPI(
   const upstreamSignal = chatReq.stream ? createStreamSignal(request) : AbortSignal.timeout(DEFAULT_TIMEOUT);
   const upstreamRes = await safeUpstreamFetch(`${upstream}/v1/chat/completions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}`, "X-Request-Id": getRequestId() || "" },
     body: JSON.stringify(chatReq),
     signal: upstreamSignal,
   });

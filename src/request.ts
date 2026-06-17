@@ -27,6 +27,7 @@ import { UPSTREAM_FORWARD_HEADERS, MAX_BODY_SIZE, MAX_RETRIES, RETRY_BASE_DELAY,
 import { log } from './logger';
 import { trackRateLimits } from './rate-limit';
 import { metricsRegistry } from './metrics';
+import { getRequestId } from './log/context';
 
 export function anthropicHeaders(request: Request, key: string): Record<string, string> {
   const headers: Record<string, string> = {
@@ -36,6 +37,9 @@ export function anthropicHeaders(request: Request, key: string): Record<string, 
   };
   const beta = request.headers.get("Anthropic-Beta");
   if (beta) headers["Anthropic-Beta"] = beta;
+  // Propagate request ID for trace correlation
+  const reqId = getRequestId();
+  if (reqId) headers["X-Request-Id"] = reqId;
   return headers;
 }
 

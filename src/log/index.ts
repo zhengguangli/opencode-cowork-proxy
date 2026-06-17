@@ -13,5 +13,13 @@
  */
 
 export { log, __capture } from './logger';
-export { generateId, withRequestId, getRequestId } from './context';
+export {
+  generateId,
+  withContextIds,
+  getRequestId,
+  getTraceId,
+  currentTraceId,
+  currentRequestId,
+  resolveContextIds,
+} from './context';
 export type { LogLevel, LogEntry } from './logger';

@@ -12,9 +12,12 @@
  *   4. Hono app construction — middleware stack setup
  *   5. First request — cold start (CF Workers: isolate warm-up)
  *
- * LOGGING: Every request gets a unique `req` (request_id). All log lines for
- * the same request share this ID, automatically injected by logger.ts via
- * AsyncLocalStorage. Use `withRequestId(generateId(), ...)` to wrap handlers.
+ * LOGGING: Every request gets a `req` (unique request ID) and `trace_id`
+ * (stable session ID). All log lines for the same request share these IDs,
+ * automatically injected by context.ts via module-level variables (safe for
+ * CF Workers isolates). Handlers are wrapped by `withContextIds()` in
+ * app.all('*'). The trace_id is resolved from client headers:
+ *   traceparent > X-Trace-Id > X-Request-Id > auto-generated
  */
 import { Hono } from 'hono';
 import { routeConfig, getUpstream, upstreamFormat } from './routing';
@@ -34,7 +37,7 @@ import { metricsRegistry } from './metrics';
 import { ensureTranslatorsRegistered } from './translate/registry';
 import { ensureProvidersRegistered } from './providers';
 import { recordAudit } from './audit';
-import { log, withRequestId, generateId } from './logger';
+import { log, resolveContextIds, withContextIds } from './logger';
 
 // ---- Startup profiling ----
 
@@ -199,11 +202,15 @@ app.use('*', async (c, next) => {
   await next();
 });
 
-// Wrap every request with a unique request_id for log correlation.
-// Uses a module-level variable (CF Workers compatible) — each isolate
+// Wrap every request with trace_id + request_id for log correlation.
+// trace_id is a stable session identifier: same across related requests
+// (retries, multi-turn chat). Resolved from client headers:
+//   traceparent > X-Trace-Id > X-Request-Id > auto-generated
+// Uses module-level variables (CF Workers compatible) — each isolate
 // processes one request at a time, so no AsyncLocalStorage needed.
 app.all('*', (c) => {
-  return withRequestId(generateId(), () => handleRequest(c.req.raw));
+  const ids = resolveContextIds(c.req.raw);
+  return withContextIds(ids, () => handleRequest(c.req.raw));
 });
 
 export default app;

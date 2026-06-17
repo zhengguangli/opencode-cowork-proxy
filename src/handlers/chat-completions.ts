@@ -29,6 +29,7 @@ import {
   jsonResponse,
 } from '../request';
 import { RouteInfo } from './shared';
+import { getRequestId } from '../log/context';
 
 import { compressibleStream } from '../compress';
 
@@ -109,7 +110,7 @@ export async function handleOpenAIChatCompletions(
     const oaiUpstreamSignal = oaiIsStreaming ? createStreamSignal(request) : AbortSignal.timeout(DEFAULT_TIMEOUT);
     const oaiPassRes = await safeUpstreamFetch(`${upstream}/v1/chat/completions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}`, "X-Request-Id": getRequestId() || "" },
       body: oaiRawBody,
       signal: oaiUpstreamSignal,
     });
@@ -136,7 +137,7 @@ export async function handleOpenAIChatCompletions(
   const oaiUpstreamSignal = oaiIsStreaming ? createStreamSignal(request) : AbortSignal.timeout(DEFAULT_TIMEOUT);
   const oaiPassRes = await safeUpstreamFetch(`${upstream}/v1/chat/completions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}`, "X-Request-Id": getRequestId() || "" },
     body: oaiBody,
     signal: oaiUpstreamSignal,
   });

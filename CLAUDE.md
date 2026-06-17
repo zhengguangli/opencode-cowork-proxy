@@ -7,7 +7,7 @@
 ```bash
 bun install          # install dependencies
 bun run dev          # start local dev server on port 8787
-bun test             # run 521 tests across 28 test files
+bun test             # run 518 tests across 28 test files
 bun run typecheck    # TypeScript type check
 bunx wrangler deploy # deploy to Cloudflare Workers
 bun run build        # CF Worker bundle (minified, ./dist/)
@@ -67,13 +67,6 @@ bun run build:binary # standalone macOS binary via bun build --compile
 | **Upstream retry** | Upstream fetch retries twice on transient failures before returning 5xx |
 | **Dual-path handlers** | Each POST handler decides translate vs pass-through based on `X-Upstream-Format` header |
 | **Audit ring buffer** | In-memory ring buffer capped at 1000 events — lost on restart (no persistence) |
-
-## Environment Variables
-
-| Variable | Required | Purpose |
-|----------|----------|---------|
-| `ANTHROPIC_BASE_URL` | Yes | Upstream endpoint (e.g. `http://localhost:18787/zen`) |
-| `ANTHROPIC_AUTH_TOKEN` | Yes | API key for upstream auth |
 
 ## Navigation
 

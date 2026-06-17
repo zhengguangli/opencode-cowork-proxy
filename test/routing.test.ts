@@ -174,12 +174,12 @@ describe('routing (integration)', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('https://api.anthropic.com/v1/models', expect.objectContaining({
       method: 'GET',
-      headers: {
+      headers: expect.objectContaining({
         'Content-Type': 'application/json',
         'X-Api-Key': key,
         'Anthropic-Version': '2023-06-01',
         'Anthropic-Beta': 'tools-2024-04-04',
-      },
+      }),
     }));
   });
 

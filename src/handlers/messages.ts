@@ -30,6 +30,7 @@ import {
 } from '../request';
 import { asRecord } from '../translate/type-guards';
 import { RouteInfo } from './shared';
+import { getRequestId } from '../log/context';
 
 import { compressibleStream } from '../compress';
 
@@ -67,7 +68,7 @@ export async function handleAnthropicToOpenAI(
     const upstreamSignal = asRecord(openaiReq).stream ? createStreamSignal(request) : AbortSignal.timeout(DEFAULT_TIMEOUT);
     const res = await safeUpstreamFetch(`${upstream}/v1/chat/completions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}`, "X-Request-Id": getRequestId() || "" },
       body: JSON.stringify(openaiReq),
       signal: upstreamSignal,
     });
