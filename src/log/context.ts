@@ -17,10 +17,19 @@
 export let currentRequestId: string | undefined;
 
 /**
- * Generate a short unique request ID (10-12 chars, hex-like).
- * Used for log correlation across a single request's lifecycle.
+ * Generate a short unique request ID (8 chars).
+ * Uses crypto.randomUUID() when available for better uniqueness,
+ * falls back to Math.random() + Date.now().
  */
 export function generateId(): string {
+  try {
+    // @ts-ignore — crypto.randomUUID() available in modern runtimes
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID().slice(0, 8);
+    }
+  } catch {
+    // Fall through
+  }
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }
 
