@@ -550,7 +550,7 @@ Rules:
   - No @ts-ignore / @ts-expect-error
   - Limit non-null assertions (!.) to 3 per file
 
-Enforced by: .agents/skills/quality-gate/scripts/check-type-safety.mjs
+Enforced by: .claude/skills/quality-gate/scripts/check-type-safety.mjs
 ```
 
 ### C10: Naming conventions
@@ -565,7 +565,7 @@ Code:
   - Types/interfaces: PascalCase
   - Functions/variables: camelCase
 
-Enforced by: .agents/skills/quality-gate/scripts/check-naming.mjs
+Enforced by: .claude/skills/quality-gate/scripts/check-naming.mjs
 ```
 
 ### C11: Naming conventions (project-specific)
@@ -657,16 +657,16 @@ Enforced by: .agents/skills/quality-gate/scripts/check-naming.mjs
 | File | Role |
 |------|------|
 | `test/architecture.test.ts` | Vitest-based architecture boundary tests |
-| `.agents/skills/quality-gate/scripts/check-layers.mjs` | Generic layer dependency check |
-| `.agents/skills/quality-gate/scripts/check-naming.mjs` | Naming convention check |
-| `.agents/skills/quality-gate/scripts/check-file-size.mjs` | File size threshold check |
-| `.agents/skills/quality-gate/scripts/check-type-safety.mjs` | Type safety lint check |
+| `.claude/skills/quality-gate/scripts/check-layers.mjs` | Generic layer dependency check |
+| `.claude/skills/quality-gate/scripts/check-naming.mjs` | Naming convention check |
+| `.claude/skills/quality-gate/scripts/check-file-size.mjs` | File size threshold check |
+| `.claude/skills/quality-gate/scripts/check-type-safety.mjs` | Type safety lint check |
 
 ---
 
-## Architecture Guard Scripts Assessment
+## Quality Gate Scripts Assessment
 
-The existing architecture-guard scripts in `.agents/skills/quality-gate/scripts/` are **generic** -- they work across any project by scanning directory structure and applying broad rules (layer detection via folder names, generic naming patterns, file size thresholds, type safety checks).
+The existing quality-gate scripts in `.claude/skills/quality-gate/scripts/` are **generic** -- they work across any project by scanning directory structure and applying broad rules (layer detection via folder names, generic naming patterns, file size thresholds, type safety checks).
 
 ### What they cover well for this project
 
@@ -678,7 +678,7 @@ The existing architecture-guard scripts in `.agents/skills/quality-gate/scripts/
 
 The generic scripts do not validate the project-specific invariants captured in `test/architecture.test.ts`:
 
-1. **Layer isolation rules** -- The `architecture-guard` scripts detect layers by folder names (`types/`, `config/`, `service/`, `ui/`, etc.) which do not match this project's directory structure. The actual layer enforcement is done by `test/architecture.test.ts`.
+1. **Layer isolation rules** -- The `quality-gate` scripts detect layers by folder names (`types/`, `config/`, `service/`, `ui/`, etc.) which do not match this project's directory structure. The actual layer enforcement is done by `test/architecture.test.ts`.
 2. **Translation purity** -- No check for `fetch()` in translate modules.
 3. **Barrel file integrity** -- No check that barrel re-export files are import-free.
 4. **Entry point isolation** -- No check that entry points only import index.ts.
@@ -687,7 +687,7 @@ The generic scripts do not validate the project-specific invariants captured in 
 
 ### Recommendation
 
-Keep `test/architecture.test.ts` as the primary architecture enforcement mechanism -- it is specific to this project's structure and invariants. The generic `architecture-guard` scripts serve as a secondary safety net for cross-cutting concerns (type safety, file size, naming). If adding to the architecture-guard scripts, focus on project-specific rules:
+Keep `test/architecture.test.ts` as the primary architecture enforcement mechanism -- it is specific to this project's structure and invariants. The generic `quality-gate` scripts serve as a secondary safety net for cross-cutting concerns (type safety, file size, naming). If adding to the quality-gate scripts, focus on project-specific rules:
 
 - Add a check that translate modules contain no `fetch()` or `fs.` references
 - Add a check that barrel files (`translate/index.ts`, `handlers/index.ts`) contain no imports

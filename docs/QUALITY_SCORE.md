@@ -36,7 +36,7 @@ Limit: 10 imports per file. All files pass (architecture test M4).
 
 ### 1.4 Type Safety Compliance (C9)
 
-Rules enforced by `.claude/skills/architecture-guard/scripts/check-type-safety.mjs`:
+Rules enforced by `.claude/skills/quality-gate/scripts/check-type-safety.mjs`:
 - Use `type-guards.ts` helpers instead of bare `as` casts -- largely compliant in source, some test files use `as` for narrowing in assertions.
 - No `any` type annotations -- compliant.
 - No `@ts-ignore` / `@ts-expect-error` -- compliant.

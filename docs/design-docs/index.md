@@ -7,9 +7,9 @@
 | Document | Description | Status |
 |----------|-------------|--------|
 | [core-beliefs.md](core-beliefs.md) | Foundational design philosophy | COMPLETE |
-| [TRANSFER.md](TRANSFER.md) | (future) Transfer patterns and protocol mapping | PLANNED |
-| [STREAMING.md](STREAMING.md) | (future) Streaming architecture deep-dive | PLANNED |
-| [ERROR_MODEL.md](ERROR_MODEL.md) | (future) Error classification and propagation | PLANNED |
+| TRANSFER.md | Transfer patterns and protocol mapping | NOT WRITTEN |
+| STREAMING.md | Streaming architecture deep-dive | NOT WRITTEN |
+| ERROR_MODEL.md | Error classification and propagation | NOT WRITTEN |
 
 ## Purpose
 

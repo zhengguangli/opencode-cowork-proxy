@@ -1,137 +1,37 @@
-# Sandbox Exec — Secure Code Execution Environment
+# Sandbox Exec — 安全代码执行环境 (Planned)
 
-> **Sandboxing provides isolated, disposable execution environments for agent-generated code.**
-> Each sandbox enforces command allowlists, network isolation, and process-level resource limits.
+> **Sandboxing 为 AI 生成的代码提供隔离、可丢弃的执行环境。**
+> 此功能目前处于规划阶段，尚未实现为独立的 skill。
 
-## Overview
+## 状态
 
-This project uses Docker-based sandbox containers to run agent-generated code safely. The sandbox setup provides:
+`sandbox-exec` 被列为可选 skill（见 `.claude/skills/harness-init/SKILL.md`），但尚未在 `.agents/skills/` 或 `.claude/skills/` 中创建。
 
-- **Process isolation** — code runs in a separate container with no access to the host system
-- **Command allowlist** — only approved commands can be executed
-- **Network isolation** — optional full network isolation or restricted internal network
-- **Resource limits** — memory (1GB), PID count (100), and timeout enforced
-- **Ephemeral lifecycle** — containers are created on demand and destroyed after task completion
+## 规划的设计
 
-## Directory Structure
+如果未来实现，每个沙箱将强制执行命令白名单、网络隔离和进程级资源限制：
+
+- **进程隔离** — 代码在独立的 Docker 容器中运行，无权访问主机系统
+- **命令白名单** — 只能执行已批准的命令
+- **网络隔离** — 可选完整网络隔离或受限的内部网络
+- **资源限制** — 强制限制内存 (1GB)、PID 数量 (100) 和超时
+- **临时生命周期** — 容器按需创建，任务完成后销毁
+
+## 目录结构（规划）
 
 ```
-.agents/skills/sandbox-exec/
-├── SKILL.md                           # Skill instructions
+.claude/skills/sandbox-exec/
+├── SKILL.md                           # Skill 说明
 └── scripts/sandbox/
-    ├── Dockerfile                     # Sandbox container image
-    ├── docker-compose.sandbox.yml     # Docker Compose configuration
-    ├── allowed-commands.txt           # Command allowlist
-    ├── entrypoint.sh                  # Container entrypoint (enforces allowlist)
-    ├── create-worktree.sh             # Git worktree isolation
-    ├── run-in-sandbox.sh              # Generic sandbox execution
-    └── run-test-in-sandbox.sh         # Test runner in sandbox
+    ├── Dockerfile                     # 沙箱容器镜像
+    ├── docker-compose.sandbox.yml     # Docker Compose 配置
+    ├── allowed-commands.txt           # 命令白名单
+    ├── entrypoint.sh                  # 容器入口（强制白名单）
+    ├── create-worktree.sh             # Git worktree 隔离
+    ├── run-in-sandbox.sh              # 通用沙箱执行
+    └── run-test-in-sandbox.sh         # 沙箱中的测试运行器
 ```
 
-## Security Levels
+## 何时需要
 
-| Level | Network | Commands | Filesystem | When to Use |
-|-------|---------|----------|------------|-------------|
-| **Full Isolation** (default) | `network_mode: none` | Allowlist enforced | Writable workspace | Running untrusted code, tests, build |
-| **Restricted Network** | Internal bridge, no internet | Allowlist enforced | Writable workspace | When tools need local network access (e.g., wrangler dev) |
-| **Dev** (no sandbox) | Full access | Unlimited | Full access | Local development speed (not for agent use) |
-
-## Usage
-
-### 1. Run tests in sandbox (full isolation)
-
-```bash
-# All tests
-.agents/skills/sandbox-exec/scripts/sandbox/run-test-in-sandbox.sh
-
-# Single test file
-.agents/skills/sandbox-exec/scripts/sandbox/run-test-in-sandbox.sh test/auth.test.ts
-```
-
-### 2. Run any command in sandbox
-
-```bash
-# Default (full isolation)
-.agents/skills/sandbox-exec/scripts/sandbox/run-in-sandbox.sh bun test
-
-# Restricted network mode
-.agents/skills/sandbox-exec/scripts/sandbox/run-in-sandbox.sh --restricted npx wrangler whoami
-```
-
-### 3. Create isolated worktree for a task
-
-```bash
-.agents/skills/sandbox-exec/scripts/sandbox/create-worktree.sh my-feature-task
-```
-
-This creates a new git worktree at `.worktrees/my-feature-task/` on branch `task/my-feature-task`.
-
-**Why worktrees?**
-- Each task gets an independent working directory and branch
-- Multiple tasks can run in parallel without state pollution
-- Worktrees can be destroyed after task completion with `git worktree remove`
-
-### 4. Build sandbox image manually
-
-```bash
-docker build -t sandbox-exec:latest \
-  -f .agents/skills/sandbox-exec/scripts/sandbox/Dockerfile .
-```
-
-The image is automatically built on first use by `run-in-sandbox.sh`.
-
-## Command Allowlist
-
-The allowlist at `allowed-commands.txt` restricts which commands can be executed inside the sandbox. It includes:
-
-- **Version control**: `git`
-- **Runtimes**: `bun`, `bunx`, `node`, `npm`, `npx`
-- **Shell**: `bash`, `sh`, `ls`, `cat`, `grep`, `find`, etc.
-- **Filesystem**: `mkdir`, `cp`, `mv`, `rm`, `chmod`, etc.
-- **Build**: `make`, `cc`, `gcc`, `g++`
-- **Utilities**: `jq`, `curl`, `wget`, `tar`, `python3`, `pip3`
-
-**Prohibited**: `sudo`, `docker`, `ping`, `nc`, `ssh`, `scp`, `rsync`, `netcat`, `socat`
-
-## Agent Integration
-
-Agents use the sandbox for executing code, running tests, and verifying changes. The SRE (Site Reliability Engineer) agent is responsible for sandbox environment configuration.
-
-### Recommended agent workflows
-
-#### Running tests after code changes
-```bash
-.agents/skills/sandbox-exec/scripts/sandbox/run-test-in-sandbox.sh
-```
-
-#### Task-level isolation with worktree + sandbox
-```bash
-# 1. Create isolated worktree
-.agents/skills/sandbox-exec/scripts/sandbox/create-worktree.sh fix-auth-bug
-
-# 2. Work in the worktree
-cd .worktrees/fix-auth-bug/
-
-# 3. Run tests in sandbox
-.agents/skills/sandbox-exec/scripts/sandbox/run-test-in-sandbox.sh
-
-# 4. Clean up
-git worktree remove .worktrees/fix-auth-bug/
-git branch -D task/fix-auth-bug
-```
-
-## Docker Requirements
-
-- **Docker Desktop** (macOS): Install from [docker.com](https://docs.docker.com/get-docker/)
-- **Docker Engine** (Linux): `sudo apt install docker.io docker-compose-v2`
-- Minimum version: Docker 24+ with Compose V2
-
-## Troubleshooting
-
-| Problem | Solution |
-|---------|----------|
-| `docker: command not found` | Install Docker Desktop or Engine |
-| `command not allowed by allowlist` | Check `allowed-commands.txt`, or adjust command |
-| `permission denied` on scripts | Run `chmod +x scripts/sandbox/*.sh` |
-| Docker build fails | Ensure Docker is running and has internet access on first build |
-| Container timeout | Increase `stop_timeout` in `docker-compose.sandbox.yml` |
+当您需要隔离执行 AI 生成的代码（测试、构建、未知脚本）时，sandbox-exec 可以提供保护。在此之前，所有代码直接在主机上运行。
