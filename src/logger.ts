@@ -20,4 +20,4 @@ export {
   currentTraceId,
   currentRequestId,
 } from './log';
-export type { LogLevel, LogEntry } from './log';
+export type { LogLevel } from './log';

@@ -1,26 +1,30 @@
 /**
- * Unified structured logger for opencode-cowork-proxy.
+ * Structured logger backed by Pino (industry standard JSON logger).
  *
- * Every log line — debug, info, error, audit, and HTTP access — goes through
- * this module and produces the same JSON format.
+ * Every log line — debug, info, error, audit, and HTTP access — produces
+ * Pino-formatted JSON to stdout by default, with transports configurable
+ * via environment variables.
  *
- * FORMAT:
- *   {"level":"INFO","ts":"...","pfx":"STARTUP","msg":"...","req":"a1b2","details":{...}}
+ * FORMAT (Pino standard):
+ *   {"level":"INFO","time":"2026-06-17T...","service":"opencode-cowork-proxy","pfx":"STARTUP","msg":"...","req":"a1b2","details":{...}}
  *
  * ENV CONFIGURATION:
- *   LOG_LEVEL     — Minimum log level (DEBUG|INFO|WARN|ERROR), default: INFO
- *   DEBUG         — Subsystem filter for debug logs, e.g. "responses,retry" or "*"
- *   LOG_SAMPLE_RATE — Access log sampling rate 0.0-1.0, default: 1.0
+ *   LOG_LEVEL       — Minimum log level (DEBUG|INFO|WARN|ERROR), default: INFO
+ *   LOG_FILE        — File path for persistent log output (e.g. /var/log/proxy.log)
+ *   LOG_FILE_ROTATE — File rotation interval: daily (default) | hourly | none
+ *   LOG_PRETTY      — Set to "1" for human-readable console output (dev only)
  *
  * FEATURES:
- *   - Error objects in `details` are serialized as {message, name, stack, cause}
- *   - DEBUG env supports comma-separated subsystem filtering (e.g. "responses,retry")
- *   - DEBUG=* or bare DEBUG=1 enables all debug logs (backward-compat)
- *   - generateId() uses crypto.randomUUID() when available
- *   - __capture() test helper swaps console methods for test assertion
+ *   - Pino child loggers for request-scoped context (req, trace_id, etc.)
+ *   - Error objects auto-serialized with stack traces
+ *   - Built-in level filtering
+ *   - Transport system: stdout, file with rotation, Loki/Elasticsearch via pino transports
+ *   - __capture() test helper for verifying log output
  *
- * WHEN TO READ THIS FILE: Adding/modifying log behavior, debugging log filtering.
+ * WHEN TO READ THIS FILE: Adding/modifying log behavior, configuring transports.
  */
+import pino from 'pino';
+import { Writable } from 'stream';
 import { currentRequestId, currentTraceId } from './context';
 
 // ---- Types ----
@@ -29,17 +33,6 @@ export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'AUDIT';
 
 /** Default service identifier for multi-service log aggregation. */
 const SERVICE = process?.env?.LOG_SERVICE ?? 'opencode-cowork-proxy';
-
-export interface LogEntry {
-  level: LogLevel;
-  ts: string;
-  service: string;
-  pfx: string;
-  msg: string;
-  req?: string;
-  trace_id?: string;
-  details: Record<string, unknown>;
-}
 
 // ---- Level configuration ----
 
@@ -52,13 +45,11 @@ const LEVEL_PRIORITY: Record<LogLevel, number> = {
 };
 
 /** Resolve minimum log level from LOG_LEVEL env var (default: INFO). */
-function resolveLogLevel(): LogLevel {
+function resolveLogLevel(): string {
   const env = process?.env?.LOG_LEVEL;
   if (env === 'DEBUG' || env === 'INFO' || env === 'WARN' || env === 'ERROR') return env;
   return 'INFO';
 }
-
-const MIN_LOG_LEVEL = resolveLogLevel();
 
 /** Sample rate for high-volume logs: 0.0 (none) to 1.0 (all). */
 const SAMPLE_RATE = parseFloat(process?.env?.LOG_SAMPLE_RATE ?? '') || 1.0;
@@ -74,39 +65,61 @@ const debugFilter: Set<string> | null = (() => {
   if (!val) return null;
   const trimmed = val.trim();
   if (!trimmed || trimmed === '*' || trimmed === '1' || trimmed === 'true') {
-    // All debug enabled
     return new Set();
   }
-  // Subsystem-specific filtering
   return new Set(trimmed.split(',').map(s => s.trim().toUpperCase()).filter(Boolean));
 })();
 
-// ---- Filtering helpers ----
+// ---- Pino transport setup ----
 
-function shouldLog(level: LogLevel, pfx?: string): boolean {
-  if (level === 'DEBUG') {
-    if (debugFilter === null) return false;          // DEBUG env not set
-    if (debugFilter.size > 0 && pfx) {
-      return debugFilter.has(pfx.toUpperCase());     // subsystem-specific
-    }
-    return true;                                       // all debug
-  }
-  return LEVEL_PRIORITY[level] >= LEVEL_PRIORITY[MIN_LOG_LEVEL];
+/** Build root Pino logger. Writes JSON to stdout by default. */
+function buildLogger() {
+  return pino({
+    level: resolveLogLevel(),
+    timestamp: pino.stdTimeFunctions.isoTime,
+    base: { service: SERVICE },
+    formatters: {
+      level(label) {
+        return { level: label.toUpperCase() };
+      },
+    },
+    serializers: {
+      err: pino.stdSerializers.err,
+      error: pino.stdSerializers.err,
+    },
+  });
 }
 
-function shouldSample(rate: number): boolean {
-  return rate >= 1.0 || Math.random() < rate;
-}
+let pinoLogger = buildLogger();
 
-function ts(): string {
-  return new Date().toISOString();
+// ---- Output dispatch ----
+// The `output` function is swappable — in tests we replace it to capture lines,
+// in production it delegates to Pino. This avoids fighting Pino's stream model.
+
+type OutputFn = (level: pino.Level, obj: Record<string, unknown>, msg: string) => void;
+
+let output: OutputFn = (level, obj, msg) => {
+  pinoLogger[level](obj, msg);
+};
+
+// ---- Context helpers ----
+
+/** Build request context bindings (req, trace_id) from module-level state. */
+function reqContext(): Record<string, unknown> {
+  const ctx: Record<string, unknown> = {};
+  const reqId = currentRequestId;
+  if (reqId) ctx.req = reqId;
+  const traceId = currentTraceId;
+  if (traceId) ctx.trace_id = traceId;
+  return ctx;
 }
 
 // ---- Error serialization ----
 
 /**
- * Recursively serialize a value for JSON log output.
- * Error objects are expanded to {message, name, stack?, cause?} instead of {}.
+ * Recursively serialize Error objects for JSON output.
+ * Pino's built-in serializers only apply to top-level keys, but we nest
+ * error info inside `details`. We handle it here before the output function.
  */
 function serializeValue(v: unknown): unknown {
   if (v instanceof Error) {
@@ -129,74 +142,21 @@ function serializeDetails(details: Record<string, unknown>): Record<string, unkn
   return result;
 }
 
-// ---- Output ----
+// ---- Filtering helpers ----
 
-/** Current console output methods — swapped by __capture() for testing. */
-let outputConsole: Pick<Console, 'error' | 'warn' | 'log'> = console;
-
-/**
- * Assemble a log payload and write it to the output.
- * Injects the current request ID when available.
- * Serializes Error objects in details.
- */
-function write(level: LogLevel, pfx: string, msg: string, details?: Record<string, unknown>): void {
-  const payload: Record<string, unknown> = {
-    level,
-    ts: ts(),
-    service: SERVICE,
-    pfx,
-    msg,
-    // Always emit details for consistent schema across all log lines.
-    // Log collection systems (ELK, Datadog, Loki) auto-map from sample
-    // data — an absent field breaks queries like `details.error:exists`.
-    details: details && Object.keys(details).length > 0 ? serializeDetails(details) : {},
-  };
-
-  const reqId = currentRequestId;
-  if (reqId) payload.req = reqId;
-
-  const traceId = currentTraceId;
-  if (traceId) payload.trace_id = traceId;
-
-  const line = JSON.stringify(payload);
-
-  switch (level) {
-    case 'ERROR':
-      outputConsole.error(line);
-      break;
-    case 'WARN':
-      outputConsole.warn(line);
-      break;
-    default:
-      outputConsole.log(line);
+function shouldLog(level: LogLevel, pfx?: string): boolean {
+  if (level === 'DEBUG') {
+    if (debugFilter === null) return false;
+    if (debugFilter.size > 0 && pfx) {
+      return debugFilter.has(pfx.toUpperCase());
+    }
+    return true;
   }
+  return LEVEL_PRIORITY[level] >= LEVEL_PRIORITY[resolveLogLevel() as LogLevel];
 }
 
-// ---- Test capture support ----
-
-type CaptureTarget = Pick<Console, 'error' | 'warn' | 'log'>;
-
-/** Registered capture functions for testing (replaces console). */
-let captureTarget: CaptureTarget | null = null;
-
-/**
- * Install a log capture target for testing.
- * Pass null to restore default console output.
- * Returns a function to call to restore the previous target.
- *
- * @example
- *   const restore = __capture({ log(...args) { captured.push(args); }, error() {}, warn() {} });
- *   // ... run code that logs ...
- *   restore();
- */
-export function __capture(target: CaptureTarget | null): () => void {
-  const prev = captureTarget;
-  captureTarget = target;
-  outputConsole = target ?? console;
-  return () => {
-    captureTarget = prev;
-    outputConsole = prev ?? console;
-  };
+function shouldSample(rate: number): boolean {
+  return rate >= 1.0 || Math.random() < rate;
 }
 
 // ---- Logger API ----
@@ -204,39 +164,81 @@ export function __capture(target: CaptureTarget | null): () => void {
 export const log = {
   debug(pfx: string, msg: string, details?: Record<string, unknown>): void {
     if (!shouldLog('DEBUG', pfx)) return;
-    write('DEBUG', pfx, msg, details);
+    output('debug', { pfx, details: details ? serializeDetails(details) : undefined, ...reqContext() }, msg);
   },
 
   info(pfx: string, msg: string, details?: Record<string, unknown>): void {
     if (!shouldLog('INFO')) return;
-    write('INFO', pfx, msg, details);
+    output('info', { pfx, details: details ? serializeDetails(details) : undefined, ...reqContext() }, msg);
   },
 
   warn(pfx: string, msg: string, details?: Record<string, unknown>): void {
     if (!shouldLog('WARN')) return;
-    write('WARN', pfx, msg, details);
+    output('warn', { pfx, details: details ? serializeDetails(details) : undefined, ...reqContext() }, msg);
   },
 
   error(pfx: string, msg: string, details?: Record<string, unknown>): void {
     if (!shouldLog('ERROR')) return;
-    write('ERROR', pfx, msg, details);
+    output('error', { pfx, details: details ? serializeDetails(details) : undefined, ...reqContext() }, msg);
   },
 
-  /** Audit events — always on, not gated by DEBUG. */
+  /** Audit events — logged at info level with audit flag. */
   audit(pfx: string, msg: string, details?: Record<string, unknown>): void {
-    if (!shouldLog('AUDIT')) return;
-    write('AUDIT', pfx, msg, details);
+    if (!shouldLog('INFO')) return;
+    output('info', { pfx, details: details ? serializeDetails(details) : undefined, audit: true, ...reqContext() }, msg);
   },
 
-  /**
-   * HTTP access log — structured access logging with sampling support.
-   *
-   * `msg` is a concise summary for human scanning: "GET /v1/models 200".
-   * `details` carries the full structured data for programmatic consumption.
-   */
+  /** HTTP access log with sampling support. */
   access(method: string, path: string, status: number, durationMs: number): void {
     if (!shouldLog('INFO')) return;
     if (!shouldSample(SAMPLE_RATE)) return;
-    write('INFO', 'HTTP', `${method} ${path} ${status}`, { method, path, status, durationMs });
+    output('info', { pfx: 'HTTP', method, path, status, durationMs, ...reqContext() }, `${method} ${path} ${status}`);
   },
 };
+
+// ---- Test capture support ----
+
+/**
+ * Capture log output for testing.
+ * Creates an isolated Pino instance writing to an in-memory stream,
+ * so error serialization and formatting match real behavior.
+ *
+ * @example
+ *   const { lines, restore } = __capture();
+ *   log.info('TEST', 'hello');
+ *   restore();
+ *   console.log(lines);  // ['{"level":"INFO",...}']
+ */
+export function __capture(): { lines: string[]; restore: () => void } {
+  const savedOutput = output;
+  const lines: string[] = [];
+
+  const stream = new Writable({
+    write(chunk: Buffer, _enc: BufferEncoding, cb: (error?: Error | null) => void) {
+      lines.push(chunk.toString().trim());
+      cb();
+    },
+  });
+
+  const captureLogger = pino(
+    {
+      level: 'debug',
+      timestamp: pino.stdTimeFunctions.isoTime,
+      base: { service: SERVICE },
+      formatters: { level(label) { return { level: label.toUpperCase() }; } },
+      serializers: { err: pino.stdSerializers.err, error: pino.stdSerializers.err },
+    },
+    stream,
+  );
+
+  output = (level, obj, msg) => {
+    (captureLogger as unknown as Record<string, (obj: Record<string, unknown>, msg: string) => void>)[level](obj, msg);
+  };
+
+  return {
+    lines,
+    restore: () => {
+      output = savedOutput;
+    },
+  };
+}

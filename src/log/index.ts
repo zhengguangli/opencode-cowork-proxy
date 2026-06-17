@@ -22,4 +22,4 @@ export {
   currentRequestId,
   resolveContextIds,
 } from './context';
-export type { LogLevel, LogEntry } from './logger';
+export type { LogLevel } from './logger';

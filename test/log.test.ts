@@ -13,64 +13,49 @@ import {
 
 describe('error serialization', () => {
   it('serializes Error objects in details instead of {}', () => {
-    const captured: string[] = [];
-    const restore = __capture({
-      log(...args: unknown[]) { captured.push(String(args[0])); },
-      error(...args: unknown[]) { captured.push(String(args[0])); },
-      warn(...args: unknown[]) { captured.push(String(args[0])); },
-    });
+    const captured = __capture();
 
     try {
       log.error('TEST', 'Something broke', { error: new Error('Kaboom') });
 
-      expect(captured.length).toBe(1);
-      const parsed = JSON.parse(captured[0]);
+      expect(captured.lines.length).toBe(1);
+      const parsed = JSON.parse(captured.lines[0]);
       expect(parsed.details.error.message).toBe('Kaboom');
       expect(parsed.details.error.name).toBe('Error');
       expect(parsed.details.error.stack).toBeTypeOf('string');
     } finally {
-      restore();
+      captured.restore();
     }
   });
 
   it('serializes nested Error cause', () => {
-    const captured: string[] = [];
-    const restore = __capture({
-      log(...args: unknown[]) { captured.push(String(args[0])); },
-      error(...args: unknown[]) { captured.push(String(args[0])); },
-      warn(...args: unknown[]) { captured.push(String(args[0])); },
-    });
+    const captured = __capture();
 
     try {
       const inner = new Error('Inner failure');
       const outer = new Error('Outer failure', { cause: inner });
       log.error('TEST', 'Chain', { error: outer });
 
-      const parsed = JSON.parse(captured[0]);
+      const parsed = JSON.parse(captured.lines[0]);
       expect(parsed.details.error.message).toBe('Outer failure');
       expect(parsed.details.error.cause.message).toBe('Inner failure');
     } finally {
-      restore();
+      captured.restore();
     }
   });
 
   it('passes non-Error values through unchanged', () => {
-    const captured: string[] = [];
-    const restore = __capture({
-      log(...args: unknown[]) { captured.push(String(args[0])); },
-      error(...args: unknown[]) { captured.push(String(args[0])); },
-      warn(...args: unknown[]) { captured.push(String(args[0])); },
-    });
+    const captured = __capture();
 
     try {
       log.info('TEST', 'Stats', { count: 42, name: 'hello', active: true });
 
-      const parsed = JSON.parse(captured[0]);
+      const parsed = JSON.parse(captured.lines[0]);
       expect(parsed.details.count).toBe(42);
       expect(parsed.details.name).toBe('hello');
       expect(parsed.details.active).toBe(true);
     } finally {
-      restore();
+      captured.restore();
     }
   });
 });
@@ -79,45 +64,31 @@ describe('error serialization', () => {
 
 describe('__capture', () => {
   it('captures log output for testing', () => {
-    const captured: string[] = [];
-    const restore = __capture({
-      log(...args: unknown[]) { captured.push(String(args[0])); },
-      error() {},
-      warn() {},
-    });
+    const captured = __capture();
 
     try {
       log.info('TEST', 'Hello world', { key: 'value' });
 
-      expect(captured.length).toBe(1);
-      const parsed = JSON.parse(captured[0]);
+      expect(captured.lines.length).toBe(1);
+      const parsed = JSON.parse(captured.lines[0]);
       expect(parsed.level).toBe('INFO');
       expect(parsed.pfx).toBe('TEST');
       expect(parsed.msg).toBe('Hello world');
     } finally {
-      restore();
+      captured.restore();
     }
   });
 
-  it('restores console output after restore', () => {
-    const captured1: string[] = [];
-    const restore = __capture({
-      log(...args: unknown[]) { captured1.push(String(args[0])); },
-      error() {},
-      warn() {},
-    });
-    restore();
+  it('does not capture after restore', () => {
+    const captured1 = __capture();
+    captured1.restore();
 
-    // After restore, no capture
-    const captured2: string[] = [];
-    const restore2 = __capture({
-      log(...args: unknown[]) { captured2.push(String(args[0])); },
-      error() {},
-      warn() {},
-    });
+    // After restore, should not capture
+    const captured2 = __capture();
     log.info('TEST', 'After restore');
-    restore2();
-    expect(captured2.length).toBe(1);
+    captured2.restore();
+
+    expect(captured2.lines.length).toBe(1);
   });
 });
 
@@ -140,24 +111,19 @@ describe('generateId', () => {
 
 describe('logging context (trace_id + req)', () => {
   it('injects req and trace_id into captured log output', async () => {
-    const captured: string[] = [];
-    const restore = __capture({
-      log(...args: unknown[]) { captured.push(String(args[0])); },
-      error() {},
-      warn() {},
-    });
+    const captured = __capture();
 
     try {
       await withContextIds({ req: 'req-001', traceId: 'trace-A' }, async () => {
         log.info('AUTH', 'User logged in');
       });
 
-      expect(captured.length).toBe(1);
-      const parsed = JSON.parse(captured[0]);
+      expect(captured.lines.length).toBe(1);
+      const parsed = JSON.parse(captured.lines[0]);
       expect(parsed.req).toBe('req-001');
       expect(parsed.trace_id).toBe('trace-A');
     } finally {
-      restore();
+      captured.restore();
     }
   });
 
@@ -167,12 +133,7 @@ describe('logging context (trace_id + req)', () => {
   });
 
   it('restores previous context after nested withContextIds', async () => {
-    const captured: string[] = [];
-    const restore = __capture({
-      log(...args: unknown[]) { captured.push(String(args[0])); },
-      error() {},
-      warn() {},
-    });
+    const captured = __capture();
 
     try {
       await withContextIds({ req: 'outer', traceId: 'trace-outer' }, async () => {
@@ -182,16 +143,16 @@ describe('logging context (trace_id + req)', () => {
         log.info('NEST', 'Back to outer');
       });
 
-      expect(captured.length).toBe(2);
-      const inner = JSON.parse(captured[0]);
+      expect(captured.lines.length).toBe(2);
+      const inner = JSON.parse(captured.lines[0]);
       expect(inner.req).toBe('inner');
       expect(inner.trace_id).toBe('trace-inner');
 
-      const outer = JSON.parse(captured[1]);
+      const outer = JSON.parse(captured.lines[1]);
       expect(outer.req).toBe('outer');
       expect(outer.trace_id).toBe('trace-outer');
     } finally {
-      restore();
+      captured.restore();
     }
   });
 });

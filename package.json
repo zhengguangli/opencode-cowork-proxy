@@ -7,7 +7,7 @@
     "build:binary": "bun build --compile --bytecode --outfile ./dist/opencode-cowork-proxy scripts/build-entry.ts",
     "test": "bun test",
     "test:watch": "bun test --watch",
-    "typecheck": "bunx tsc --noEmit && echo \"\u2705 TypeScript: no errors\"",
+    "typecheck": "bunx tsc --noEmit && echo \"✅ TypeScript: no errors\"",
     "deploy": "bunx wrangler deploy",
     "build": "bun build ./src/index.ts --outdir ./dist --minify"
   },
@@ -17,9 +17,10 @@
     "typescript": "^6.0.3"
   },
   "license": "MIT",
-  "description": "Bidirectional AI API translation gateway. Anthropic\u2194OpenAI format bridge.",
+  "description": "Bidirectional AI API translation gateway. Anthropic↔OpenAI format bridge.",
   "dependencies": {
     "hono": "^4.12.17",
+    "pino": "^10.3.1",
     "zod": "^4.4.3"
   }
 }
