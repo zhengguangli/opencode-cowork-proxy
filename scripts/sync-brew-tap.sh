@@ -14,6 +14,16 @@ fi
 
 SHA256=$(shasum -a 256 "$DIST_FILE" | awk '{print $1}')
 
+# Use Ruby-safe quoting: avoid heredoc escaping issues
+ruby_post_install='  def post_install
+    plist = "#{ENV["HOME"]}/Library/LaunchAgents/homebrew.mxcl.opencode-cowork-proxy.plist"
+    if File.exist?(plist)
+      uid = Process.uid
+      label = "homebrew.mxcl.opencode-cowork-proxy"
+      system "launchctl", "kickstart", "-k", "gui/#{uid}/#{label}"
+    end
+  end'
+
 cat > "$FORMULA_FILE" <<FORMULA
 class OpencodeCoworkProxy < Formula
   desc "API translation proxy for AI clients (Anthropic↔OpenAI)"
@@ -26,14 +36,7 @@ class OpencodeCoworkProxy < Formula
     bin.install "opencode-cowork-proxy"
   end
 
-  def post_install
-    plist = "\#{ENV["HOME"]}/Library/LaunchAgents/homebrew.mxcl.opencode-cowork-proxy.plist"
-    if File.exist?(plist)
-      uid = Process.uid
-      label = "homebrew.mxcl.opencode-cowork-proxy"
-      system "launchctl", "kickstart", "-k", "gui/\#{uid}/\#{label}"
-    end
-  end
+${ruby_post_install}
 
   service do
     run [opt_bin/"opencode-cowork-proxy"]
