@@ -14,8 +14,8 @@ fi
 
 SHA256=$(shasum -a 256 "$DIST_FILE" | awk '{print $1}')
 
-# Use Ruby-safe quoting: avoid heredoc escaping issues
-ruby_post_install='  def post_install
+ruby_install='  def install
+    bin.install "opencode-cowork-proxy"
     plist = "#{ENV["HOME"]}/Library/LaunchAgents/homebrew.mxcl.opencode-cowork-proxy.plist"
     if File.exist?(plist)
       uid = Process.uid
@@ -32,11 +32,7 @@ class OpencodeCoworkProxy < Formula
   url "${RELEASE_URL}"
   sha256 "${SHA256}"
 
-  def install
-    bin.install "opencode-cowork-proxy"
-  end
-
-${ruby_post_install}
+${ruby_install}
 
   service do
     run [opt_bin/"opencode-cowork-proxy"]
