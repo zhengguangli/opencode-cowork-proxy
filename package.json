@@ -1,6 +1,6 @@
 {
   "name": "opencode-cowork-proxy",
-  "version": "2.2.2",
+  "version": "2.1.5",
   "main": "src/index.ts",
   "scripts": {
     "dev": "bun run scripts/build-entry.ts",
