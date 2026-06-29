@@ -27,7 +27,12 @@ class OpencodeCoworkProxy < Formula
   end
 
   def post_install
-    system "brew", "services", "restart", "opencode-cowork-proxy"
+    plist = "\#{ENV["HOME"]}/Library/LaunchAgents/homebrew.mxcl.opencode-cowork-proxy.plist"
+    if File.exist?(plist)
+      uid = Process.uid
+      label = "homebrew.mxcl.opencode-cowork-proxy"
+      system "launchctl", "kickstart", "-k", "gui/\#{uid}/\#{label}"
+    end
   end
 
   service do
