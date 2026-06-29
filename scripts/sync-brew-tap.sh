@@ -14,10 +14,6 @@ fi
 
 SHA256=$(shasum -a 256 "$DIST_FILE" | awk '{print $1}')
 
-ruby_post_install='  def post_install
-    safe_system "launchctl", "kickstart", "-k", "gui/#{Process.uid}/homebrew.mxcl.opencode-cowork-proxy"
-  end'
-
 cat > "$FORMULA_FILE" <<FORMULA
 class OpencodeCoworkProxy < Formula
   desc "API translation proxy for AI clients (Anthropic↔OpenAI)"
@@ -29,8 +25,6 @@ class OpencodeCoworkProxy < Formula
   def install
     bin.install "opencode-cowork-proxy"
   end
-
-${ruby_post_install}
 
   service do
     run [opt_bin/"opencode-cowork-proxy"]
