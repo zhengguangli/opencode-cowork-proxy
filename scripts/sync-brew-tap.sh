@@ -26,6 +26,14 @@ class OpencodeCoworkProxy < Formula
     bin.install "opencode-cowork-proxy"
   end
 
+  def post_install
+    plist = "#{ENV["HOME"]}/Library/LaunchAgents/homebrew.mxcl.opencode-cowork-proxy.plist"
+    if File.exist?(plist)
+      quiet_system "launchctl", "bootout", "gui/#{Process.uid}", plist rescue nil
+      quiet_system "launchctl", "bootstrap", "gui/#{Process.uid}", plist
+    end
+  end
+
   service do
     run [opt_bin/"opencode-cowork-proxy"]
     environment_variables PORT: "18787", VERSION: "${VERSION}"
