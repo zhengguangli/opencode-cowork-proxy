@@ -34,6 +34,7 @@ export function streamChatCompletionsToResponses(
 
   const decoder = new TextDecoder();
   const enqueueSSE = createSseEncoder();
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
 
   return new ReadableStream({
     async start(controller) {
@@ -53,7 +54,7 @@ export function streamChatCompletionsToResponses(
       const outputItems: Array<Record<string, unknown>> = [];
       let activeToolCallIndex: number | null = null;
 
-      const reader = openaiStream.getReader();
+      reader = openaiStream.getReader();
       let buffer = "";
 
       function emitCreated() {
@@ -424,8 +425,16 @@ export function streamChatCompletionsToResponses(
         type: terminalEvent,
         response: finalResponse,
       });
-
       controller.close();
+    },
+    async cancel(reason) {
+      if (reader) {
+        try {
+          await reader.cancel(reason);
+        } catch {
+          // ignore cancellation error
+        }
+      }
     },
   });
 }

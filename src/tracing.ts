@@ -33,16 +33,34 @@ const provider = new BasicTracerProvider({
 // Register as global tracer provider so trace.getTracer() returns our tracer
 trace.setGlobalTracerProvider(provider);
 
+import { getRequestContext } from './log/context';
+
 const TRACER: Tracer = trace.getTracer(SERVICE_NAME, SERVICE_VERSION);
 
-// ---- Module-level span tracking for utility functions ----
+// ---- Async context-aware span tracking for utility functions ----
 
-/** @internal Current root span for this request (read by safeUpstreamFetch, etc.). */
-export let currentSpan: Span | undefined;
+let fallbackSpan: Span | undefined;
 
-/** @internal Set the current span (used by index.ts before handler dispatch). */
+/** Current root span for this request (read by safeUpstreamFetch, etc.). */
+export function getCurrentSpan(): Span | undefined {
+  const ctx = getRequestContext();
+  return (ctx?.span as Span | undefined) ?? fallbackSpan;
+}
+
+/** Legacy export accessor */
+export const currentSpan = {
+  get value() { return getCurrentSpan(); },
+  valueOf() { return getCurrentSpan(); },
+};
+
+/** Set the current span (used by index.ts before handler dispatch). */
 export function setCurrentSpan(span: Span | undefined): void {
-  currentSpan = span;
+  const ctx = getRequestContext();
+  if (ctx) {
+    ctx.span = span;
+  } else {
+    fallbackSpan = span;
+  }
 }
 
 /**
@@ -58,10 +76,10 @@ export function startRequestSpan(path: string, method: string): Span {
 }
 
 /**
- * Start a child span under the given parent or the module-level current span.
+ * Start a child span under the given parent or the active request span.
  */
 export function startSpan(name: string, parent?: Span): Span {
-  const p = parent ?? currentSpan;
+  const p = parent ?? getCurrentSpan();
   let ctx = context.active();
   if (p) ctx = trace.setSpan(ctx, p);
   return TRACER.startSpan(name, undefined, ctx);
@@ -83,7 +101,7 @@ export function endSpan(span: Span, attrs?: Record<string, string | number | boo
     }
   }
   span.end();
-  if (currentSpan === span) setCurrentSpan(undefined);
+  if (getCurrentSpan() === span) setCurrentSpan(undefined);
 }
 
 /**
@@ -93,3 +111,4 @@ export function recordError(span: Span, error: Error): void {
   span.recordException(error);
   span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
 }
+

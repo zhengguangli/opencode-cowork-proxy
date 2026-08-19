@@ -34,11 +34,46 @@
  *   currentTraceId        — Module-level variable
  */
 
-/** Per-request ID — populated by withContextIds(), read by logger.ts write(). */
-export let currentRequestId: string | undefined;
+import { AsyncLocalStorage } from 'node:async_hooks';
 
-/** Trace/session ID — populated by withContextIds(), read by logger.ts write(). */
-export let currentTraceId: string | undefined;
+export interface RequestContext {
+  req: string;
+  traceId?: string;
+  span?: unknown;
+}
+
+const asyncLocalStorage = new AsyncLocalStorage<RequestContext>();
+
+/**
+ * Fallback module-level variables for environments without active ALS context.
+ */
+let fallbackRequestId: string | undefined;
+let fallbackTraceId: string | undefined;
+
+/** Per-request ID — read from AsyncLocalStorage or fallback. */
+export function getRequestId(): string | undefined {
+  return asyncLocalStorage.getStore()?.req ?? fallbackRequestId;
+}
+
+/** Trace/session ID — read from AsyncLocalStorage or fallback. */
+export function getTraceId(): string | undefined {
+  return asyncLocalStorage.getStore()?.traceId ?? fallbackTraceId;
+}
+
+/** Get the current RequestContext from AsyncLocalStorage. */
+export function getRequestContext(): RequestContext | undefined {
+  return asyncLocalStorage.getStore();
+}
+
+/** Legacy getters for direct property access (backward compatibility). */
+export const currentRequestId = {
+  toString: () => getRequestId() ?? '',
+  valueOf: () => getRequestId(),
+};
+export const currentTraceId = {
+  toString: () => getTraceId() ?? '',
+  valueOf: () => getTraceId(),
+};
 
 /**
  * Generate a short unique ID (8 chars).
@@ -119,10 +154,6 @@ export function resolveContextIds(request: Request): ContextIds {
     const xri = request.headers.get('X-Request-Id');
     if (xri) traceId = xri.trim().slice(0, 64);
   }
-  // No auto-generated fallback — trace_id is *client-provided only*.
-  // Without cooperation from the client (a header), the server has no
-  // way to know which requests belong to the same session. Leaving
-  // traceId as undefined is honest and avoids misleading metrics.
 
   // --- req resolution ---
   const clientReqId = request.headers.get('X-Request-Id');
@@ -132,28 +163,13 @@ export function resolveContextIds(request: Request): ContextIds {
 }
 
 /**
- * Wrap an async operation with trace_id and req in the logging context.
- * Nests safely — previous values are restored in the `finally` block.
+ * Wrap an async operation with trace_id and req in the logging context via AsyncLocalStorage.
+ * Nests safely and isolates concurrent request contexts.
  */
-export async function withContextIds<T>(ids: ContextIds, fn: () => Promise<T>): Promise<T> {
-  const prevReq = currentRequestId;
-  const prevTrace = currentTraceId;
-  currentRequestId = ids.req;
-  currentTraceId = ids.traceId;
-  try {
-    return await fn();
-  } finally {
-    currentRequestId = prevReq;
-    currentTraceId = prevTrace;
-  }
-}
-
-/** Get the current request ID (for passing to sub-systems or embedding in responses). */
-export function getRequestId(): string | undefined {
-  return currentRequestId;
-}
-
-/** Get the current trace/session ID. */
-export function getTraceId(): string | undefined {
-  return currentTraceId;
+export function withContextIds<T>(ids: ContextIds, fn: () => Promise<T>): Promise<T> {
+  const store: RequestContext = {
+    req: ids.req,
+    traceId: ids.traceId,
+  };
+  return asyncLocalStorage.run(store, fn);
 }

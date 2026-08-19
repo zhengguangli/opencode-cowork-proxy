@@ -59,6 +59,16 @@ export const VISION_CAPABLE_ZEN = new Set<string>([
   "mimo-v2.5-free",
 ]);
 
+// Read extra vision models from environment (comma-separated)
+const extraVisionModels = (typeof process !== 'undefined' && process?.env?.EXTRA_VISION_MODELS)
+  ? process.env.EXTRA_VISION_MODELS.split(',').map(s => s.trim()).filter(Boolean)
+  : [];
+
+for (const model of extraVisionModels) {
+  VISION_CAPABLE_GO.add(model);
+  VISION_CAPABLE_ZEN.add(model);
+}
+
 export const API_VERSION_PATTERN = /^v\d+$/;
 
 export const UPSTREAM_FORWARD_HEADERS = [
@@ -72,6 +82,11 @@ export const UPSTREAM_FORWARD_HEADERS = [
 
 declare const process: { env?: Record<string, string | undefined> } | undefined;
 export const IS_DEBUG = typeof process !== 'undefined' && process?.env?.DEBUG;
+
+/** Optional Admin API Key for securing operational endpoints (/audit/log, /health/upstream?probe=true) */
+export const ADMIN_API_KEY = typeof process !== 'undefined' && process?.env?.ADMIN_API_KEY?.trim()
+  ? process.env.ADMIN_API_KEY.trim()
+  : null;
 
 /** Cloudflare Cache TTL for model list responses (in seconds) */
 export const MODEL_CACHE_TTL = 300;

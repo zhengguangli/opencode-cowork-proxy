@@ -16,6 +16,7 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
   const messageId = "msg_" + Date.now();
   const decoder = new TextDecoder();
   const enqueueSSE = createSseEncoder();
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
 
   return new ReadableStream({
     async start(controller) {
@@ -31,7 +32,7 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
       let finishReason: string | null = null;
       let messageStarted = false;
 
-      const reader = openaiStream.getReader();
+      reader = openaiStream.getReader();
       let buffer = '';
 
       function processStreamDelta(delta_: Record<string, unknown>, parsed_: Record<string, unknown>) {
@@ -121,18 +122,17 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
               });
             }
 
-            // Always process arguments, keyed by OpenAI tool call index
-            // (not by a single currentToolCallId pointer)
-            if (toolCall.function?.arguments) {
-              const tcId = toolCallIdByOaiIndex.get(toolCall.index);
-              if (tcId) {
-                const currentJson = toolCallJsonMap.get(tcId) || "";
-                toolCallJsonMap.set(tcId, currentJson + toolCall.function.arguments);
+            // Stream arguments delta (handles new declaration with non-empty args too)
+            if (toolCall.function?.arguments !== undefined && toolCall.function.arguments !== "") {
+              const targetCbIndex = oaiIndexToCbIndex.get(toolCall.index);
+              const targetTcId = toolCallIdByOaiIndex.get(toolCall.index);
+              if (targetCbIndex !== undefined && targetTcId !== undefined) {
+                const currentArgs = toolCallJsonMap.get(targetTcId) || "";
+                toolCallJsonMap.set(targetTcId, currentArgs + toolCall.function.arguments);
 
-                const cbIndex = oaiIndexToCbIndex.get(toolCall.index) ?? contentBlockIndex;
                 enqueueSSE(controller, "content_block_delta", {
                   type: "content_block_delta",
-                  index: cbIndex,
+                  index: targetCbIndex,
                   delta: {
                     type: "input_json_delta",
                     partial_json: toolCall.function.arguments,
@@ -143,7 +143,8 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
           }
         }
 
-        if (delta.reasoning_content) {
+        // Handle text or thinking content
+        if (delta.reasoning_content !== undefined && delta.reasoning_content !== null) {
           if (isToolUse || hasStartedTextBlock) {
             enqueueSSE(controller, "content_block_stop", {
               type: "content_block_stop",
@@ -341,6 +342,15 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
       });
 
       controller.close();
+    },
+    async cancel(reason) {
+      if (reader) {
+        try {
+          await reader.cancel(reason);
+        } catch {
+          // ignore cancellation error
+        }
+      }
     },
   });
 }

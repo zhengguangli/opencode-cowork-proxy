@@ -8,13 +8,18 @@
  */
 
 import { getRecentAuditEvents } from '../audit';
+import { verifyAdminAuth, unauthorizedResponse } from '../auth';
 import { RouteInfo } from './shared';
 
 /**
  * Handle GET /audit/log — returns recent audit events.
  */
-export async function handleAuditLog(_request: Request, _route: RouteInfo): Promise<Response> {
-  const url = new URL(_request.url);
+export async function handleAuditLog(request: Request, _route: RouteInfo): Promise<Response> {
+  if (!verifyAdminAuth(request)) {
+    return unauthorizedResponse('Unauthorized to access audit logs');
+  }
+
+  const url = new URL(request.url);
   const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '200', 10), 1), 1000);
   const events = getRecentAuditEvents(limit);
   return new Response(JSON.stringify(events, null, 2), {

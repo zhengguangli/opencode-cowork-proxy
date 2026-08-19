@@ -25,7 +25,7 @@
  */
 import pino from 'pino';
 import { Writable } from 'stream';
-import { currentRequestId, currentTraceId } from './context';
+import { getRequestId, getTraceId } from './context';
 
 // ---- Types ----
 
@@ -132,12 +132,12 @@ let output: OutputFn = (level, obj, msg) => {
 
 // ---- Context helpers ----
 
-/** Build request context bindings (req, trace_id) from module-level state. */
+/** Build request context bindings (req, trace_id) from AsyncLocalStorage context. */
 function reqContext(): Record<string, unknown> {
   const ctx: Record<string, unknown> = {};
-  const reqId = currentRequestId;
+  const reqId = getRequestId();
   if (reqId) ctx.req = reqId;
-  const traceId = currentTraceId;
+  const traceId = getTraceId();
   if (traceId) ctx.trace_id = traceId;
   return ctx;
 }

@@ -30,18 +30,60 @@ export interface AuditEvent {
 // ---- Ring buffer for /audit/log ----
 
 const MAX_BUFFERED = 1000;
-const eventBuffer: AuditEvent[] = [];
+
+export class RingBuffer<T> {
+  private buffer: (T | undefined)[];
+  private head = 0;
+  private tail = 0;
+  private count = 0;
+
+  constructor(private capacity: number) {
+    this.buffer = new Array(capacity);
+  }
+
+  push(item: T): void {
+    this.buffer[this.tail] = item;
+    this.tail = (this.tail + 1) % this.capacity;
+    if (this.count < this.capacity) {
+      this.count++;
+    } else {
+      this.head = (this.head + 1) % this.capacity;
+    }
+  }
+
+  get length(): number {
+    return this.count;
+  }
+
+  /** Return the last `limit` items, oldest first. */
+  slice(limit = 200): T[] {
+    const lim = Math.min(Math.max(limit, 0), this.count);
+    const result: T[] = [];
+    const startIndex = (this.head + this.count - lim) % this.capacity;
+    for (let i = 0; i < lim; i++) {
+      const idx = (startIndex + i) % this.capacity;
+      result.push(this.buffer[idx] as T);
+    }
+    return result;
+  }
+
+  clear(): void {
+    this.head = 0;
+    this.tail = 0;
+    this.count = 0;
+    this.buffer.fill(undefined);
+  }
+}
+
+const auditRingBuffer = new RingBuffer<AuditEvent>(MAX_BUFFERED);
 
 function bufferEvent(event: AuditEvent): void {
-  eventBuffer.push(event);
-  if (eventBuffer.length > MAX_BUFFERED) {
-    eventBuffer.shift();
-  }
+  auditRingBuffer.push(event);
 }
 
 /** Get a snapshot of recent audit events (newest last). */
 export function getRecentAuditEvents(limit = 200): AuditEvent[] {
-  return eventBuffer.slice(-limit);
+  return auditRingBuffer.slice(limit);
 }
 
 // ---- Core ----

@@ -75,11 +75,14 @@ export function getCachedResponse(upstream: string, path: string, body: string):
     return null;
   }
   entry.hitCount++;
+  // Refresh LRU order by re-inserting
+  store.delete(key);
+  store.set(key, entry);
   return entry.response.clone();
 }
 
 /**
- * Store a response in cache.
+ * Store a response in cache with O(1) LRU eviction.
  * The response body is consumed and buffered.
  */
 export async function setCachedResponse(
@@ -90,20 +93,17 @@ export async function setCachedResponse(
   if (!response.ok) return;
   if (response.headers.get('Content-Type')?.includes('text/event-stream')) return;
 
-  // Evict oldest if at capacity
-  if (store.size >= MAX_CACHE_SIZE) {
-    let oldestKey: string | null = null;
-    let oldestTime = Infinity;
-    for (const [k, v] of store) {
-      if (v.createdAt < oldestTime) {
-        oldestTime = v.createdAt;
-        oldestKey = k;
-      }
-    }
+  const key = cacheKey(upstream, path, simpleHash(body));
+
+  // If already exists, delete first so new entry goes to the end
+  if (store.has(key)) {
+    store.delete(key);
+  } else if (store.size >= MAX_CACHE_SIZE) {
+    // Evict least recently used (first item in Map iterator) in O(1)
+    const oldestKey = store.keys().next().value;
     if (oldestKey) store.delete(oldestKey);
   }
 
-  const key = cacheKey(upstream, path, simpleHash(body));
   const now = Date.now();
 
   // Buffer the response body so we can clone it later

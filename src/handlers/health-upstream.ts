@@ -10,6 +10,7 @@
  */
 import { MODEL_LIST_TIMEOUT } from '../config';
 import { safeUpstreamFetch, upstreamErrorResponse } from '../request';
+import { verifyAdminAuth, unauthorizedResponse } from '../auth';
 import { RouteInfo } from './shared';
 
 interface HealthResult {
@@ -25,15 +26,19 @@ interface HealthResult {
  * Handle GET /health/upstream — reports upstream connectivity.
  *
  * Without ?probe=true: returns cached/config info only (no active probe).
- * With ?probe=true: performs a lightweight GET to /v1/models with 10s timeout.
+ * With ?probe=true: performs a lightweight GET to /v1/models with 10s timeout (requires admin auth if ADMIN_API_KEY is configured).
  */
 export async function handleUpstreamHealth(
-  _request: Request,
+  request: Request,
   route: RouteInfo,
 ): Promise<Response> {
-  const url = new URL(_request.url);
+  const url = new URL(request.url);
   const shouldProbe = url.searchParams.get('probe') === 'true';
   const upstream = route.upstream;
+
+  if (shouldProbe && !verifyAdminAuth(request)) {
+    return unauthorizedResponse('Unauthorized to trigger active health probe');
+  }
 
   const result: HealthResult = {
     upstream,

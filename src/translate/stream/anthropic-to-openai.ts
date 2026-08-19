@@ -17,9 +17,11 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
     controller.enqueue(sseEncoder.encode(`data: ${JSON.stringify(data)}\n\n`));
   };
 
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+
   return new ReadableStream({
     async start(controller) {
-      const reader = anthropicStream.getReader();
+      reader = anthropicStream.getReader();
       let buffer = "";
 
       // Tool call tracking: contentBlockIndex → { id, name, args, toolCallIndex }
@@ -216,6 +218,15 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
       // Send [DONE] — raw text, NOT JSON-stringified (OpenAI spec requires data: [DONE])
       controller.enqueue(sseEncoder.encode("data: [DONE]\n\n"));
       controller.close();
+    },
+    async cancel(reason) {
+      if (reader) {
+        try {
+          await reader.cancel(reason);
+        } catch {
+          // ignore cancellation error
+        }
+      }
     },
   });
 }

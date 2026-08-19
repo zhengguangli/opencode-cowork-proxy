@@ -12,6 +12,8 @@
  *   - Generic keys: at least 32 chars of base64-like characters
  */
 
+import { ADMIN_API_KEY } from './config';
+
 const KEY_PATTERN = /^[A-Za-z0-9_-]{32,}$/;
 const OPENCODE_KEY_PATTERN = /^(sk-|pk-)[A-Za-z0-9_-]{29,}$/;
 const ANTHROPIC_KEY_PATTERN = /^sk-ant-[A-Za-z0-9_-]{35,}$/;
@@ -81,5 +83,23 @@ export function authErrorResponse(err: AuthError, path?: string): Response {
   return new Response(JSON.stringify(body), {
     status: err.status,
     headers: { "Content-Type": "application/json" },
+  });
+}
+
+/**
+ * Verify admin authorization for operational endpoints.
+ * Returns true if ADMIN_API_KEY is not set (open mode) or if request provides valid key.
+ */
+export function verifyAdminAuth(request: Request): boolean {
+  if (!ADMIN_API_KEY) return true;
+  const adminKey = request.headers.get('X-Admin-Key') ||
+    request.headers.get('Authorization')?.replace(/^(Bearer|Token)\s+/i, '')?.trim();
+  return adminKey === ADMIN_API_KEY;
+}
+
+export function unauthorizedResponse(message = 'Unauthorized'): Response {
+  return new Response(JSON.stringify({ error: { type: 'authentication_error', message } }), {
+    status: 401,
+    headers: { 'Content-Type': 'application/json' },
   });
 }
