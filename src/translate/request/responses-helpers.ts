@@ -77,6 +77,23 @@ export function translateUserContent(content: unknown): Record<string, unknown> 
     } else if (part.type === "image_url") {
       hasImages = true;
       parts.push({ type: "image_url", image_url: { url: String(asRecord(part.image_url)?.url ?? "") } });
+    } else if (part.type === "input_file") {
+      const fileData = asRecord(part);
+      if (fileData.file_url || fileData.url) {
+        hasImages = true;
+        parts.push({ type: "file", file: { url: String(fileData.file_url || fileData.url) } });
+      } else if (fileData.text || fileData.content) {
+        textParts.push(String(fileData.text || fileData.content));
+      }
+    } else if (part.type === "input_audio") {
+      const audioData = asRecord(part);
+      if (audioData.input_audio || audioData.data) {
+        hasImages = true;
+        parts.push({
+          type: "input_audio",
+          input_audio: audioData.input_audio || { data: audioData.data, format: audioData.format || "wav" },
+        });
+      }
     }
   }
 

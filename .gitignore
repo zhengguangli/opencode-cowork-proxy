@@ -33,3 +33,8 @@ opencode-cowork-proxy.newsyslog.conf
 
 # Reasonix tool-specific skill store (duplicates .claude/skills/)
 .reasonix/
+
+# Local agent & indexing tooling
+.codegraph/
+.engram/
+.gemini/

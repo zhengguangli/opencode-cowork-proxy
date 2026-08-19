@@ -452,4 +452,44 @@ describe('formatResponsesToChatCompletions (Responses API → Chat Completions r
     });
     expect(result.tool_choice).toBe('auto');
   });
+
+  // ── Multimodal input_file and input_audio ──
+  it('handles input_file with url in Responses API user message', () => {
+    const result: any = formatResponsesToChatCompletions({
+      model: 'deepseek-v4-pro',
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Analyze file' },
+            { type: 'input_file', file_url: 'https://example.com/doc.pdf' },
+          ],
+        },
+      ],
+    });
+    expect(result.messages[0].content).toEqual([
+      { type: 'text', text: 'Analyze file' },
+      { type: 'file', file: { url: 'https://example.com/doc.pdf' } },
+    ]);
+  });
+
+  it('handles input_audio in Responses API user message', () => {
+    const result: any = formatResponsesToChatCompletions({
+      model: 'deepseek-v4-pro',
+      input: [
+        {
+          type: 'message',
+          role: 'user',
+          content: [
+            { type: 'input_audio', data: 'audiobase64', format: 'wav' },
+          ],
+        },
+      ],
+    });
+    expect(result.messages[0].content).toEqual([
+      { type: 'input_audio', input_audio: { data: 'audiobase64', format: 'wav' } },
+    ]);
+  });
 });
+
