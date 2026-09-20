@@ -5,6 +5,7 @@
  * to Anthropic client, adding new response field mappings, or changing how
  * finish_reason / tool_calls map to Anthropic stop_reason / tool_use.
  */
+import { syntheticId } from "../id";
 import { extractCachedTokens, extractOutputTokens, extractUncachedInputTokens } from '../../cache';
 import { asRecord, asRecordArray, asRecordOptional } from '../type-guards';
 
@@ -23,7 +24,7 @@ function parseToolArguments(value: string | undefined): Record<string, unknown> 
 }
 
 export function formatOpenAIToAnthropic(completion: Record<string, unknown>, model: string): Record<string, unknown> {
-  const messageId = "msg_" + Date.now();
+  const messageId = syntheticId("msg");
 
   let content: Array<Record<string, unknown>> = [];
   const choices = asRecordArray(completion.choices);

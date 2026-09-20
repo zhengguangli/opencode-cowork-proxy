@@ -24,14 +24,15 @@ import { DEFAULT_TIMEOUT, UPSTREAM_FORWARD_HEADERS } from '../config';
 import { hasResponsesImages, getVisionModel } from '../vision';
 import {
   authenticateRequest,
-  safeJsonBody,
-  safeUpstreamFetch,
   createStreamSignal,
-  upstreamErrorResponse,
   forwardUpstreamHeaders,
   jsonResponse,
+  opencodeSessionHeader,
+  safeJsonBody,
+  safeUpstreamFetch,
+  upstreamErrorResponse,
 } from '../request';
-import { asRecord, asRecordArray, asRecordOptional } from '../translate/type-guards';
+import { asRecordArray, asRecordOptional } from '../translate/type-guards';
 import { RouteInfo } from './shared';
 import { log } from '../logger';
 import { getRequestId } from '../log/context';
@@ -62,21 +63,6 @@ export async function handleResponsesAPI(
   log.info('RESPONSES', `Model routing: ${req.model} → ${route.modelOverride || '(default)'}`, { model: req.model, originalModel, modelOverride: route.modelOverride });
   log.debug('RESPONSES', `Input type=${typeof req.input}, has thinking=${!!req.thinking}`);
 
-  if (Array.isArray(req.input)) {
-    for (let ii = 0; ii < req.input.length; ii++) {
-      const item = asRecord(req.input[ii]);
-      if (item.type === 'message') {
-        const contentPreview = Array.isArray(item.content)
-          ? asRecordArray(item.content).map((p) => p.type).join(',')
-          : typeof item.content;
-      } else if (item.type === 'reasoning') {
-      } else {
-      }
-    }
-  } else if (typeof req.input === 'string') {
-  } else {
-  }
-
   if (route.modelOverride) req.model = route.modelOverride;
 
   // Vision model override before DeepSeek thinking injection
@@ -92,18 +78,11 @@ export async function handleResponsesAPI(
 
   const chatReq = formatResponsesToChatCompletions(req as Record<string, unknown>);
   log.debug('RESPONSES', `ChatReq model=${(chatReq as Record<string, unknown>).model}, messages count=${asRecordArray((chatReq as Record<string, unknown>).messages).length}`);
-  const msgs = asRecordArray(chatReq.messages);
-  for (let mi = 0; mi < msgs.length; mi++) {
-    const m = msgs[mi];
-    const preview = m.role === 'user' ? `"${String(m.content || '').slice(0, 120)}"`
-      : m.role === 'assistant' ? `len=${String(m.content || '').length} reasoning=${!!m.reasoning_content} tool_calls=${((m.tool_calls || []) as unknown[]).length}`
-      : `"${String(m.content || '').slice(0, 80)}"`;
-  }
 
   const upstreamSignal = chatReq.stream ? createStreamSignal(request) : AbortSignal.timeout(DEFAULT_TIMEOUT);
   const upstreamRes = await safeUpstreamFetch(`${upstream}/v1/chat/completions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}`, "X-Request-Id": getRequestId() || "" },
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}`, "X-Request-Id": getRequestId() || "" , ...opencodeSessionHeader(request) },
     body: JSON.stringify(chatReq),
     signal: upstreamSignal,
   });

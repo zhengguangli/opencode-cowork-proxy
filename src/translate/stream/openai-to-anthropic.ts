@@ -5,6 +5,7 @@
  * when proxying to an Anthropic client, adding support for new OpenAI stream delta
  * types (tool_calls, function_call), or changing content block lifecycle management.
  */
+import { syntheticId } from "../id";
 import { extractCachedTokens, extractOutputTokens, extractUncachedInputTokens } from '../../cache';
 import { log } from '../../logger';
 import { applyBackpressure } from '../../backpressure';
@@ -13,7 +14,7 @@ import { parseSseFrame, parseSseBuffer } from './sse-parser';
 import { mapFinishReason } from './finish-reason';
 
 export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: string): ReadableStream {
-  const messageId = "msg_" + Date.now();
+  const messageId = syntheticId("msg");
   const decoder = new TextDecoder();
   const enqueueSSE = createSseEncoder();
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;

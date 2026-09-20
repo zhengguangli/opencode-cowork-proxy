@@ -11,7 +11,7 @@
  *   https://prometheus.io/docs/instrumenting/exposition_formats/
  */
 
-import { BUCKET_BOUNDS, type HistogramEntry } from './registry';
+import { BUCKET_BOUNDS, compareLabelKeys, type HistogramEntry } from './registry';
 
 /** Escape a label value per Prometheus exposition format. */
 export function escapeLabel(v: string): string {
@@ -21,7 +21,7 @@ export function escapeLabel(v: string): string {
 /** Serialise a label set to `key="value",key2="value2"` (sorted keys). */
 export function labelKey(labels: Record<string, string>): string {
   return Object.entries(labels)
-    .sort(([a], [b]) => a.localeCompare(b))
+    .sort(([a], [b]) => compareLabelKeys(a, b))
     .map(([k, v]) => `${k}="${escapeLabel(v)}"`)
     .join(',');
 }
@@ -121,15 +121,14 @@ export function formatHistogram(
       // Convert to string label value (bound is number | '+Inf')
       const leStr = bound === '+Inf' ? '+Inf' : String(bound);
       // Construct lookup key using labelKey so ordering matches the stored key
-      const k = labelKey({ ...baseLabels, le: leStr });
-      const entry = entries.get(k);
+      const fullLabelsKey = labelKey({ ...baseLabels, le: leStr });
+      const entry = entries.get(fullLabelsKey);
       const rawCount = entry?.count ?? 0;
       const bucketSum = entry?.sum ?? 0;
 
       // Emit cumulative count for this bucket
       cumulative += rawCount;
       baseSum += bucketSum;
-      const fullLabelsKey = labelKey({ ...baseLabels, le: leStr });
       out += `${name}_bucket{${fullLabelsKey}} ${cumulative}\n`;
     }
     totalCount += cumulative;

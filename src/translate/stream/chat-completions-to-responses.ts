@@ -14,6 +14,7 @@
  * - Tool calls → function_call output items + function_call_arguments.delta
  * - Usage in final chunk → response.completed
  */
+import { syntheticId } from "../id";
 import { mapUsage } from '../../cache';
 import { log } from '../../logger';
 import { ThinkTagStripper } from '../../think-tag-stripper';
@@ -28,8 +29,8 @@ export function streamChatCompletionsToResponses(
   openaiStream: ReadableStream,
   model: string
 ): ReadableStream {
-  const respId = "resp_" + Date.now();
-  const msgId = "msg_" + Date.now();
+  const respId = syntheticId("resp");
+  const msgId = syntheticId("msg");
   const createdTime = Math.floor(Date.now() / 1000);
 
   const decoder = new TextDecoder();

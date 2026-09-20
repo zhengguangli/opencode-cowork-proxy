@@ -19,14 +19,15 @@ import {
 import { DEFAULT_TIMEOUT, UPSTREAM_FORWARD_HEADERS } from '../config';
 import { hasOpenAIImages, hasAnyImageInMessages, rawBodyMayHaveImages, getVisionModel } from '../vision';
 import {
-  authenticateRequest,
-  safeJsonBody,
-  safeUpstreamFetch,
-  createStreamSignal,
   anthropicHeaders,
-  upstreamErrorResponse,
+  authenticateRequest,
+  createStreamSignal,
   forwardUpstreamHeaders,
   jsonResponse,
+  opencodeSessionHeader,
+  safeJsonBody,
+  safeUpstreamFetch,
+  upstreamErrorResponse,
 } from '../request';
 import { RouteInfo } from './shared';
 import { getRequestId } from '../log/context';
@@ -110,7 +111,7 @@ export async function handleOpenAIChatCompletions(
     const oaiUpstreamSignal = oaiIsStreaming ? createStreamSignal(request) : AbortSignal.timeout(DEFAULT_TIMEOUT);
     const oaiPassRes = await safeUpstreamFetch(`${upstream}/v1/chat/completions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}`, "X-Request-Id": getRequestId() || "" },
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}`, "X-Request-Id": getRequestId() || "" , ...opencodeSessionHeader(request) },
       body: oaiRawBody,
       signal: oaiUpstreamSignal,
     });
@@ -137,7 +138,7 @@ export async function handleOpenAIChatCompletions(
   const oaiUpstreamSignal = oaiIsStreaming ? createStreamSignal(request) : AbortSignal.timeout(DEFAULT_TIMEOUT);
   const oaiPassRes = await safeUpstreamFetch(`${upstream}/v1/chat/completions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}`, "X-Request-Id": getRequestId() || "" },
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}`, "X-Request-Id": getRequestId() || "" , ...opencodeSessionHeader(request) },
     body: oaiBody,
     signal: oaiUpstreamSignal,
   });
