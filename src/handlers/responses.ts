@@ -24,12 +24,13 @@ import { DEFAULT_TIMEOUT, UPSTREAM_FORWARD_HEADERS } from '../config';
 import { hasResponsesImages, getVisionModel } from '../vision';
 import {
   authenticateRequest,
-  safeJsonBody,
-  safeUpstreamFetch,
   createStreamSignal,
-  upstreamErrorResponse,
   forwardUpstreamHeaders,
   jsonResponse,
+  opencodeSessionHeader,
+  safeJsonBody,
+  safeUpstreamFetch,
+  upstreamErrorResponse,
 } from '../request';
 import { asRecordArray, asRecordOptional } from '../translate/type-guards';
 import { RouteInfo } from './shared';
@@ -81,7 +82,7 @@ export async function handleResponsesAPI(
   const upstreamSignal = chatReq.stream ? createStreamSignal(request) : AbortSignal.timeout(DEFAULT_TIMEOUT);
   const upstreamRes = await safeUpstreamFetch(`${upstream}/v1/chat/completions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}`, "X-Request-Id": getRequestId() || "" },
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}`, "X-Request-Id": getRequestId() || "" , ...opencodeSessionHeader(request) },
     body: JSON.stringify(chatReq),
     signal: upstreamSignal,
   });

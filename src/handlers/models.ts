@@ -8,7 +8,13 @@
  * and Cloudflare Cache API for efficient caching across requests.
  */
 
-import { anthropicHeaders, authenticateRequest, safeUpstreamFetch, upstreamErrorResponse } from '../request';
+import {
+  anthropicHeaders,
+  authenticateRequest,
+  opencodeSessionHeader,
+  safeUpstreamFetch,
+  upstreamErrorResponse,
+} from '../request';
 import { MODEL_CACHE_TTL, MODEL_LIST_TIMEOUT } from '../config';
 
 import { log } from '../logger';
@@ -44,7 +50,7 @@ export async function handleModelList(
       })
     : await safeUpstreamFetch(`${upstream}/v1/models`, {
         method: "GET",
-        headers: { "Authorization": `Bearer ${key}` },
+        headers: { "Authorization": `Bearer ${key}` , ...opencodeSessionHeader(request) },
         signal: AbortSignal.timeout(MODEL_LIST_TIMEOUT),
     });
   if (!res.ok) return upstreamErrorResponse(res, await res.text());

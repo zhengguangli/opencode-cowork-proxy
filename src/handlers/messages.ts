@@ -19,14 +19,15 @@ import {
 import { DEFAULT_TIMEOUT, UPSTREAM_FORWARD_HEADERS } from '../config';
 import { hasImages, hasAnyImageInMessages, rawBodyMayHaveImages, getVisionModel } from '../vision';
 import {
-  authenticateRequest,
-  safeJsonBody,
-  safeUpstreamFetch,
-  createStreamSignal,
   anthropicHeaders,
-  upstreamErrorResponse,
+  authenticateRequest,
+  createStreamSignal,
   forwardUpstreamHeaders,
   jsonResponse,
+  opencodeSessionHeader,
+  safeJsonBody,
+  safeUpstreamFetch,
+  upstreamErrorResponse,
 } from '../request';
 import { asRecord } from '../translate/type-guards';
 import { RouteInfo } from './shared';
@@ -68,7 +69,7 @@ export async function handleAnthropicToOpenAI(
     const upstreamSignal = asRecord(openaiReq).stream ? createStreamSignal(request) : AbortSignal.timeout(DEFAULT_TIMEOUT);
     const res = await safeUpstreamFetch(`${upstream}/v1/chat/completions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}`, "X-Request-Id": getRequestId() || "" },
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}`, "X-Request-Id": getRequestId() || "" , ...opencodeSessionHeader(request) },
       body: JSON.stringify(openaiReq),
       signal: upstreamSignal,
     });
