@@ -4,6 +4,7 @@
  * WHEN TO READ THIS FILE: Debugging response shape / finish_reason mapping,
  * adding new content block types, or changing how tool_use → tool_calls conversion works.
  */
+import { syntheticId } from "../id";
 import { extractInputTokens, extractOutputTokens } from '../../cache';
 import { asRecordArray, asRecordOptional } from '../type-guards';
 
@@ -50,7 +51,7 @@ export function formatAnthropicToOpenAI(response: Record<string, unknown>, model
   }
 
   return {
-    id: "chatcmpl-" + Date.now(),
+    id: syntheticId("chatcmpl"),
     object: "chat.completion",
     created: Math.floor(Date.now() / 1000),
     model,

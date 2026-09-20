@@ -8,6 +8,7 @@
  * - Usage mapping (including DeepSeek-specific cache fields)
  * - finish_reason/stop_reason mapping
  */
+import { syntheticId } from "../id";
 import { mapUsage } from '../../cache';
 import { stripThinkTags } from '../../think-tag-stripper';
 import { asRecordArray, asRecordOptional, asRecord } from '../type-guards';
@@ -16,7 +17,7 @@ export function formatChatCompletionsToResponses(completion: Record<string, unkn
   const choice = asRecordArray(completion.choices)[0] || {};
   const message = asRecord(choice.message);
 
-  const respId = "resp_" + Date.now() + Math.random().toString(36).slice(2, 6);
+  const respId = syntheticId("resp");
   const status = mapFinishReason(choice.finish_reason as string | undefined);
   const output: Array<Record<string, unknown>> = [];
 
@@ -24,7 +25,7 @@ export function formatChatCompletionsToResponses(completion: Record<string, unkn
   if (message.reasoning_content) {
     output.push({
       type: "reasoning",
-      id: "rsn_" + Date.now(),
+      id: syntheticId("rsn"),
       reasoning_text: message.reasoning_content,
     });
   }
@@ -43,7 +44,7 @@ export function formatChatCompletionsToResponses(completion: Record<string, unkn
     }
 
     const msgItem: { id: string; type: string; role: string; content: Array<Record<string, unknown>>; status: string } = {
-      id: "msg_" + Date.now() + Math.random().toString(36).slice(2, 6),
+      id: syntheticId("msg"),
       type: "message",
       role: "assistant",
       content: contentBlocks,
@@ -58,7 +59,7 @@ export function formatChatCompletionsToResponses(completion: Record<string, unkn
     for (const tc of tcs) {
       const fn = asRecordOptional(tc.function);
       output.push({
-        id: "fc_" + Date.now() + Math.random().toString(36).slice(2, 4),
+        id: syntheticId("fc"),
         type: "function_call",
         call_id: tc.id,
         name: fn?.name || "",
