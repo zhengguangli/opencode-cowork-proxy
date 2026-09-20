@@ -19,6 +19,23 @@
 export const GO_UPSTREAM = "https://opencode.ai/zen/go";
 export const ZEN_UPSTREAM = "https://opencode.ai/zen";
 export const DEFAULT_UPSTREAM = GO_UPSTREAM;
+/**
+ * Optional host allowlist for the X-Upstream-Url header override.
+ *
+ * Empty (default) - no allowlist; any public https host is accepted, but
+ * loopback/private/link-local IP literals are still rejected (see
+ * isAllowedUpstreamUrl in routing.ts).
+ *
+ * Set a comma-separated list to hard-restrict the override, e.g.
+ *   UPSTREAM_ALLOWED_HOSTS=api.anthropic.com,api.openai.com
+ * Matching is case-insensitive and exact (no subdomain wildcards).
+ */
+export const UPSTREAM_ALLOWED_HOSTS: ReadonlySet<string> = new Set(
+  (typeof process !== 'undefined' && process?.env?.UPSTREAM_ALLOWED_HOSTS)
+    ? process.env.UPSTREAM_ALLOWED_HOSTS.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+    : [],
+);
+
 export const START_TIME = Date.now();
 export const GO_VISION_MODEL = "qwen3.6-plus";
 export const ZEN_VISION_MODEL = "mimo-v2.5-free";
