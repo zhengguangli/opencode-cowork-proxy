@@ -31,6 +31,19 @@ const spec = {
     { url: 'http://localhost:18787', description: 'Local development (Bun standalone)' },
   ],
   paths: {
+    '/ws': {
+      get: {
+        summary: 'WebSocket endpoint (protocol upgrade)',
+        description: 'Upgrades to a WebSocket connection. OpenAPI 3.0 cannot describe WebSocket message payloads, so only the upgrade contract is listed here.',
+        operationId: 'webSocketUpgrade',
+        'x-websocket': true,
+        security: [{ apiKey: [] }],
+        responses: {
+          '101': { description: 'Switching protocols (upgrade accepted)' },
+          '400': { description: 'Upgrade rejected' },
+        },
+      },
+    },
     '/': {
       get: {
         summary: 'Health check',
@@ -205,11 +218,64 @@ const spec = {
         required: ['model', 'input'],
         properties: {
           model: { type: 'string' },
-          input: { oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'object' } }] },
+          input: {
+            oneOf: [
+              { type: 'string' },
+              { type: 'array', items: { $ref: '#/components/schemas/ResponsesContentPart' } },
+            ],
+          },
           instructions: { type: 'string' },
           max_output_tokens: { type: 'integer' },
           stream: { type: 'boolean' },
         },
+      },
+      ResponsesContentPart: {
+        description: 'Content parts accepted in the Responses API input array. input_file accepts a file_url/url (treated as an attachment) or inline text/content; input_audio accepts an input_audio object or data/format fields.',
+        oneOf: [
+          {
+            type: 'object',
+            required: ['type'],
+            properties: {
+              type: { type: 'string', enum: ['text'] },
+              text: { type: 'string' },
+            },
+          },
+          {
+            type: 'object',
+            required: ['type'],
+            properties: {
+              type: { type: 'string', enum: ['image_url'] },
+              image_url: { type: 'object', properties: { url: { type: 'string' } } },
+            },
+          },
+          {
+            type: 'object',
+            required: ['type'],
+            properties: {
+              type: { type: 'string', enum: ['input_file'] },
+              file_url: { type: 'string' },
+              url: { type: 'string' },
+              text: { type: 'string' },
+              content: { type: 'string' },
+            },
+          },
+          {
+            type: 'object',
+            required: ['type'],
+            properties: {
+              type: { type: 'string', enum: ['input_audio'] },
+              input_audio: {
+                type: 'object',
+                properties: {
+                  data: { type: 'string' },
+                  format: { type: 'string', default: 'wav' },
+                },
+              },
+              data: { type: 'string' },
+              format: { type: 'string' },
+            },
+          },
+        ],
       },
     },
   },
