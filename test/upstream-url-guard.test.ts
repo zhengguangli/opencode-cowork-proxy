@@ -139,3 +139,104 @@ describe('getUpstream fallback contract', () => {
     expect(getUpstream(req('https://api.openai.com'), GO_UPSTREAM, allow)).toBe(GO_UPSTREAM);
   });
 });
+
+describe('additional reserved IPv4 segments', () => {
+  const cases: Array<[string, boolean]> = [
+    ['https://192.0.0.9', false],        // IETF protocol assignments
+    ['https://192.0.1.1', true],         // adjacent public space
+    ['https://198.18.0.105', false],     // benchmarking
+    ['https://198.19.255.255', false],
+    ['https://198.20.0.1', true],
+    ['https://198.51.100.7', false],     // TEST-NET-2
+    ['https://203.0.113.7', false],      // TEST-NET-3
+    ['https://203.0.114.7', true],
+  ];
+  for (const [url, expected] of cases) {
+    it(`${url} -> ${expected ? 'allowed' : 'rejected'}`, () => {
+      expect(isAllowedUpstreamUrl(url, NO_ALLOWLIST)).toBe(expected);
+    });
+  }
+});
+
+describe('additional reserved IPv6 segments', () => {
+  it('rejects ff00::/8 multicast', () => {
+    expect(isAllowedUpstreamUrl('https://[ff02::1]', NO_ALLOWLIST)).toBe(false);
+  });
+  it('rejects fec0:: site-local even though fe80::/10 is reported separately', () => {
+    expect(isAllowedUpstreamUrl('https://[fec0::1]', NO_ALLOWLIST)).toBe(false);
+  });
+  it('rejects 2002::/16 6to4 that encodes 127.0.0.1', () => {
+    expect(isAllowedUpstreamUrl('https://[2002:7f00:1::]', NO_ALLOWLIST)).toBe(false);
+  });
+  it('rejects 2002::/16 6to4 that encodes 169.254.169.254', () => {
+    expect(isAllowedUpstreamUrl('https://[2002:a9fe:a9fe::]', NO_ALLOWLIST)).toBe(false);
+  });
+  it('still allows a public IPv6 address', () => {
+    expect(isAllowedUpstreamUrl('https://[2606:4700:4700::1111]', NO_ALLOWLIST)).toBe(true);
+  });
+});
+
+describe('root-label (trailing-dot) hostnames', () => {
+  it('rejects "localhost." - WHATWG keeps the dot, it is the same host', () => {
+    expect(isAllowedUpstreamUrl('https://localhost.:8443', NO_ALLOWLIST)).toBe(false);
+  });
+  it('rejects "app.localhost."', () => {
+    expect(isAllowedUpstreamUrl('https://app.localhost.', NO_ALLOWLIST)).toBe(false);
+  });
+  it('accepts a public host with a trailing dot', () => {
+    expect(isAllowedUpstreamUrl('https://custom.example.com.', NO_ALLOWLIST)).toBe(true);
+  });
+  it('matches a trailing-dot host against an allowlist entry', () => {
+    const allow = new Set(['custom.example.com']);
+    expect(isAllowedUpstreamUrl('https://custom.example.com.', allow)).toBe(true);
+  });
+});
+
+describe('allowlist precedence over the private-address rules', () => {
+  it('trusts an explicitly allowlisted loopback host', () => {
+    const allow = new Set(['127.0.0.1']);
+    expect(isAllowedUpstreamUrl('https://127.0.0.1:8443', allow)).toBe(true);
+    expect(getUpstream(req('https://127.0.0.1:8443'), GO_UPSTREAM, allow)).toBe('https://127.0.0.1:8443');
+  });
+
+  it('trusts an explicitly allowlisted internal hostname', () => {
+    const allow = new Set(['upstream.internal.example']);
+    expect(isAllowedUpstreamUrl('https://upstream.internal.example', allow)).toBe(true);
+  });
+
+  it('still blocks everything else when an allowlist is set', () => {
+    const allow = new Set(['127.0.0.1']);
+    expect(isAllowedUpstreamUrl('https://10.0.0.5', allow)).toBe(false);
+    expect(isAllowedUpstreamUrl('https://api.openai.com', allow)).toBe(false);
+  });
+
+  it('still requires https even for an allowlisted host', () => {
+    const allow = new Set(['127.0.0.1']);
+    expect(isAllowedUpstreamUrl('http://127.0.0.1:8787/health', allow)).toBe(false);
+  });
+});
+
+describe('UPSTREAM_ALLOW_PRIVATE escape hatch', () => {
+  it('allows private addresses only when opted in', () => {
+    expect(isAllowedUpstreamUrl('https://127.0.0.1:8443', NO_ALLOWLIST, false)).toBe(false);
+    expect(isAllowedUpstreamUrl('https://127.0.0.1:8443', NO_ALLOWLIST, true)).toBe(true);
+  });
+
+  it('does not waive the https requirement', () => {
+    expect(isAllowedUpstreamUrl('http://169.254.169.254/latest/meta-data/', NO_ALLOWLIST, true)).toBe(false);
+  });
+
+  it('does not waive the allowlist when one is configured', () => {
+    const allow = new Set(['api.anthropic.com']);
+    expect(isAllowedUpstreamUrl('https://127.0.0.1:8443', allow, true)).toBe(false);
+  });
+
+  it('does not waive localhost hostname rejection', () => {
+    expect(isAllowedUpstreamUrl('https://localhost:8443', NO_ALLOWLIST, true)).toBe(false);
+  });
+
+  it('propagates through getUpstream', () => {
+    expect(getUpstream(req('https://127.0.0.1:8443'), GO_UPSTREAM, NO_ALLOWLIST, true)).toBe('https://127.0.0.1:8443');
+    expect(getUpstream(req('https://127.0.0.1:8443'), GO_UPSTREAM, NO_ALLOWLIST, false)).toBe(GO_UPSTREAM);
+  });
+});

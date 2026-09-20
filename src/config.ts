@@ -36,6 +36,14 @@ export const UPSTREAM_ALLOWED_HOSTS: ReadonlySet<string> = new Set(
     : [],
 );
 
+/**
+ * Dev-only escape hatch: when true, X-Upstream-Url may point at private /
+ * loopback addresses. An exact UPSTREAM_ALLOWED_HOSTS match is always
+ * trusted regardless, so prefer an allowlist entry over this flag.
+ */
+export const UPSTREAM_ALLOW_PRIVATE: boolean =
+  typeof process !== 'undefined' && process?.env?.UPSTREAM_ALLOW_PRIVATE === 'true';
+
 export const START_TIME = Date.now();
 export const GO_VISION_MODEL = "qwen3.6-plus";
 export const ZEN_VISION_MODEL = "mimo-v2.5-free";
