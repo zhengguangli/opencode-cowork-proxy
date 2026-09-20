@@ -34,6 +34,57 @@ export interface HistogramEntry {
 /** Labels key → count for simple counters. */
 type CounterMap = Map<string, number>;
 
+/** A single label as a [key, value] pair, in canonical (sorted) order. */
+type LabelEntry = [string, string];
+
+/**
+ * Compare label keys with plain code-unit ordering.
+ *
+ * localeCompare() pulls in ICU collation and can vary with the runtime's
+ * locale data; label keys are ASCII identifiers, so a plain comparison is
+ * both faster and byte-for-byte deterministic. Shared with formatter.ts —
+ * histogram bucket lookups silently read zero if the two ever disagree on
+ * ordering.
+ */
+export function compareLabelKeys(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/** Escape a label value per Prometheus exposition format. */
+function escapeLabel(v: string): string {
+  return v.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+}
+
+/** Sort label entries into canonical key order. */
+function sortedLabelEntries(labels: Record<string, string>): LabelEntry[] {
+  return Object.entries(labels).sort(([a], [b]) => compareLabelKeys(a, b));
+}
+
+/** Serialise already-sorted label entries to `k="v",k2="v2"`. */
+function joinLabelEntries(entries: LabelEntry[]): string {
+  let out = '';
+  for (const [k, v] of entries) {
+    if (out) out += ',';
+    out += `${k}="${escapeLabel(v)}"`;
+  }
+  return out;
+}
+
+/** Merge the histogram `le` label into sorted base entries, keeping order. */
+function withLeEntry(base: LabelEntry[], le: string): LabelEntry[] {
+  const merged: LabelEntry[] = [...base, ['le', le]];
+  merged.sort(([a], [b]) => compareLabelKeys(a, b));
+  return merged;
+}
+
+/** Pick the histogram bucket a duration falls into. */
+function bucketFor(durationMs: number): string {
+  for (const bound of BUCKET_BOUNDS) {
+    if (durationMs <= bound) return String(bound);
+  }
+  return '+Inf';
+}
+
 /**
  * Thread-safe-ish metrics registry for Cloudflare Workers.
  * Each isolate processes one request at a time, so no atomicity needed.
@@ -71,31 +122,20 @@ export class MetricsRegistry {
 
   /** Serialise a label set to a Prometheus label string for use as a Map key. */
   private labelKey(labels: Record<string, string>): string {
-    return Object.entries(labels)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([k, v]) => `${k}="${this.escapeLabel(v)}"`)
-      .join(',');
-  }
-
-  private escapeLabel(v: string): string {
-    return v.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+    return joinLabelEntries(sortedLabelEntries(labels));
   }
 
   // ---- Recording methods ----
 
   /** Record one HTTP request with its duration. */
   recordRequest(method: string, path: string, status: number, durationMs: number): void {
-    const labels = { method, path, status: String(status) };
-    const key = this.labelKey(labels);
+    // Base entries are computed once and reused for both the counter key and
+    // the histogram key — previously the label set was serialised twice.
+    const base = sortedLabelEntries({ method, path, status: String(status) });
+    const key = joinLabelEntries(base);
     this.requestCount.set(key, (this.requestCount.get(key) || 0) + 1);
 
-    // Duration bucketing
-    let bucket = '+Inf';
-    for (const bound of BUCKET_BOUNDS) {
-      if (durationMs <= bound) { bucket = String(bound); break; }
-    }
-
-    const durKey = this.labelKey({ ...labels, le: bucket });
+    const durKey = joinLabelEntries(withLeEntry(base, bucketFor(durationMs)));
     const prev = this.durationBuckets.get(durKey) || { count: 0, sum: 0 };
     this.durationBuckets.set(durKey, {
       count: prev.count + 1,
@@ -108,17 +148,11 @@ export class MetricsRegistry {
    * Call this after the final model is resolved (after URL + vision overrides).
    */
   recordModelRequest(model: string, status: number, durationMs: number): void {
-    const labels = { model, status: String(status) };
-    const key = this.labelKey(labels);
+    const base = sortedLabelEntries({ model, status: String(status) });
+    const key = joinLabelEntries(base);
     this.modelRequestCount.set(key, (this.modelRequestCount.get(key) || 0) + 1);
 
-    // Duration bucketing
-    let bucket = '+Inf';
-    for (const bound of BUCKET_BOUNDS) {
-      if (durationMs <= bound) { bucket = String(bound); break; }
-    }
-
-    const durKey = this.labelKey({ ...labels, le: bucket });
+    const durKey = joinLabelEntries(withLeEntry(base, bucketFor(durationMs)));
     const prev = this.modelDurationBuckets.get(durKey) || { count: 0, sum: 0 };
     this.modelDurationBuckets.set(durKey, {
       count: prev.count + 1,

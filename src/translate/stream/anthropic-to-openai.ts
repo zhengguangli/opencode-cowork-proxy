@@ -24,8 +24,10 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
       reader = anthropicStream.getReader();
       let buffer = "";
 
-      // Tool call tracking: contentBlockIndex → { id, name, args, toolCallIndex }
-      const toolCallMap = new Map<number, { id: string; name: string; args: string; toolCallIndex: number }>();
+      // Tool call tracking: contentBlockIndex → toolCallIndex. Only the index
+      // is ever read back, so nothing else is stored (accumulating the full
+      // argument string here was O(n^2) work whose result was never used).
+      const toolCallMap = new Map<number, number>();
       let contentBlockIndex = -1;
       let toolCallCounter = 0; // 0-based sequential index for OpenAI tool calls (independent of contentBlockIndex)
       let activeBlockType: "text" | "thinking" | "tool_use" | null = null;
@@ -90,7 +92,7 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
                 // Emit the initial tool_call chunk with id, name, empty args
                 const tcId = block.id || `call_${Date.now()}`;
                 const tcIndex = toolCallCounter++;
-                toolCallMap.set(contentBlockIndex, { id: tcId, name: block.name || "", args: "", toolCallIndex: tcIndex });
+                toolCallMap.set(contentBlockIndex, tcIndex);
                 emitChunk({
                   tool_calls: [{
                     index: tcIndex,
@@ -110,13 +112,12 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
               } else if (delta?.type === "thinking_delta") {
                 emitChunk({ reasoning_content: delta.thinking || "" });
               } else if (delta?.type === "input_json_delta") {
-                // Accumulate and emit tool call argument deltas
-                const tc = toolCallMap.get(contentBlockIndex);
-                if (tc) {
-                  tc.args += delta.partial_json || "";
+                // Forward tool call argument deltas as-is (no accumulation)
+                const tcIndex = toolCallMap.get(contentBlockIndex);
+                if (tcIndex !== undefined) {
                   emitChunk({
                     tool_calls: [{
-                      index: tc.toolCallIndex,
+                      index: tcIndex,
                       function: { arguments: delta.partial_json || "" },
                     }],
                   });

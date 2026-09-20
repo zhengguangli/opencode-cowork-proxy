@@ -24,7 +24,6 @@
  * WHEN TO READ THIS FILE: Adding/modifying log behavior, configuring transports.
  */
 import pino from 'pino';
-import { Writable } from 'stream';
 import { getRequestId, getTraceId } from './context';
 
 // ---- Types ----
@@ -50,6 +49,13 @@ function resolveLogLevel(): string {
   if (env === 'DEBUG' || env === 'INFO' || env === 'WARN' || env === 'ERROR') return env;
   return 'INFO';
 }
+
+/**
+ * Minimum level, resolved once at module load. Resolving per log line meant
+ * re-reading process.env and re-running four string comparisons on every
+ * single line emitted on the request hot path.
+ */
+const MIN_LEVEL = resolveLogLevel();
 
 /** Sample rate for high-volume logs: 0.0 (none) to 1.0 (all). */
 const SAMPLE_RATE = parseFloat(process?.env?.LOG_SAMPLE_RATE ?? '') || 1.0;
@@ -163,6 +169,14 @@ function serializeValue(v: unknown): unknown {
 }
 
 function serializeDetails(details: Record<string, unknown>): Record<string, unknown> {
+  // Fast path: with no Error values the copy is byte-identical to the input,
+  // so skip allocating it (this runs for every log call that passes details).
+  let hasError = false;
+  for (const v of Object.values(details)) {
+    if (v instanceof Error) { hasError = true; break; }
+  }
+  if (!hasError) return details;
+
   const result: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(details)) {
     result[k] = serializeValue(v);
@@ -180,7 +194,7 @@ function shouldLog(level: LogLevel, pfx?: string): boolean {
     }
     return true;
   }
-  return LEVEL_PRIORITY[level] >= LEVEL_PRIORITY[resolveLogLevel() as LogLevel];
+  return LEVEL_PRIORITY[level] >= LEVEL_PRIORITY[MIN_LEVEL as LogLevel];
 }
 
 function shouldSample(rate: number): boolean {
@@ -241,12 +255,15 @@ export function __capture(): { lines: string[]; restore: () => void } {
   const savedOutput = output;
   const lines: string[] = [];
 
-  const stream = new Writable({
-    write(chunk: Buffer, _enc: BufferEncoding, cb: (error?: Error | null) => void) {
-      lines.push(chunk.toString().trim());
-      cb();
+  // Plain write-callback object — Pino accepts any destination exposing
+  // write(), and this avoids importing Node's `stream` module for a test-only
+  // helper (which would otherwise be pulled into the Worker bundle).
+  const stream = {
+    write(msg: string, _enc?: unknown, cb?: (error?: Error | null) => void): void {
+      lines.push(String(msg).trim());
+      cb?.();
     },
-  });
+  };
 
   const captureLogger = pino(
     {

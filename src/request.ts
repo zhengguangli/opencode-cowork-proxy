@@ -126,16 +126,11 @@ export async function safeUpstreamFetch(url: string, init: RequestInit): Promise
   const fetchSpan = startSpan('upstream.fetch');
 
   // Don't retry streaming requests — can't replay SSE.
-  let isStreaming = false;
-  if (typeof init.body === "string") {
-    try {
-      const parsed = JSON.parse(init.body);
-      isStreaming = !!(parsed && typeof parsed === "object" && (parsed as Record<string, unknown>).stream);
-    } catch {
-      // Fall back to heuristic for non-JSON or malformed bodies
-      isStreaming = init.body.includes('"stream":true') || init.body.includes('"stream": true');
-    }
-  }
+  // Cheap string pre-check instead of JSON.parse: parsing a multi-MB body on
+  // every fetch (and every retry) just to read one boolean costs more CPU than
+  // the fetch itself. Errs toward "streaming" (no retry), the safe direction —
+  // same convention as rawBodyMayHaveImages() in vision.ts.
+  const isStreaming = typeof init.body === "string" && /"stream"\s*:\s*true/.test(init.body);
 
   // Extract hostname for upstream metrics labeling
   const upstreamLabel = (() => {
