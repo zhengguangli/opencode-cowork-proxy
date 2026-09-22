@@ -4,41 +4,38 @@
 
 ## Active Items
 
-### P1: Test File `as` Casts (Partially Fixed)
+### P1: Test File `as` Casts (Mostly Fixed)
 
-- **Issue**: Some test files use bare `as` assertions for type narrowing at test boundaries. TypeScript 6.x strict mode flags these. 27 instances cleaned in commit aa654ae.
-- **Status**: Partially resolved. Remaining `as` casts in test files need review -- some are legitimate (casting test fixture data), others should use type-guard helpers.
+- **Issue**: Some test files use bare `as` assertions for type narrowing at test boundaries. TypeScript 6.x strict mode flags these. 27+ instances cleaned across multiple commits.
+- **Status**: Mostly resolved. Remaining `as` casts are legitimate test patterns (JSON response parsing, mock type assertions, edge-case test inputs). The `undefined as unknown as Record<string, unknown>` pattern in `cache.test.ts` and `vision.test.ts` tests invalid inputs to verify graceful handling; changing to `asRecord()` would alter behavior since it returns `{}` for non-objects.
 - **Files affected**: `test/` directory files
-- **Fix**: Replace bare `as` with `asRecord`/`asRecordArray`/`asRecordOptional` from `type-guards.ts`, or cast through intermediate types where format conversion test data is known to match.
+- **Fix**: Replace bare `as` with `asRecord`/`asRecordArray`/`asRecordOptional` from `type-guards.ts` where the input is known to match the target type. Edge-case tests with intentionally invalid inputs should keep explicit casts.
 
-### P2: `cache.test.ts` Imports from `request.ts`
+### P2: `cache.test.ts` Imports from `request.ts` ✅ FIXED
 
-- **Issue**: `test/cache.test.ts` imports `formatUptime()` from `src/request.ts` to test its behavior. This is a minor violation -- `formatUptime` is a pure formatting function that belongs in a utility module, not in `request.ts` (which orchestrates auth/fetch/response logic).
-- **Status**: Documented in ARCHITECTURE.md ADR-3.
-- **Fix**: Extract `formatUptime()` to a dedicated utility file (e.g., `src/utils.ts` or `src/uptime.ts`), update both `request.ts` and `cache.test.ts` imports.
+- **Issue**: `test/cache.test.ts` imported `formatUptime()` from `src/request.ts`.
+- **Fix**: Extracted `formatUptime()` to `src/utils/formatUptime.ts`. Updated `src/handlers/health.ts` and `test/utils.test.ts` imports.
 
-### P3: `safeJsonBody` vs Pass-Through Parsing Pattern
+### P3: `safeJsonBody` vs Pass-Through Parsing Pattern ✅ FIXED
 
-- **Issue**: Handlers use `safeJsonBody()` in the translation path, but the pass-through path reimplements JSON parsing with try/catch manually. This duplication increases maintenance surface.
-- **Files affected**: `handlers/messages.ts` (lines 94-101), `handlers/chat-completions.ts` (lines 90-97)
-- **Fix**: Unify parsing by always using `safeJsonBody()` or a shared wrapper. The pass-through path historically parsed raw body text for the fast-path bypass optimization.
+- **Issue**: Handlers used `safeJsonBody()` in the translation path but reimplemented JSON parsing in the pass-through path.
+- **Fix**: Added `safeJsonParse(text)` to `src/request.ts` (sync counterpart with identical `Result` shape). Refactored pass-through paths in `src/handlers/messages.ts` and `src/handlers/chat-completions.ts`.
 
-### P4: No Integration Test Coverage for Pass-Through Path
+### P4: No Integration Test Coverage for Pass-Through Path ✅ FIXED
 
-- **Issue**: The pass-through fast path (no model override + no images) has no dedicated test coverage. All current tests exercise the translation path.
-- **Impact**: A regression in the pass-through fast path would go undetected by CI.
-- **Fix**: Add test cases for pass-through scenarios in both `messages.ts` and `chat-completions.ts` handlers.
+- **Issue**: The pass-through fast path had no dedicated test coverage.
+- **Fix**: Created `test/pass-through.test.ts` with 4 integration tests covering Anthropic/OpenAI verbatim forwarding and image-detection bypass.
 
 ### P5: Debug Log Overhead
 
-- **Issue**: `IS_DEBUG` guards are used throughout handlers (especially `responses.ts`) for verbose logging. In production, the `DEBUG` env var check and branching still execute on every request.
-- **Impact**: Negligible (env-var check is sub-ms), but the log statements remain in production binary.
-- **Fix**: Consider compile-time stripping for the Bun standalone binary, or accept as intentional (debug logging for deployed troubleshooting).
+- **Issue**: `IS_DEBUG` guards execute on every request. In production, the env-var check and branching still execute.
+- **Impact**: Negligible (sub-ms), but log statements remain in production binary.
+- **Fix**: Accept as intentional (debug logging for deployed troubleshooting), or consider compile-time stripping for Bun standalone binary.
 
 ### P6: `query` Variable Name Typo in Vision Functions
 
-- **Issue**: In `src/vision.ts`, local variable `query` is used throughout (e.g., "Images detected in user's prompt" via `hasImages`), but some internal tests reference parameters as `req` instead of `body`. Minor naming inconsistency.
-- **Status**: Cosmetic only, no functional impact.
+- **Issue**: In `src/vision.ts`, local variable naming inconsistency between `query` and `req` in internal tests.
+- **Status**: Not found in current codebase — may have been resolved in prior refactor. Cosmetic only, no functional impact.
 
 ## Resolved Items
 
