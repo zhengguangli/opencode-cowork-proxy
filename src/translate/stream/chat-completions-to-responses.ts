@@ -23,6 +23,18 @@ import { createSseEncoder } from './sse-encoder';
 import { parseSseFrame, parseSseBuffer } from './sse-parser';
 import { asRecord, asRecordArray, asRecordOptional } from '../type-guards';
 
+interface ResponsesToolCallDelta {
+  id?: string;
+  index: number;
+  function: { name?: string; arguments?: string };
+}
+
+interface ResponsesChatDelta {
+  reasoning_content?: string;
+  tool_calls?: ResponsesToolCallDelta[];
+  content?: string;
+}
+
 type ActiveItemType = "text" | "reasoning" | "function_call" | null;
 
 export function streamChatCompletionsToResponses(
@@ -220,10 +232,7 @@ export function streamChatCompletionsToResponses(
           finishReason = (firstChoice as Record<string, unknown>).finish_reason as string;
         }
 
-        // SSE delta shape is known by OpenAI streaming protocol but too dynamic
-        // for static typing — using `any` avoids excessive type-guard verbosity.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const delta: any = firstChoice?.delta;
+        const delta = firstChoice?.delta as ResponsesChatDelta | undefined;
         if (!delta) return;
 
         // Stream debug logging is in the handler (handlers/responses.ts)
@@ -259,8 +268,9 @@ export function streamChatCompletionsToResponses(
         }
 
         // Handle tool calls
-        if (delta.tool_calls?.length > 0) {
-          for (const tc of delta.tool_calls) {
+        const toolCalls = delta.tool_calls;
+        if (toolCalls && toolCalls.length > 0) {
+          for (const tc of toolCalls) {
             if (tc.id) {
               // New tool call (has id)
               if (activeItemType) flushActiveItem(true);

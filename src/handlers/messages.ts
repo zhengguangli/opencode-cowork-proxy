@@ -26,6 +26,7 @@ import {
   jsonResponse,
   opencodeSessionHeader,
   safeJsonBody,
+  safeJsonParse,
   safeUpstreamFetch,
   upstreamErrorResponse,
 } from '../request';
@@ -99,13 +100,9 @@ export async function handleAnthropicToOpenAI(
 
   // ---- Pass-through: send Anthropic body as-is to Anthropic upstream ----
   const anthRawBody = await request.text();
-  let parsedBody: Record<string, unknown>;
-  try { parsedBody = asRecord(JSON.parse(anthRawBody)); } catch {
-    return new Response(
-      JSON.stringify({ error: { type: "invalid_request_error", message: "Request body contains invalid JSON" } }),
-      { status: 400, headers: { "Content-Type": "application/json" } },
-    );
-  }
+  const parsed = safeJsonParse(anthRawBody);
+  if (!parsed.ok) return parsed.response;
+  const parsedBody = parsed.data;
 
   // Fast path: if no model override AND no image markers in raw string
   route.resolvedModel = (parsedBody.model as string) || route.modelOverride || undefined;

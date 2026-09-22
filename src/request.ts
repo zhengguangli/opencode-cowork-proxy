@@ -90,6 +90,26 @@ export async function safeJsonBody<T>(request: Request): Promise<{ ok: true; dat
   }
 }
 
+/** Parse a raw JSON string with the same error shape as `safeJsonBody`.
+ *
+ * Used by the pass-through fast path, which must read the body as text first
+ * for cheap image-detection heuristics before deciding whether to parse.
+ */
+export function safeJsonParse(text: string): { ok: true; data: Record<string, unknown> } | { ok: false; response: Response } {
+  try {
+    const data = JSON.parse(text) as Record<string, unknown>;
+    return { ok: true, data };
+  } catch {
+    return {
+      ok: false,
+      response: new Response(
+        JSON.stringify({ error: { type: "invalid_request_error", message: "Invalid JSON body" } }),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      ),
+    };
+  }
+}
+
 /** Check request body size against max body size. Returns 413 if exceeded.
  *
  * Fast path: uses Content-Length header when present (no body read).
@@ -223,13 +243,7 @@ export function forwardUpstreamHeaders(target: Headers, source: Response): void 
   }
 }
 
-export function formatUptime(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  return `${h}h ${m}m`;
-}
+import { formatUptime } from './utils/formatUptime';
 
 function clientAcceptsGzip(request: Request): boolean {
   const accept = request.headers.get("Accept-Encoding") || "";

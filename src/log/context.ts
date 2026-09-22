@@ -81,7 +81,6 @@ export const currentTraceId = {
  */
 export function generateId(): string {
   try {
-    // @ts-ignore — crypto.randomUUID() available in modern runtimes
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
       return crypto.randomUUID().slice(0, 8);
     }

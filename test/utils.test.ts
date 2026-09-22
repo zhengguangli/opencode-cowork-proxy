@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { anthropicHeaders, upstreamErrorResponse, forwardUpstreamHeaders, formatUptime, jsonResponse, safeJsonBody } from '../src/request';
+import { anthropicHeaders, upstreamErrorResponse, forwardUpstreamHeaders, jsonResponse, safeJsonBody } from '../src/request';
+import { formatUptime } from '../src/utils/formatUptime';
 
 describe('anthropicHeaders', () => {
   it('includes X-Api-Key and Content-Type', () => {

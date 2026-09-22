@@ -10,7 +10,7 @@
 
 import { VERSION } from '../version';
 import { START_TIME, GO_UPSTREAM, ZEN_UPSTREAM } from '../config';
-import { formatUptime } from '../request';
+import { formatUptime } from '../utils/formatUptime';
 
 /**
  * Handle GET / — health check endpoint.

@@ -15,7 +15,7 @@ describe('handleWebSocketUpgrade', () => {
     const result = await handleWebSocketUpgrade(req);
     expect(result).not.toBeNull();
     expect(result!.status).toBe(426);
-    const body: Record<string, unknown> = await result!.json() as Record<string, unknown>;
+    const body = await result!.json() as Record<string, unknown>;
     expect(body.alternative).toBeDefined();
     expect((body.error as Record<string, unknown>).type).toBe('upgrade_required');
     
@@ -28,7 +28,7 @@ describe('handleWebSocketUpgrade', () => {
     });
     const result = await handleWebSocketUpgrade(req);
     expect(result).not.toBeNull();
-    const body: Record<string, unknown> = await result!.json() as Record<string, unknown>;
+    const body = await result!.json() as Record<string, unknown>;
     expect(((body.alternative as Record<string, unknown>).body as Record<string, unknown>).stream).toBe(true);
   });
 

@@ -7,6 +7,35 @@
 import { log } from '../../logger';
 import { applyBackpressure } from '../../backpressure';
 
+interface AnthropicUsage {
+  input_tokens?: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+}
+
+interface AnthropicContentBlock {
+  type: string;
+  id?: string;
+  name?: string;
+}
+
+interface AnthropicDelta {
+  type: string;
+  text?: string;
+  thinking?: string;
+  partial_json?: string;
+  stop_reason?: string;
+}
+
+interface AnthropicStreamEvent {
+  type: string;
+  message?: { usage?: AnthropicUsage };
+  content_block?: AnthropicContentBlock;
+  index?: number;
+  delta?: AnthropicDelta;
+  usage?: { output_tokens?: number };
+}
+
 export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: string): ReadableStream {
   const startTime = Math.floor(Date.now() / 1000);
   const chatId = "chatcmpl-" + startTime;
@@ -59,29 +88,25 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
           const raw = line.slice(6).trim();
           if (!raw) continue;
 
-          let evt: Record<string, unknown>;
+          let evt: AnthropicStreamEvent;
           try { evt = JSON.parse(raw); } catch { continue; }
-          // SSE event shape is known by Anthropic streaming protocol but too dynamic
-          // for static typing — using `as any` avoids excessive type-guard verbosity.
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const e = evt as any;
 
-          switch (e.type) {
+          switch (evt.type) {
             case "message_start":
               contentBlockIndex = -1;
               activeBlockType = null;
               toolCallMap.clear();
               // Capture input tokens and cache stats from the initial message
-              if (e.message?.usage) {
-                inputTokens = e.message.usage.input_tokens || 0;
-                cacheReadTokens = e.message.usage.cache_read_input_tokens || 0;
-                cacheCreateTokens = e.message.usage.cache_creation_input_tokens || 0;
+              if (evt.message?.usage) {
+                inputTokens = evt.message.usage.input_tokens || 0;
+                cacheReadTokens = evt.message.usage.cache_read_input_tokens || 0;
+                cacheCreateTokens = evt.message.usage.cache_creation_input_tokens || 0;
               }
               break;
 
             case "content_block_start": {
-              const block = e.content_block;
-              contentBlockIndex = e.index;
+              const block = evt.content_block;
+              contentBlockIndex = evt.index ?? contentBlockIndex + 1;
 
               if (block?.type === "text") {
                 activeBlockType = "text";
@@ -106,7 +131,7 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
             }
 
             case "content_block_delta": {
-              const delta = e.delta;
+              const delta = evt.delta;
               if (delta?.type === "text_delta") {
                 emitChunk({ content: delta.text || "" });
               } else if (delta?.type === "thinking_delta") {
@@ -131,15 +156,15 @@ export function streamAnthropicToOpenAI(anthropicStream: ReadableStream, model: 
               break;
 
             case "message_delta": {
-              const stopReason = e.delta?.stop_reason;
+              const stopReason = evt.delta?.stop_reason;
               if (stopReason) {
                 lastFinishReason = stopReason;
                 const finishReason = stopReason === "tool_use" ? "tool_calls"
                                    : stopReason === "max_tokens" ? "length"
                                    : "stop";
                 // Capture output tokens from message_delta
-                if (e.usage?.output_tokens) {
-                  outputTokens = e.usage.output_tokens;
+                if (evt.usage?.output_tokens) {
+                  outputTokens = evt.usage.output_tokens;
                 }
                 // Emit chunk with both finish_reason and usage when available
                 const totalPromptTokens = inputTokens + cacheReadTokens + cacheCreateTokens;

@@ -26,6 +26,7 @@ import {
   jsonResponse,
   opencodeSessionHeader,
   safeJsonBody,
+  safeJsonParse,
   safeUpstreamFetch,
   upstreamErrorResponse,
 } from '../request';
@@ -96,13 +97,9 @@ export async function handleOpenAIChatCompletions(
 
   // ---- Pass-through: send OpenAI body as-is to OpenAI upstream ----
   const oaiRawBody = await request.text();
-  let parsedOaiBody: Record<string, unknown>;
-  try { parsedOaiBody = JSON.parse(oaiRawBody) as Record<string, unknown>; } catch {
-    return new Response(
-      JSON.stringify({ error: { type: "invalid_request_error", message: "Request body contains invalid JSON" } }),
-      { status: 400, headers: { "Content-Type": "application/json" } },
-    );
-  }
+  const parsed = safeJsonParse(oaiRawBody);
+  if (!parsed.ok) return parsed.response;
+  const parsedOaiBody = parsed.data;
 
   // Fast path: if no model override AND no image markers in raw string
   route.resolvedModel = (parsedOaiBody.model as string) || route.modelOverride || undefined;

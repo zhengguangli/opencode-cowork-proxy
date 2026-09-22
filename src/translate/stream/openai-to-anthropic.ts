@@ -13,6 +13,23 @@ import { createSseEncoder } from './sse-encoder';
 import { parseSseFrame, parseSseBuffer } from './sse-parser';
 import { mapFinishReason } from './finish-reason';
 
+interface OpenAIToolCallDelta {
+  id?: string;
+  index: number;
+  function: { name?: string; arguments?: string };
+}
+
+interface OpenAIDelta {
+  tool_calls?: OpenAIToolCallDelta[];
+  reasoning_content?: string | null;
+  content?: string | null;
+}
+
+interface OpenAIParsed {
+  usage?: Record<string, unknown>;
+  choices?: Array<{ finish_reason?: string }>;
+}
+
 export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: string): ReadableStream {
   const messageId = syntheticId("msg");
   const decoder = new TextDecoder();
@@ -25,10 +42,10 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
       let hasStartedTextBlock = false;
       let hasStartedThinkingBlock = false;
       let isToolUse = false;
-      let activeToolCallId: string | null = null;
-      let toolCallIdByOaiIndex = new Map<number, string>(); // OpenAI tool_call index → tool call ID
+      let activeToolCallId: string | undefined;
+      let toolCallIdByOaiIndex = new Map<number, string | undefined>(); // OpenAI tool_call index → tool call ID
       let oaiIndexToCbIndex = new Map<number, number>();    // OpenAI tool_call index → content block index
-      let toolCallJsonMap = new Map<string, string>();
+      let toolCallJsonMap = new Map<string, string | undefined>();
       let lastUsage: { input_tokens: number; output_tokens: number; cache_read_input_tokens: number; cache_creation_input_tokens: number } | null = null;
       let finishReason: string | null = null;
       let messageStarted = false;
@@ -37,12 +54,8 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
       let buffer = '';
 
       function processStreamDelta(delta_: Record<string, unknown>, parsed_: Record<string, unknown>) {
-        // SSE delta/parsed shapes are known by OpenAI streaming protocol but too
-        // dynamic for static typing — using `as any` avoids excessive type-guard verbosity.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const delta = delta_ as any;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const parsed = parsed_ as any;
+        const delta = delta_ as OpenAIDelta;
+        const parsed = parsed_ as OpenAIParsed;
         // Capture usage from any chunk that has it
         if (parsed.usage) {
           lastUsage = {
@@ -59,12 +72,13 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
         }
 
         // Handle tool calls
-        if (delta.tool_calls?.length > 0) {
-          for (const toolCall of delta.tool_calls) {
+        const toolCalls = delta.tool_calls;
+        if (toolCalls && toolCalls.length > 0) {
+          for (const toolCall of toolCalls) {
             const isNewDeclaration = !!toolCall.id;
 
             if (isNewDeclaration) {
-              const toolCallId = toolCall.id;
+              const toolCallId = toolCall.id!;
 
               // Close previous content block if switching types
               if (hasStartedTextBlock || hasStartedThinkingBlock) {
@@ -153,7 +167,7 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
             });
             isToolUse = false;
             hasStartedTextBlock = false;
-            activeToolCallId = null;
+            activeToolCallId = undefined;
             contentBlockIndex++;
           }
 
@@ -188,7 +202,7 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
           enqueueSSE(controller, "content_block_delta", {
             type: "content_block_delta",
             index: contentBlockIndex,
-            delta: { type: "thinking_delta", thinking: delta.reasoning_content },
+            delta: { type: "thinking_delta", thinking: delta.reasoning_content ?? null },
           });
         }
 
@@ -205,7 +219,7 @@ export function streamOpenAIToAnthropic(openaiStream: ReadableStream, model: str
               });
               isToolUse = false;
               hasStartedThinkingBlock = false;
-              activeToolCallId = null;
+              activeToolCallId = undefined;
               contentBlockIndex++;
             }
 

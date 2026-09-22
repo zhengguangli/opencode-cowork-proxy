@@ -173,7 +173,7 @@ describe('Optimizations: Admin Auth & Security Guard', () => {
   it('returns structured 401 unauthorizedResponse', async () => {
     const res = unauthorizedResponse('Forbidden area');
     expect(res.status).toBe(401);
-    const body = await res.json() as Record<string, any>;
-    expect(body.error.message).toBe('Forbidden area');
+    const body = await res.json() as Record<string, unknown>;
+    expect((body.error as Record<string, unknown>).message).toBe('Forbidden area');
   });
 });
