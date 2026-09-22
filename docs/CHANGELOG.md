@@ -20,7 +20,7 @@ Entry rules:
 
 All notable changes to the opencode-cowork-proxy harness.
 
-## [Unreleased]
+## [2.3.0] — 2026-09-22
 
 ### Added
 
@@ -104,6 +104,8 @@ All notable changes to the opencode-cowork-proxy harness.
   (`.claude/` + `.agents/`)
 - Fixed duplicate directory string in `harness-init/SKILL.md`
   (`.claude/", ".claude/"` → `.claude/", ".agents/"`)
+
+## [Unreleased]
 
 ## [2.1.0] — 2026-06-05
 
